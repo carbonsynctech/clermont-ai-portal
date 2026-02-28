@@ -12,6 +12,7 @@ import { MaterialUpload } from "@/components/sources/material-upload";
 import { StyleGuideUpload } from "@/components/sources/style-guide-upload";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 import { InlineEditor } from "@/components/review/inline-editor";
+import { CritiqueSelector } from "@/components/review/critique-selector";
 import type { ProjectBriefData } from "@repo/db";
 
 interface PageProps {
@@ -409,6 +410,51 @@ export default async function ProjectPage({ params }: PageProps) {
                 {stageMap[10]?.status === "completed" && (
                   <p className="text-xs text-muted-foreground">
                     Human Review V5 — approved and locked.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 11: Devil's Advocate */}
+          {stageMap[10]?.status === "completed" && (
+            <Card className="col-span-full">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Step 11: Devil&#39;s Advocate</CardTitle>
+                <CardDescription className="text-xs">
+                  {stageMap[11]?.status === "completed"
+                    ? "Critiques selected — ready to integrate."
+                    : stageMap[11]?.status === "awaiting_human"
+                    ? "Review the critique report and select which points to address."
+                    : "Generate adversarial critiques to stress-test the memo."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(stageMap[11]?.status === "pending" || !stageMap[11]) && (
+                  <StepTrigger
+                    projectId={project.id}
+                    stepNumber={11}
+                    label="Generate Devil's Advocate Critiques"
+                    currentStatus={stageMap[11]?.status ?? "pending"}
+                  />
+                )}
+                {stageMap[11]?.status === "running" && (
+                  <StepTrigger
+                    projectId={project.id}
+                    stepNumber={11}
+                    label="Generate Devil's Advocate Critiques"
+                    currentStatus="running"
+                  />
+                )}
+                {stageMap[11]?.status === "awaiting_human" && (
+                  <CritiqueSelector
+                    projectId={project.id}
+                    redReport={versionRows.find((v) => v.versionType === "red_report")?.content ?? ""}
+                  />
+                )}
+                {stageMap[11]?.status === "completed" && (
+                  <p className="text-xs text-muted-foreground">
+                    Critiques confirmed — proceeding to integration.
                   </p>
                 )}
               </CardContent>
