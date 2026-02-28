@@ -10,7 +10,8 @@ import { finalStylePass } from "./handlers/final-style-pass";
 import { devilsAdvocate } from "./handlers/devils-advocate";
 import { integrateCritiques } from "./handlers/integrate-critiques";
 import { exportHtml } from "./handlers/export-html";
-import type { StageRunPayload } from "@repo/core";
+import { askAi } from "./handlers/ask-ai";
+import type { StageRunPayload, AskAiPayload } from "@repo/core";
 
 export async function runJob(jobId: string): Promise<void> {
   const job = getJob(jobId);
@@ -29,6 +30,9 @@ export async function runJob(jobId: string): Promise<void> {
     if (job.type === "extract_material") {
       const payload = job.payload as { materialId: string };
       await extractAndChunk(payload.materialId);
+    } else if (job.type === "ask_ai") {
+      const payload = job.payload as AskAiPayload;
+      await askAi(payload, onChunk);
     } else {
       const payload = job.payload as StageRunPayload;
       const { projectId, stepNumber, userId } = payload;
@@ -38,7 +42,7 @@ export async function runJob(jobId: string): Promise<void> {
           await generateMasterPrompt(projectId, userId, onChunk);
           break;
         case 2:
-          await suggestPersonas(projectId, userId);
+          await suggestPersonas(projectId, userId, onChunk);
           break;
         case 4:
           await generatePersonaDrafts(projectId, userId);

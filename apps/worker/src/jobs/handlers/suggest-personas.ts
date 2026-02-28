@@ -1,3 +1,4 @@
+// apps/worker/src/jobs/handlers/suggest-personas.ts
 import { db, projects, stages, personas, auditLogs } from "@repo/db";
 import {
   claude,
@@ -10,10 +11,14 @@ interface PersonaSuggestion {
   name: string;
   description: string;
   systemPrompt: string;
+  tags?: string[];
 }
 
-export async function suggestPersonas(projectId: string, userId: string): Promise<void> {
-  // 1. Fetch project and master prompt
+export async function suggestPersonas(
+  projectId: string,
+  userId: string,
+  onChunk?: (chunk: string) => void,
+): Promise<void> {
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
   });
@@ -21,7 +26,6 @@ export async function suggestPersonas(projectId: string, userId: string): Promis
   if (!project) throw new Error(`Project ${projectId} not found`);
   if (!project.masterPrompt) throw new Error(`Project ${projectId} has no master prompt`);
 
-  // 2. Update stage to running
   await db
     .update(stages)
     .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
@@ -29,17 +33,19 @@ export async function suggestPersonas(projectId: string, userId: string): Promis
 
   const startedAt = Date.now();
 
-  // 3. Call Claude for persona suggestions
-  const result = await claude.call({
+  const callOptions = {
     system: buildPersonaSuggestionSystemPrompt(),
     messages: [
-      { role: "user", content: buildPersonaSuggestionUserMessage(project.masterPrompt) },
+      { role: "user" as const, content: buildPersonaSuggestionUserMessage(project.masterPrompt) },
     ],
-  });
+  };
+
+  const result = onChunk
+    ? await claude.stream(callOptions, onChunk)
+    : await claude.call(callOptions);
 
   const durationMs = Date.now() - startedAt;
 
-  // 4. Parse suggestions
   let suggestions: PersonaSuggestion[] = [];
   try {
     const jsonMatch = result.content.match(/\[[\s\S]*\]/);
@@ -50,7 +56,6 @@ export async function suggestPersonas(projectId: string, userId: string): Promis
     throw new Error("Failed to parse persona suggestions from Claude response");
   }
 
-  // 5. Insert personas
   if (suggestions.length > 0) {
     await db.insert(personas).values(
       suggestions.map((s) => ({
@@ -58,11 +63,11 @@ export async function suggestPersonas(projectId: string, userId: string): Promis
         name: s.name,
         description: s.description,
         systemPrompt: s.systemPrompt,
+        tags: s.tags ?? [],
       }))
     );
   }
 
-  // 6. Write audit log
   await db.insert(auditLogs).values({
     projectId,
     userId,
@@ -74,7 +79,6 @@ export async function suggestPersonas(projectId: string, userId: string): Promis
     payload: { durationMs, personaCount: suggestions.length },
   });
 
-  // 7. Update stage - awaiting human selection
   await db
     .update(stages)
     .set({

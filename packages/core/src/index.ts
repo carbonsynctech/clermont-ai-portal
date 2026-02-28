@@ -14,7 +14,7 @@ export {
   AI_AGENT_STEPS,
 } from "./types/pipeline";
 export type { SopStepNumber } from "./types/pipeline";
-export type { Job, JobStatus, StageRunPayload } from "./types/jobs";
+export type { Job, JobStatus, StageRunPayload, AskAiPayload } from "./types/jobs";
 export {
   buildMasterPromptSystemPrompt,
   buildMasterPromptUserMessage,
@@ -22,6 +22,8 @@ export {
 export {
   buildPersonaSuggestionSystemPrompt,
   buildPersonaSuggestionUserMessage,
+  buildCustomPersonaSystemPrompt,
+  buildCustomPersonaUserMessage,
 } from "./prompts/personas";
 export {
   buildPersonaDraftSystemPrompt,
@@ -53,3 +55,7 @@ export {
   buildHtmlExportSystemPrompt,
   buildHtmlExportUserMessage,
 } from "./prompts/export";
+export {
+  buildAskAiSystemPrompt,
+  buildAskAiUserMessage,
+} from "./prompts/ask-ai";
