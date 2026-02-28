@@ -11,6 +11,7 @@ import { PersonaSelector } from "@/components/personas/persona-selector";
 import { MaterialUpload } from "@/components/sources/material-upload";
 import { StyleGuideUpload } from "@/components/sources/style-guide-upload";
 import { VersionsPanel } from "@/components/versions/versions-panel";
+import { InlineEditor } from "@/components/review/inline-editor";
 import type { ProjectBriefData } from "@repo/db";
 
 interface PageProps {
@@ -381,6 +382,34 @@ export default async function ProjectPage({ params }: PageProps) {
                     label="Apply Final Style Pass"
                     currentStatus={stageMap[9]?.status ?? "pending"}
                   />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 10: Human Review */}
+          {stageMap[9]?.status === "completed" && (
+            <Card className="col-span-full">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Step 10: Human Review</CardTitle>
+                <CardDescription className="text-xs">
+                  {stageMap[10]?.status === "completed"
+                    ? `Human review complete — ${versionRows.find((v) => v.versionType === "human_reviewed")?.wordCount?.toLocaleString() ?? "?"} words approved.`
+                    : "Read and edit the final styled memo inline before approving."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {stageMap[10]?.status === "awaiting_human" && (
+                  <InlineEditor
+                    projectId={project.id}
+                    initialContent={versionRows.find((v) => v.versionType === "final_styled")?.content ?? ""}
+                    versionLabel="Final Styled V4"
+                  />
+                )}
+                {stageMap[10]?.status === "completed" && (
+                  <p className="text-xs text-muted-foreground">
+                    Human Review V5 — approved and locked.
+                  </p>
                 )}
               </CardContent>
             </Card>
