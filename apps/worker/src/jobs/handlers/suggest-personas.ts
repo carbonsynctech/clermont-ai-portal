@@ -49,11 +49,12 @@ export async function suggestPersonas(
   let suggestions: PersonaSuggestion[] = [];
   try {
     const jsonMatch = result.content.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      suggestions = JSON.parse(jsonMatch[0]) as PersonaSuggestion[];
+    if (!jsonMatch) {
+      throw new Error("Failed to parse persona suggestions from Claude response");
     }
-  } catch {
-    throw new Error("Failed to parse persona suggestions from Claude response");
+    suggestions = JSON.parse(jsonMatch[0]) as PersonaSuggestion[];
+  } catch (err) {
+    throw err instanceof Error ? err : new Error("Failed to parse persona suggestions from Claude response");
   }
 
   if (suggestions.length > 0) {
