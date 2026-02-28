@@ -78,7 +78,7 @@ export async function generatePersonaDrafts(projectId: string, userId: string): 
 
   // 5. Select chunks within token budget (leave room for master prompt + system + response)
   const masterPromptTokens = estimateTokens(project.masterPrompt);
-  const availableTokens = getAvailableContextTokens("claude-sonnet-4-6");
+  const availableTokens = getAvailableContextTokens("claude-opus-4-6");
   const chunkBudget = availableTokens - masterPromptTokens - 4000; // reserve for system + response
   const selectedChunks = selectChunksForBudget(allChunks, chunkBudget);
 

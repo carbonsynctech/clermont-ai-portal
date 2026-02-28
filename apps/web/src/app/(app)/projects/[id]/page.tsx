@@ -54,11 +54,10 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
   const initialStep = Number.isFinite(stepParam) && stepParam >= 1 && stepParam <= 13
     ? stepParam
     : project.currentStage;
-  const step10Stage = stageRows.find((stage) => stage.stepNumber === 10);
-  const step10DraftContent =
-    typeof step10Stage?.metadata?.reviewDraftContent === "string"
-      ? step10Stage.metadata.reviewDraftContent
-      : null;
+  const step8Stage = stageRows.find((stage) => stage.stepNumber === 8);
+  const factCheckIssues = Array.isArray(step8Stage?.metadata?.factCheckIssues)
+    ? (step8Stage.metadata.factCheckIssues as string[])
+    : null;
 
   // Fetch selected cover image signed URL for the styled document preview
   let coverImageUrl: string | undefined;
@@ -87,7 +86,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       versions={versionRows}
       latestStyleGuide={styleGuideRows[0] ?? null}
       initialStep={initialStep}
-      step10DraftContent={step10DraftContent}
+      factCheckIssues={factCheckIssues}
       coverImageUrl={coverImageUrl}
     />
   );

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Builds the page array for the stylized document preview.
  *
  * Takes markdown content and project metadata, returns an ordered
@@ -6,9 +6,9 @@
  *
  * Page structure (matches the sample PDFs):
  *   1. Cover page
- *   2. Brand/mission intro page
- *   3. Abstract/overview intro page
- *   4. Confidentiality banner page
+ *   2. Intro A   About (navy left panel)
+ *   3. Intro B   Overview (structured white grid)
+ *   4. Intro C   Confidentiality (full dark)
  *   5. Table of Contents
  *   6. Separator (empty)
  *   7+. Content pages (two-column)
@@ -18,12 +18,13 @@
 import type { DocumentColors } from "./document-template";
 import { DEFAULT_COLORS } from "./document-template";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+//  Types 
 
 export type PageType =
   | "cover"
-  | "intro"
-  | "intro-banner"
+  | "intro-a"
+  | "intro-b"
+  | "intro-c"
   | "toc"
   | "separator"
   | "content"
@@ -42,23 +43,18 @@ interface ContentSection {
   subSections: { subHeading?: string; body: string }[];
 }
 
-// ─── Markdown → HTML helpers ──────────────────────────────────────────────────
+//  Markdown  HTML helpers 
 
 /** Minimal markdown-to-HTML for body paragraphs (no full parser needed). */
 function mdToHtml(md: string): string {
   return md
-    // Bold
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/__(.+?)__/g, "<strong>$1</strong>")
-    // Italic
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/_(.+?)_/g, "<em>$1</em>")
-    // Inline code
     .replace(/`(.+?)`/g, "<code>$1</code>")
-    // Mark tags pass-through
     .replace(/&lt;mark&gt;/g, "<mark>")
     .replace(/&lt;\/mark&gt;/g, "</mark>")
-    // Links
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 }
 
@@ -71,7 +67,6 @@ function blockToHtml(text: string): string {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Unordered list
     if (/^[-*+]\s/.test(trimmed)) {
       if (inList !== "ul") {
         if (inList) html += `</${inList}>`;
@@ -82,7 +77,6 @@ function blockToHtml(text: string): string {
       continue;
     }
 
-    // Ordered list
     if (/^\d+\.\s/.test(trimmed)) {
       if (inList !== "ol") {
         if (inList) html += `</${inList}>`;
@@ -93,20 +87,23 @@ function blockToHtml(text: string): string {
       continue;
     }
 
-    // Blockquote
     if (trimmed.startsWith(">")) {
       if (inList) { html += `</${inList}>`; inList = null; }
       html += `<blockquote>${mdToHtml(trimmed.replace(/^>\s?/, ""))}</blockquote>`;
       continue;
     }
 
-    // Empty line
     if (!trimmed) {
       if (inList) { html += `</${inList}>`; inList = null; }
       continue;
     }
 
-    // Regular paragraph
+    // Skip markdown horizontal rules (---, ***, ___)
+    if (/^[-*_]{3,}$/.test(trimmed)) {
+      if (inList) { html += `</${inList}>`; inList = null; }
+      continue;
+    }
+
     if (inList) { html += `</${inList}>`; inList = null; }
     html += `<p>${mdToHtml(trimmed)}</p>`;
   }
@@ -115,7 +112,7 @@ function blockToHtml(text: string): string {
   return html;
 }
 
-// ─── Content parser ───────────────────────────────────────────────────────────
+//  Content parser 
 
 /** Parse markdown content into sections split on ## headings. */
 function parseContentSections(markdown: string): ContentSection[] {
@@ -153,7 +150,7 @@ function parseContentSections(markdown: string): ContentSection[] {
       continue;
     }
 
-    // Skip H1 (title) — it goes on the cover
+    // Skip H1 (title)  it goes on the cover
     if (line.match(/^#\s+/)) continue;
 
     currentSubBody.push(line);
@@ -165,7 +162,137 @@ function parseContentSections(markdown: string): ContentSection[] {
   return sections;
 }
 
-// ─── Page builders ────────────────────────────────────────────────────────────
+function sanitizeMarkdownForPreview(markdown: string): string {
+  const lines = markdown.split("\n");
+
+  const filtered = lines
+    .map((line) => line.replace(/\u00a0/g, " "))
+    .map((line) => line.trimEnd())
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+
+      // Drop XML-like control tags and injected meta wrappers
+      if (/^<\/?[a-zA-Z][^>]*>/.test(trimmed)) return false;
+
+      // Drop common noise lines seen in draft/system outputs
+      if (/^contents$/i.test(trimmed)) return false;
+      if (/^document\s+note\s*:/i.test(trimmed)) return false;
+      if (/^copyright\b/i.test(trimmed)) return false;
+      if (/^[a-z]+\s+\d{4}\s+copyright\b/i.test(trimmed)) return false;
+      if (/^rules\s*:/i.test(trimmed)) return false;
+
+      return true;
+    });
+
+  return filtered.join("\n").trim();
+}
+
+function isLikelyNoiseTocTitle(title: string): boolean {
+  const normalized = title.toLowerCase();
+
+  if (normalized.includes("<") || normalized.includes(">")) return true;
+  if (normalized.includes("copyright")) return true;
+  if (normalized.startsWith("document note")) return true;
+  if (normalized === "contents") return true;
+  if (normalized.startsWith("rules")) return true;
+  if (normalized.startsWith("editeddraft")) return true;
+
+  return false;
+}
+
+function tocDedupKey(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[-–—:;,.'"()\[\]/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function dedupeTocTitles(titles: string[], max = 10): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const title of titles) {
+    const key = tocDedupKey(title);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(title);
+    if (result.length >= max) break;
+  }
+
+  return result;
+}
+
+function normaliseTocTitle(input: string): string | null {
+  const stripped = input
+    .replace(/^[#\-*+>\d.\s]+/, "")
+    .replace(/^section\s+\d+\s*[:\-]\s*/i, "")
+    .replace(/[*_`~\[\]()]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (isLikelyNoiseTocTitle(stripped)) return null;
+  if (stripped.length < 8) return null;
+  if (stripped.length <= 78) return stripped;
+  return `${stripped.slice(0, 75).trimEnd()}...`;
+}
+
+function deriveTocTitles(markdown: string, sections: ContentSection[]): string[] {
+  const lines = markdown.split("\n").map((line) => line.trim()).filter(Boolean);
+
+  const fromSectionLabels = lines
+    .map((line) => {
+      const sectionMatch = line.match(/^section\s+\d+\s*[:\-]\s*(.+)$/i);
+      if (sectionMatch?.[1]) return sectionMatch[1];
+      return null;
+    })
+    .filter((entry): entry is string => !!entry)
+    .map((entry) => normaliseTocTitle(entry))
+    .filter((entry): entry is string => !!entry);
+
+  if (fromSectionLabels.length > 0) {
+    return dedupeTocTitles(fromSectionLabels, 10);
+  }
+
+  const fromHeadings = markdown
+    .split("\n")
+    .map((line) => line.match(/^##+\s+(.+)/)?.[1] ?? null)
+    .filter((entry): entry is string => !!entry)
+    .map((entry) => normaliseTocTitle(entry))
+    .filter((entry): entry is string => !!entry);
+
+  if (fromHeadings.length > 0) {
+    return dedupeTocTitles(fromHeadings, 10);
+  }
+
+  const blocks = markdown
+    .replace(/^#\s+.+$/gm, "")
+    .split(/\n\s*\n+/)
+    .map((chunk) => chunk.replace(/\n+/g, " ").trim())
+    .filter((chunk) => chunk.length > 0);
+
+  const fromParagraphs: string[] = [];
+  for (const block of blocks) {
+    const firstSentence = block.split(/[.!?](?:\s|$)/)[0] ?? "";
+    const candidate = normaliseTocTitle(firstSentence);
+    if (candidate) fromParagraphs.push(candidate);
+    if (fromParagraphs.length >= 10) break;
+  }
+
+  if (fromParagraphs.length > 0) {
+    return dedupeTocTitles(fromParagraphs, 10);
+  }
+
+  const fallbackFromSections = sections
+    .map((section) => normaliseTocTitle(section.heading))
+    .filter((entry): entry is string => !!entry);
+
+  return dedupeTocTitles(fallbackFromSections, 10);
+}
+
+//  Page builders 
 
 function buildCoverPage(opts: {
   title: string;
@@ -174,29 +301,51 @@ function buildCoverPage(opts: {
   date: string;
   coverImageUrl?: string;
 }): DocPage {
-  const bgStyle = opts.coverImageUrl
-    ? `background-image: url('${opts.coverImageUrl}');`
+  const imageStyle = opts.coverImageUrl
+    ? `style="background-image: url('${opts.coverImageUrl}');" `
     : "";
-  const imageClass = opts.coverImageUrl ? " has-image" : "";
+
+  // Full-page cover image background
+  const bgFill = opts.coverImageUrl
+    ? `<div class="cover-image-fill" ${imageStyle}></div>`
+    : "";
+
+  // Top ~1/3 black header band with Clermont logo + white title, overlaid on top of the cover image
+  const topBand = `
+    <div style="
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 490px;
+      background: #000000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 40px 80px;
+      z-index: 2;
+    ">
+      <img
+        src="/clermont-logo.png"
+        alt="Clermont Group"
+        style="height: 130px; width: auto; object-fit: contain;"
+      />
+      <p style="
+        font-family: 'Gill Sans MT Light', 'Gill Sans Light', 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+        font-size: 42px;
+        font-weight: 300;
+        color: #ffffff;
+        text-align: center;
+        line-height: 1.3;
+        letter-spacing: 0.01em;
+        margin: 0;
+        max-width: 600px;
+      ">${escHtml(opts.title)}</p>
+    </div>`;
 
   return {
     type: "cover",
-    html: `
-      <div class="doc-page page-cover${imageClass}" style="${bgStyle}">
-        ${opts.coverImageUrl ? '<div class="cover-overlay"></div>' : ""}
-        <div class="cover-content">
-          <div class="cover-divider"></div>
-          <div class="cover-label">${opts.dealType ?? "Investment Memo"}</div>
-          <div class="cover-title">${escHtml(opts.title)}</div>
-          ${opts.companyName ? `<div class="cover-subtitle">Prepared for ${escHtml(opts.companyName)}</div>` : ""}
-          <div class="cover-meta">
-            <div class="cover-meta-item">Date<span class="cover-meta-value">${escHtml(opts.date)}</span></div>
-            ${opts.companyName ? `<div class="cover-meta-item">Client<span class="cover-meta-value">${escHtml(opts.companyName)}</span></div>` : ""}
-            <div class="cover-meta-item">Classification<span class="cover-meta-value">Confidential</span></div>
-          </div>
-        </div>
-      </div>
-    `.trim(),
+    html: `<div class="doc-page page-cover">${bgFill}${topBand}</div>`,
   };
 }
 
@@ -204,92 +353,46 @@ function buildIntroPages(opts: {
   companyName?: string;
   title: string;
 }): DocPage[] {
-  const company = opts.companyName ?? "Our Firm";
+  void opts;
 
   return [
-    // Page 2: Brand / mission statement
+    // Page 2: solid tan/gold colour block
     {
-      type: "intro" as PageType,
-      html: `
-        <div class="doc-page page-intro">
-          <div class="intro-icon">&#9670;</div>
-          <div class="intro-heading">About This Report</div>
-          <div class="intro-rule"></div>
-          <div class="intro-body">
-            <p>This document has been prepared by ${escHtml(company)} to provide a comprehensive
-            analysis and informed perspective. The findings and recommendations contained herein
-            are based on extensive research, expert consultation, and rigorous analytical frameworks.</p>
-            <p style="margin-top: 3%;"><strong>Our methodology</strong> combines quantitative data analysis
-            with qualitative expert assessment to deliver actionable insights for strategic decision-making.</p>
-          </div>
-        </div>
-      `.trim(),
+      type: "intro-a" as PageType,
+      html: `<div class="doc-page page-solid-tan"></div>`,
     },
-    // Page 3: Abstract / overview
+    // Page 3: static full-page image
     {
-      type: "intro" as PageType,
-      html: `
-        <div class="doc-page page-intro">
-          <div class="intro-heading">Document Overview</div>
-          <div class="intro-rule"></div>
-          <div class="intro-body">
-            <p><strong>${escHtml(opts.title)}</strong></p>
-            <p style="margin-top: 3%;">This report presents a thorough examination of the subject matter,
-            structured to guide the reader from foundational context through detailed analysis to
-            actionable recommendations.</p>
-            <p style="margin-top: 3%;">Each section has been reviewed by domain experts to ensure accuracy
-            and relevance. The document follows institutional standards for investment-grade research.</p>
-          </div>
-        </div>
-      `.trim(),
-    },
-    // Page 4: Confidentiality banner
-    {
-      type: "intro-banner" as PageType,
-      html: `
-        <div class="doc-page page-intro-banner">
-          <div class="intro-heading">Confidential</div>
-          <div class="intro-rule" style="background: rgba(255,255,255,0.3);"></div>
-          <div class="intro-body">
-            <p>This document contains proprietary information and is intended solely for the use of the
-            intended recipient(s). Unauthorised distribution, reproduction, or disclosure of any part
-            of this document is strictly prohibited.</p>
-            <p style="margin-top: 3%;">By proceeding, the reader acknowledges that the contents of this
-            report are confidential and agrees to abide by the terms of any applicable non-disclosure agreements.</p>
-          </div>
-        </div>
-      `.trim(),
+      type: "intro-c" as PageType,
+      html: `<div class="doc-page page-static-image" style="background-image: url('/step7-page4.jpg');"></div>`,
     },
   ];
 }
 
-function buildTocPage(sections: ContentSection[]): DocPage {
-  // We start content pages after cover(1) + intro(3) + toc(1) + separator(1) = 7
-  // So first content page is page 7
-  const CONTENT_START_PAGE = 7;
+function buildTocPage(markdown: string, sections: ContentSection[]): DocPage {
+  // Content pages start after: cover(1) + intro(2) + toc(1) + separator(1) = page 6
+  const CONTENT_START_PAGE = 6;
+  const tocTitles = deriveTocTitles(markdown, sections);
 
-  // Distribute sections across pages (rough estimate: ~800 chars per page)
-  const items = sections.map((section, idx) => {
+  const items = tocTitles.map((title, idx) => {
     const approxPage = CONTENT_START_PAGE + idx;
     return `
-      <li class="toc-item">
-        <span class="toc-title">${escHtml(section.heading)}</span>
-        <span class="toc-dots"></span>
-        <span class="toc-page">${approxPage}</span>
-      </li>
-    `;
+    <li class="toc-item">
+      <span class="toc-title">${escHtml(title)}</span>
+      <span class="toc-page-num">${approxPage}</span>
+    </li>`;
   });
 
   return {
     type: "toc",
     html: `
-      <div class="doc-page page-toc">
-        <div class="toc-heading">Contents</div>
-        <ul class="toc-list">
-          ${items.join("")}
-        </ul>
-      </div>
-    `.trim(),
+<div class="doc-page page-toc">
+  <div class="toc-top-rule"></div>
+  <div class="toc-heading">Contents</div>
+  <ul class="toc-list">
+    ${items.join("")}
+  </ul>
+</div>`.trim(),
   };
 }
 
@@ -300,32 +403,75 @@ function buildSeparatorPage(): DocPage {
   };
 }
 
-function buildContentPages(sections: ContentSection[], startPage: number): DocPage[] {
+function buildContentPages(markdown: string, sections: ContentSection[], startPage: number): DocPage[] {
   const pages: DocPage[] = [];
   let currentPage = startPage;
+  const firstHeading = sections[0]?.heading ?? "Summary";
 
-  for (const section of sections) {
-    // Build section HTML
-    let sectionHtml = `<div class="content-header"><div class="section-heading">${escHtml(section.heading)}</div></div>`;
-    sectionHtml += `<div class="content-columns">`;
+  const blocks: string[] = [];
 
-    for (const sub of section.subSections) {
-      if (sub.subHeading) {
-        sectionHtml += `<h3>${escHtml(sub.subHeading)}</h3>`;
+  if (sections.length > 0) {
+    for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+      const section = sections[sectionIndex]!;
+      if (sectionIndex > 0) {
+        blocks.push(`<h2>${escHtml(section.heading)}</h2>`);
       }
-      sectionHtml += blockToHtml(sub.body);
-    }
 
-    sectionHtml += `</div>`;
+      for (const sub of section.subSections) {
+        if (sub.subHeading) {
+          blocks.push(`<h3>${escHtml(sub.subHeading)}</h3>`);
+        }
+
+        const html = blockToHtml(sub.body).trim();
+        if (html) blocks.push(html);
+      }
+    }
+  } else {
+    const paragraphs = markdown
+      .split(/\n\s*\n+/)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 0);
+
+    for (const paragraph of paragraphs) {
+      const html = blockToHtml(paragraph).trim();
+      if (html) blocks.push(html);
+    }
+  }
+
+  if (blocks.length === 0) {
+    blocks.push("<p></p>");
+  }
+
+  const pageChunks: string[] = [];
+  let currentChunk = "";
+
+  for (const block of blocks) {
+    const chunkBudget = pageChunks.length === 0 ? 3000 : 3600;
+    if (currentChunk.length > 0 && currentChunk.length + block.length > chunkBudget) {
+      pageChunks.push(currentChunk);
+      currentChunk = block;
+    } else {
+      currentChunk += block;
+    }
+  }
+
+  if (currentChunk.length > 0) {
+    pageChunks.push(currentChunk);
+  }
+
+  for (let i = 0; i < pageChunks.length; i++) {
+    const chunk = pageChunks[i]!;
 
     pages.push({
       type: "content",
       html: `
-        <div class="doc-page page-content">
-          ${sectionHtml}
-          <div class="page-number">${currentPage}</div>
-        </div>
-      `.trim(),
+<div class="doc-page page-content page-content-flow">
+  ${i === 0 ? `<div class="flow-page-title">${escHtml(firstHeading)}</div>` : ""}
+  <div class="flow-columns">
+    ${chunk}
+  </div>
+  <div class="page-number">${currentPage}</div>
+</div>`.trim(),
       pageNumber: currentPage,
     });
 
@@ -339,86 +485,38 @@ function buildOutroPages(opts: {
   companyName?: string;
   title: string;
 }): DocPage[] {
-  const company = opts.companyName ?? "Our Firm";
+  void opts;
 
   return [
-    // Last-4: Methodology
+    // Fifth-last: white page with centered note
     {
       type: "outro" as PageType,
-      html: `
-        <div class="doc-page page-outro">
-          <div class="outro-heading">Methodology</div>
-          <div class="outro-rule"></div>
-          <div class="outro-body">
-            <p>The analysis presented in this report was conducted using a multi-layered research
-            methodology combining quantitative and qualitative approaches.</p>
-            <p><strong>Data Sources:</strong> Primary research, industry databases, public filings,
-            expert interviews, and proprietary analytical models.</p>
-            <p><strong>Analytical Framework:</strong> Our assessment incorporates market sizing, competitive
-            positioning analysis, financial modelling, risk assessment matrices, and scenario planning.</p>
-            <p><strong>Review Process:</strong> This document has undergone multiple rounds of review by
-            domain-specific experts, fact-checkers, and editorial staff to ensure accuracy and clarity.</p>
-          </div>
-        </div>
-      `.trim(),
+      html: `<div class="doc-page page-trailing-blank"><span>This page is intentionally left blank</span></div>`,
     },
-    // Last-3: Disclosures
+    // Fourth-last: white page with centered note
     {
       type: "outro" as PageType,
-      html: `
-        <div class="doc-page page-outro">
-          <div class="outro-heading">Important Disclosures</div>
-          <div class="outro-rule"></div>
-          <div class="outro-body">
-            <p>This report is provided for informational purposes only and does not constitute investment
-            advice, a recommendation, or an offer to buy or sell any securities.</p>
-            <p>Past performance is not indicative of future results. Projections and estimates are based
-            on current market conditions and are subject to change without notice.</p>
-            <p>${escHtml(company)} and its affiliates may hold positions in securities discussed in this
-            report. Recipients should conduct their own due diligence before making any investment decisions.</p>
-            <p>The information contained herein has been obtained from sources believed to be reliable, but
-            no guarantee is made as to its accuracy or completeness.</p>
-          </div>
-        </div>
-      `.trim(),
+      html: `<div class="doc-page page-trailing-blank"><span>This page is intentionally left blank</span></div>`,
     },
-    // Last-2: About
+    // Third-last: white page with centered note
     {
       type: "outro" as PageType,
-      html: `
-        <div class="doc-page page-outro">
-          <div class="outro-heading">About ${escHtml(company)}</div>
-          <div class="outro-rule"></div>
-          <div class="outro-body">
-            <p>${escHtml(company)} delivers institutional-grade research and advisory services,
-            combining advanced AI-powered analytical tools with deep domain expertise.</p>
-            <p>Our team comprises experienced investment professionals, data scientists, and industry
-            specialists dedicated to providing actionable intelligence for strategic decision-making.</p>
-            <p>For more information about our research capabilities and service offerings, please
-            contact your dedicated relationship manager.</p>
-          </div>
-        </div>
-      `.trim(),
+      html: `<div class="doc-page page-trailing-blank"><span>This page is intentionally left blank</span></div>`,
     },
-    // Last-1: Back cover
+    // Second-last: full #D0B38B
+    {
+      type: "outro" as PageType,
+      html: `<div class="doc-page page-trailing-tan"></div>`,
+    },
+    // Last: full #000000
     {
       type: "outro-back" as PageType,
-      html: `
-        <div class="doc-page page-outro-back">
-          <div class="back-title">${escHtml(company)}</div>
-          <div class="back-rule"></div>
-          <div class="back-subtitle">Institutional Research &amp; Advisory</div>
-          <div class="back-info">
-            &copy; ${new Date().getFullYear()} ${escHtml(company)}. All rights reserved.<br/>
-            This document is confidential and intended for authorised recipients only.
-          </div>
-        </div>
-      `.trim(),
+      html: `<div class="doc-page page-trailing-black"></div>`,
     },
   ];
 }
 
-// ─── Main export ──────────────────────────────────────────────────────────────
+//  Main export 
 
 export interface BuildStyledPagesOptions {
   content: string;
@@ -431,7 +529,8 @@ export interface BuildStyledPagesOptions {
 
 export function buildStyledPages(opts: BuildStyledPagesOptions): DocPage[] {
   const _colors = opts.colors ?? DEFAULT_COLORS;
-  void _colors; // Colors are applied via CSS, not used directly here
+  void _colors; // Colors are applied via CSS variables, not used directly here
+  const sanitizedContent = sanitizeMarkdownForPreview(opts.content);
 
   const date = new Date().toLocaleDateString("en-GB", {
     year: "numeric",
@@ -439,7 +538,7 @@ export function buildStyledPages(opts: BuildStyledPagesOptions): DocPage[] {
     day: "numeric",
   });
 
-  const sections = parseContentSections(opts.content);
+  const sections = parseContentSections(sanitizedContent);
 
   const pages: DocPage[] = [];
 
@@ -454,7 +553,7 @@ export function buildStyledPages(opts: BuildStyledPagesOptions): DocPage[] {
     }),
   );
 
-  // 2-4. Intro pages
+  // 2-3. Intro pages
   pages.push(
     ...buildIntroPages({
       companyName: opts.companyName,
@@ -463,16 +562,16 @@ export function buildStyledPages(opts: BuildStyledPagesOptions): DocPage[] {
   );
 
   // 5. Table of Contents
-  pages.push(buildTocPage(sections));
+  pages.push(buildTocPage(sanitizedContent, sections));
 
   // 6. Separator
   pages.push(buildSeparatorPage());
 
-  // 7+. Content pages
-  const contentStartPage = 7;
-  pages.push(...buildContentPages(sections, contentStartPage));
+  // 6+. Content pages (start at printed page 6)
+  const contentStartPage = 6;
+  pages.push(...buildContentPages(sanitizedContent, sections, contentStartPage));
 
-  // Outro pages (last 4)
+  // Outro pages (last 5)
   pages.push(
     ...buildOutroPages({
       companyName: opts.companyName,
@@ -483,7 +582,7 @@ export function buildStyledPages(opts: BuildStyledPagesOptions): DocPage[] {
   return pages;
 }
 
-// ─── Utility ──────────────────────────────────────────────────────────────────
+//  Utility 
 
 function escHtml(str: string): string {
   return str

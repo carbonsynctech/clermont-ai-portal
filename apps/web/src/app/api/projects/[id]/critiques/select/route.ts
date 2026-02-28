@@ -29,20 +29,20 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const body = (await req.json()) as { selectedCritiques?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { selectedCritiques?: unknown };
 
   if (
-    !Array.isArray(body.selectedCritiques) ||
-    body.selectedCritiques.length < 1 ||
-    !body.selectedCritiques.every((c) => typeof c === "string")
+    body.selectedCritiques !== undefined &&
+    (!Array.isArray(body.selectedCritiques) ||
+      !body.selectedCritiques.every((c) => typeof c === "string"))
   ) {
     return NextResponse.json(
-      { error: "selectedCritiques must be a non-empty array of strings" },
+      { error: "selectedCritiques must be an array of strings" },
       { status: 400 }
     );
   }
 
-  const selectedCritiques = body.selectedCritiques as string[];
+  const selectedCritiques = (body.selectedCritiques as string[] | undefined) ?? [];
 
   // Insert audit log with selected critiques in payload
   await db.insert(auditLogs).values({
@@ -59,11 +59,31 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
 
+  if (selectedCritiques.length === 0) {
+    // Skip step 12 entirely when no critiques are selected
+    await db
+      .update(stages)
+      .set({
+        status: "completed",
+        completedAt: new Date(),
+        updatedAt: new Date(),
+        metadata: { reviewNotes: "Skipped Step 12 because no critiques were selected." },
+      })
+      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 12)));
+
+    await db
+      .update(projects)
+      .set({ currentStage: 13, updatedAt: new Date() })
+      .where(eq(projects.id, projectId));
+
+    return NextResponse.json({ ok: true, nextStep: 13, skippedStep12: true });
+  }
+
   // Advance project to stage 12
   await db
     .update(projects)
     .set({ currentStage: 12, updatedAt: new Date() })
     .where(eq(projects.id, projectId));
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, nextStep: 12, skippedStep12: false });
 }

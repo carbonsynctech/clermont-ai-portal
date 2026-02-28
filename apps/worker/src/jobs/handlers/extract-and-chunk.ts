@@ -1,8 +1,11 @@
 import { PDFParse } from "pdf-parse";
-import { db, sourceMaterials, sourceChunks } from "@repo/db";
+import { db, sourceMaterials, sourceChunks, auditLogs } from "@repo/db";
 import { eq } from "drizzle-orm";
-import { chunkText } from "@repo/core";
+import { chunkText, claude } from "@repo/core";
 import { createAdminClient } from "../../lib/supabase-admin";
+
+const HAIKU_MODEL = "claude-haiku-4-5-20251001";
+const SUMMARY_BATCH_SIZE = 10;
 
 export async function extractAndChunk(materialId: string): Promise<void> {
   // 1. Fetch source_material row
@@ -69,4 +72,56 @@ export async function extractAndChunk(materialId: string): Promise<void> {
     .where(eq(sourceMaterials.id, materialId));
 
   console.log(`Extracted ${chunks.length} chunks from material ${materialId}`);
+
+  // 8. Summarize each chunk with Claude Haiku so selectChunksForBudget() can
+  //    fall back to summaries when the full source material exceeds the token budget.
+  if (chunks.length > 0) {
+    const insertedChunks = await db.query.sourceChunks.findMany({
+      where: eq(sourceChunks.materialId, materialId),
+      orderBy: (c, { asc }) => [asc(c.chunkIndex)],
+    });
+
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+
+    for (let i = 0; i < insertedChunks.length; i += SUMMARY_BATCH_SIZE) {
+      const batch = insertedChunks.slice(i, i + SUMMARY_BATCH_SIZE);
+      await Promise.all(
+        batch.map(async (chunk) => {
+          try {
+            const result = await claude.call({
+              model: HAIKU_MODEL,
+              system:
+                "You are a concise summarizer. Summarize the provided excerpt in 2-3 sentences, preserving key facts, names, numbers, and claims.",
+              messages: [{ role: "user", content: chunk.content }],
+              maxTokens: 150,
+            });
+            await db
+              .update(sourceChunks)
+              .set({ summary: result.content.trim() })
+              .where(eq(sourceChunks.id, chunk.id));
+            totalInputTokens += result.inputTokens;
+            totalOutputTokens += result.outputTokens;
+          } catch (err) {
+            console.warn(
+              `Failed to summarize chunk ${chunk.id} (index ${chunk.chunkIndex}):`,
+              err,
+            );
+          }
+        }),
+      );
+    }
+
+    await db.insert(auditLogs).values({
+      projectId: material.projectId,
+      action: "agent_response_received",
+      stepNumber: 3,
+      modelId: HAIKU_MODEL,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      payload: { materialId, chunkCount: insertedChunks.length, summarizationComplete: true },
+    });
+
+    console.log(`Summarized ${insertedChunks.length} chunks from material ${materialId}`);
+  }
 }

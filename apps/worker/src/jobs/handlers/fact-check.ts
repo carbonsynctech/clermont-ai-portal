@@ -6,13 +6,15 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).length;
 }
 
-export async function factCheck(projectId: string, userId: string): Promise<void> {
+export async function factCheck(projectId: string, userId: string, onChunk?: (chunk: string) => void): Promise<void> {
   // 1. Fetch project
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
   });
 
   if (!project) throw new Error(`Project ${projectId} not found`);
+
+  onChunk?.("Fetching latest styled version…\n");
 
   // 2. Update stage to running
   await db
@@ -44,6 +46,8 @@ export async function factCheck(projectId: string, userId: string): Promise<void
     throw new Error(`Project ${projectId} has no styled version to fact-check`);
   }
 
+  onChunk?.("Extracting factual claims with Claude…\n");
+
   // 4. Extract factual claims via Claude
   const claimsResult = await claude.call({
     system: "Extract all specific factual claims (numbers, dates, names, statistics, percentages, financial figures) from the provided content. Return a JSON array of strings — one claim per item. Return ONLY the JSON array, no other text.",
@@ -62,10 +66,22 @@ export async function factCheck(projectId: string, userId: string): Promise<void
     claims = [];
   }
 
+  onChunk?.(`Found ${claims.length} claim${claims.length !== 1 ? "s" : ""} to verify.\n`);
+  onChunk?.("Sending to Gemini for fact-checking…\n");
+
   // 5. Call Gemini fact-check
   const geminiResult = await gemini.factCheck(styledContent, claims);
 
   const durationMs = Date.now() - startedAt;
+
+  const issueWord = geminiResult.issues.length === 1 ? "issue" : "issues";
+  onChunk?.(
+    geminiResult.verified
+      ? `Fact-check complete. No issues found.\n`
+      : `Fact-check complete. ${geminiResult.issues.length} ${issueWord} found:\n${geminiResult.issues.map((i) => `  • ${i}`).join("\n")}\n`
+  );
+  onChunk?.(`\n${geminiResult.correctedContent}\n`);
+  onChunk?.("\nSaving corrected version…\n");
 
   // 6. Insert fact-checked version
   const issueCount = geminiResult.issues.length;
@@ -96,7 +112,7 @@ export async function factCheck(projectId: string, userId: string): Promise<void
     userId,
     action: "agent_response_received",
     stepNumber: 8,
-    modelId: "gemini-2.0-flash",
+    modelId: "gemini-2.5-flash",
     payload: {
       durationMs,
       issueCount,
@@ -105,20 +121,16 @@ export async function factCheck(projectId: string, userId: string): Promise<void
     },
   });
 
-  // 9. Update stage to completed
+  // 9. Update stage to awaiting human approval
   await db
     .update(stages)
     .set({
-      status: "completed",
-      completedAt: new Date(),
+      status: "awaiting_human",
       updatedAt: new Date(),
-      metadata: { durationMs },
+      metadata: {
+        durationMs,
+        factCheckIssues: geminiResult.issues,
+      },
     })
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
-
-  // 10. Advance project to stage 9
-  await db
-    .update(projects)
-    .set({ currentStage: 9, updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
 }

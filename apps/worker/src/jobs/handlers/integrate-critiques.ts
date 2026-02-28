@@ -47,10 +47,6 @@ export async function integrateCritiques(projectId: string, userId: string): Pro
   const logPayload = critiqueLog.payload as { selectedCritiques: string[] } | null;
   const selectedCritiques = logPayload?.selectedCritiques ?? [];
 
-  if (selectedCritiques.length === 0) {
-    throw new Error(`Project ${projectId} has no selected critiques`);
-  }
-
   // 4. Update stage 12 to running
   await db
     .update(stages)
@@ -59,22 +55,27 @@ export async function integrateCritiques(projectId: string, userId: string): Pro
 
   const startedAt = Date.now();
 
-  // 5. Call Claude with extended thinking (10k budget per architecture rules)
-  const result = await claude.callWithThinking({
-    system: buildCritiqueIntegrationSystemPrompt(),
-    messages: [
-      {
-        role: "user",
-        content: buildCritiqueIntegrationUserMessage(
-          humanReviewedVersion.content,
-          selectedCritiques
-        ),
-      },
-    ],
-    maxTokens: 18192, // 8192 output + 10000 thinking budget
-  });
+
+  // 5. Integrate critiques (if any). For zero critiques, carry forward V5 as V6.
+  const hasSelectedCritiques = selectedCritiques.length > 0;
+  const result = hasSelectedCritiques
+    ? await claude.callWithThinking({
+      system: buildCritiqueIntegrationSystemPrompt(),
+      messages: [
+        {
+          role: "user",
+          content: buildCritiqueIntegrationUserMessage(
+            humanReviewedVersion.content,
+            selectedCritiques
+          ),
+        },
+      ],
+      maxTokens: 18192, // 8192 output + 10000 thinking budget
+    })
+    : null;
 
   const durationMs = Date.now() - startedAt;
+  const finalContent = result?.content ?? humanReviewedVersion.content;
 
   // 6. Insert final version
   const [newVersion] = await db
@@ -83,9 +84,9 @@ export async function integrateCritiques(projectId: string, userId: string): Pro
       projectId,
       producedByStep: 12,
       versionType: "final",
-      internalLabel: "Final V6",
-      content: result.content,
-      wordCount: countWords(result.content),
+      internalLabel: hasSelectedCritiques ? "Final V6" : "Final V6 (No Critiques Selected)",
+      content: finalContent,
+      wordCount: countWords(finalContent),
       isClientVisible: false,
     })
     .returning();
@@ -99,16 +100,30 @@ export async function integrateCritiques(projectId: string, userId: string): Pro
     .where(eq(projects.id, projectId));
 
   // 8. Insert audit log
-  await db.insert(auditLogs).values({
-    projectId,
-    userId,
-    action: "agent_response_received",
-    stepNumber: 12,
-    modelId: result.model,
-    inputTokens: result.inputTokens,
-    outputTokens: result.outputTokens,
-    payload: { durationMs, thinkingLength: result.thinking.length },
-  });
+  if (result) {
+    await db.insert(auditLogs).values({
+      projectId,
+      userId,
+      action: "agent_response_received",
+      stepNumber: 12,
+      modelId: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      payload: { durationMs, thinkingLength: result.thinking.length },
+    });
+  } else {
+    await db.insert(auditLogs).values({
+      projectId,
+      userId,
+      action: "stage_completed",
+      stepNumber: 12,
+      payload: {
+        durationMs,
+        selectedCritiquesCount: 0,
+        reason: "No critiques selected; carried forward human-reviewed version",
+      },
+    });
+  }
 
   // 9. Update stage 12 to completed
   await db
@@ -118,10 +133,11 @@ export async function integrateCritiques(projectId: string, userId: string): Pro
       completedAt: new Date(),
       updatedAt: new Date(),
       metadata: {
-        modelId: result.model,
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
+        ...(result?.model !== undefined && { modelId: result.model }),
+        ...(result?.inputTokens !== undefined && { inputTokens: result.inputTokens }),
+        ...(result?.outputTokens !== undefined && { outputTokens: result.outputTokens }),
         durationMs,
+        selectedCritiquesCount: selectedCritiques.length,
       },
     })
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 12)));

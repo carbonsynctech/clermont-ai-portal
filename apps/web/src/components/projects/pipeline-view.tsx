@@ -9,15 +9,18 @@ import { StepTrigger } from "./step-trigger";
 import { SelectPersonasStep } from "./steps/select-personas-step";
 import { SynthesisStep } from "./steps/synthesis-step";
 import { StyleEditStep } from "./steps/style-edit-step";
+import { FinalStylePassStep } from "./steps/final-style-pass-step";
+import { IntegrateCritiquesStep } from "./steps/integrate-critiques-step";
 import { MaterialUpload } from "@/components/sources/material-upload";
 import { StyleGuideUpload } from "@/components/sources/style-guide-upload";
-import { StyleGuidePreview } from "@/components/sources/style-guide-preview";
+import { StyleGuidePreview, type ColorPaletteEntry } from "@/components/sources/style-guide-preview";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 import { InlineEditor, type InlineEditorHandle } from "@/components/review/inline-editor";
 import { CritiqueSelector } from "@/components/review/critique-selector";
+import { FactCheckReviewStep } from "@/components/review/fact-check-review";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangleIcon, CheckCircle2, Users, BookOpen, Eye } from "lucide-react";
+import { AlertTriangleIcon, CheckCircle2, Users, BookOpen, Eye, RefreshCw } from "lucide-react";
 import type {
   Stage,
   Persona,
@@ -27,6 +30,7 @@ import type {
   Project,
 } from "@repo/db";
 import type { ProjectBriefData } from "@repo/db";
+import { type DocumentColors, DEFAULT_COLORS } from "./steps/document-template";
 
 const STEP_TITLES: Record<number, string> = {
   1: "Define Task",
@@ -72,7 +76,7 @@ interface PipelineViewProps {
   versions: Version[];
   latestStyleGuide: StyleGuide | null;
   initialStep: number;
-  step10DraftContent: string | null;
+  factCheckIssues: string[] | null;
   coverImageUrl?: string;
 }
 
@@ -84,7 +88,7 @@ export function PipelineView({
   versions,
   latestStyleGuide,
   initialStep,
-  step10DraftContent,
+  factCheckIssues,
   coverImageUrl,
 }: PipelineViewProps) {
   const router = useRouter();
@@ -93,12 +97,37 @@ export function PipelineView({
   const [step1Running, setStep1Running] = useState(false);
   const [step4Running, setStep4Running] = useState(false);
   const [step5Running, setStep5Running] = useState(false);
-  const [step7Running, setStep7Running] = useState(false);
   const [step8Running, setStep8Running] = useState(false);
   const [step9Running, setStep9Running] = useState(false);
   const [step11Running, setStep11Running] = useState(false);
+  const [step11Submitting, setStep11Submitting] = useState(false);
+  const [step11SelectedCritiques, setStep11SelectedCritiques] = useState<string[]>([]);
   const [step12Running, setStep12Running] = useState(false);
+  const [step12Skipping, setStep12Skipping] = useState(false);
   const [step13Running, setStep13Running] = useState(false);
+  const [step7FormatRunId, setStep7FormatRunId] = useState(0);
+  const [step13RunId, setStep13RunId] = useState(0);
+
+  // Shared document styling state — set in step 6, consumed in step 7
+  const [documentColors, setDocumentColors] = useState<DocumentColors>(DEFAULT_COLORS);
+  const [liveCoverImageUrl, setLiveCoverImageUrl] = useState<string | undefined>(coverImageUrl);
+
+  // Keep liveCoverImageUrl in sync when the server refreshes the signed URL
+  useEffect(() => {
+    setLiveCoverImageUrl(coverImageUrl);
+  }, [coverImageUrl]);
+
+  const handleColorsChange = useCallback((palette: ColorPaletteEntry[]) => {
+    const [primary, secondary, accent, neutral, muted, surface] = palette;
+    setDocumentColors({
+      primary:   primary?.hex   ?? DEFAULT_COLORS.primary,
+      secondary: secondary?.hex ?? DEFAULT_COLORS.secondary,
+      accent:    accent?.hex    ?? DEFAULT_COLORS.accent,
+      neutral:   neutral?.hex   ?? DEFAULT_COLORS.neutral,
+      muted:     muted?.hex     ?? DEFAULT_COLORS.muted,
+      surface:   surface?.hex   ?? DEFAULT_COLORS.surface,
+    });
+  }, []);
 
   // Step 10 editor ref + state (for floating bar actions)
   const editorRef = useRef<InlineEditorHandle | null>(null);
@@ -151,6 +180,55 @@ export function PipelineView({
     setActiveStep(next);
     router.push(`/projects/${project.id}?step=${next}`);
   }
+
+  async function handleStep11Continue() {
+    setStep11Submitting(true);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/critiques/select`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedCritiques: step11SelectedCritiques }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to save Step 11 selection");
+      }
+
+      const data = (await res.json()) as { nextStep?: number };
+      const next = data.nextStep === 13 ? 13 : 12;
+      setActiveStep(next);
+      router.push(`/projects/${project.id}?step=${next}`);
+      router.refresh();
+    } catch (error) {
+      console.error("Step 11 continue error:", error);
+      alert(error instanceof Error ? error.message : "Failed to continue to Step 12");
+    } finally {
+      setStep11Submitting(false);
+    }
+  }
+
+  async function handleStep12SkipContinue() {
+    setStep12Skipping(true);
+    try {
+      const res = await fetch(`/api/projects/${project.id}/stages/12/skip`, {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to skip Step 12");
+      }
+
+      const next = 13;
+      setActiveStep(next);
+      router.push(`/projects/${project.id}?step=${next}`);
+      router.refresh();
+    } catch (error) {
+      console.error("Step 12 skip error:", error);
+      alert(error instanceof Error ? error.message : "Failed to continue to Step 13");
+    } finally {
+      setStep12Skipping(false);
+    }
+  }
   const showFloatingStepBar = activeStep >= 4;
 
   function renderStepContent() {
@@ -189,16 +267,7 @@ export function PipelineView({
 
       case 4: {
         const canRunStep4 = stageMap[3]?.status === "completed";
-        return status === "completed" ? (
-          <div className="rounded-xl border bg-card p-6 space-y-2">
-            <p className="font-medium text-base text-green-700 dark:text-green-400">
-              {personaDrafts.length} persona draft{personaDrafts.length !== 1 ? "s" : ""} generated.
-            </p>
-            <p className="text-base text-muted-foreground">
-              All drafts are available in Output Versions below. Proceed to Step 5 to synthesise.
-            </p>
-          </div>
-        ) : (
+        return (
           <div className="space-y-4">
             <div className="rounded-xl border bg-card p-6 space-y-4">
               <div className="flex items-center gap-2">
@@ -263,6 +332,8 @@ export function PipelineView({
                 projectTitle={project.title}
                 companyName={brief?.companyName}
                 onGeneratingChange={setCoverImagesGenerating}
+                onColorsChange={handleColorsChange}
+                onCoverImageChange={setLiveCoverImageUrl}
               />
             )}
           </div>
@@ -278,57 +349,58 @@ export function PipelineView({
             stage5Status={stageMap[5]?.status ?? "pending"}
             stage7Status={status}
             styledVersion={versions.find((v) => v.versionType === "styled")}
+            synthesisVersion={versions.find((v) => v.versionType === "synthesis")}
             latestStyleGuide={latestStyleGuide}
-            coverImageUrl={coverImageUrl}
-            onRunningChange={setStep7Running}
+            coverImageUrl={liveCoverImageUrl}
+            colors={documentColors}
+            formatRunId={step7FormatRunId}
           />
         );
 
-      case 8:
+      case 8: {
         const canRunStep8 = stageMap[7]?.status === "completed";
+        if (factCheckVersion) {
+          return (
+            <FactCheckReviewStep
+              projectId={project.id}
+              projectTitle={project.title}
+              companyName={brief?.companyName}
+              dealType={brief?.dealType}
+              coverImageUrl={coverImageUrl}
+              factCheckIssues={factCheckIssues ?? []}
+              factCheckedVersion={factCheckVersion}
+            />
+          );
+        }
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {status === "completed" && factCheckVersion && (
-              <p className="text-base text-muted-foreground">{factCheckVersion.internalLabel}</p>
-            )}
-            {status !== "completed" && (
-              <StepTrigger
-                projectId={project.id}
-                stepNumber={8}
-                label="Fact-Check with Gemini"
-                currentStatus={status}
-                disabled={!canRunStep8}
-                disabledReason="Complete Step 7 to run this step."
-                autoRun={canRunStep8}
-                onRunningChange={setStep8Running}
-              />
-            )}
+            <StepTrigger
+              projectId={project.id}
+              stepNumber={8}
+              label="Fact-Check with Gemini"
+              currentStatus={status}
+              disabled={!canRunStep8}
+              disabledReason="Complete Step 7 to run this step."
+              autoRun={canRunStep8}
+              onRunningChange={setStep8Running}
+            />
           </div>
         );
+      }
 
       case 9:
-        const canRunStep9 = stageMap[8]?.status === "completed";
         return (
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            {status === "completed" && (
-              <p className="text-base text-muted-foreground">
-                Final Styled V4 —{" "}
-                {versions.find((v) => v.versionType === "final_styled")?.wordCount?.toLocaleString() ?? "?"} words.
-              </p>
-            )}
-            {status !== "completed" && (
-              <StepTrigger
-                projectId={project.id}
-                stepNumber={9}
-                label="Apply Final Style Pass"
-                currentStatus={status}
-                disabled={!canRunStep9}
-                disabledReason="Complete Step 8 to run this step."
-                autoRun={canRunStep9}
-                onRunningChange={setStep9Running}
-              />
-            )}
-          </div>
+          <FinalStylePassStep
+            projectId={project.id}
+            projectTitle={project.title}
+            companyName={brief?.companyName}
+            dealType={brief?.dealType}
+            coverImageUrl={coverImageUrl}
+            finalStyledVersion={versions.find((v) => v.versionType === "final_styled")}
+            stage8Status={stageMap[8]?.status ?? "pending"}
+            stage9Status={status}
+            onRunningChange={setStep9Running}
+          />
         );
 
       case 10:
@@ -338,92 +410,85 @@ export function PipelineView({
               <Eye className="size-4 text-muted-foreground" />
               <h3 className="font-medium text-base text-foreground">Human Review</h3>
             </div>
-            {status !== "completed" && (
-              <InlineEditor
-                ref={editorRef}
-                projectId={project.id}
-                initialContent={step10DraftContent ?? versions.find((v) => v.versionType === "final_styled")?.content ?? ""}
-                versionLabel="Final Styled V4"
-                hideActions
-                onContentChange={handleStep10ContentChange}
-                onApproveSuccess={() => setActiveStep(11)}
-              />
-            )}
-            {status === "completed" && (
-              <p className="text-base text-muted-foreground">
-                Human Review V5 — approved and locked.
-              </p>
-            )}
+            <InlineEditor
+              ref={editorRef}
+              projectId={project.id}
+              initialContent={
+                versions.find((v) => v.versionType === "human_reviewed")?.content
+                ?? versions.find((v) => v.versionType === "final_styled")?.content
+                ?? ""
+              }
+              compareContent={versions.find((v) => v.versionType === "final_styled")?.content}
+              versionLabel="Final Styled V4"
+              hideActions
+              onContentChange={handleStep10ContentChange}
+              onApproveSuccess={() => setActiveStep(11)}
+            />
           </div>
         );
 
-      case 11:
+      case 11: {
         const canRunStep11 = stageMap[10]?.status === "completed";
+        const redReportContent = versions.find((v) => v.versionType === "red_report")?.content ?? "";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {(status === "pending" || status === "running" || !stage) && (
-              <StepTrigger
-                projectId={project.id}
-                stepNumber={11}
-                label="Generate Devil's Advocate Critiques"
-                currentStatus={status}
-                disabled={!canRunStep11}
-                disabledReason="Complete Step 10 to run this step."
-                autoRun={canRunStep11}
-                onRunningChange={setStep11Running}
-              />
-            )}
-            {status === "awaiting_human" && (
+            <StepTrigger
+              projectId={project.id}
+              stepNumber={11}
+              label="Generate Devil's Advocate Critiques"
+              currentStatus={status}
+              disabled={!canRunStep11}
+              disabledReason="Complete Step 10 to run this step."
+              autoRun={canRunStep11}
+              onRunningChange={setStep11Running}
+              hideButton
+            />
+            {redReportContent && (
               <CritiqueSelector
                 projectId={project.id}
-                redReport={versions.find((v) => v.versionType === "red_report")?.content ?? ""}
+                redReport={redReportContent}
+                step10Markdown={
+                  versions.find((v) => v.versionType === "human_reviewed")?.content
+                  ?? versions.find((v) => v.versionType === "final_styled")?.content
+                  ?? ""
+                }
+                onSelectedCritiquesChange={setStep11SelectedCritiques}
               />
-            )}
-            {status === "completed" && (
-              <p className="text-base text-muted-foreground">
-                Critiques confirmed — proceeding to integration.
-              </p>
             )}
           </div>
         );
+      }
 
       case 12:
-        const canRunStep12 = stageMap[11]?.status === "completed";
         return (
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            {status !== "completed" && (
-              <StepTrigger
-                projectId={project.id}
-                stepNumber={12}
-                label="Integrate Critiques with Extended Thinking"
-                currentStatus={status}
-                disabled={!canRunStep12}
-                disabledReason="Complete Step 11 to run this step."
-                autoRun={canRunStep12}
-                onRunningChange={setStep12Running}
-              />
-            )}
-            {status === "completed" && (
-              <p className="text-base text-muted-foreground">Final V6 — critique integration complete.</p>
-            )}
-          </div>
+          <IntegrateCritiquesStep
+            projectId={project.id}
+            projectTitle={project.title}
+            companyName={brief?.companyName}
+            dealType={brief?.dealType}
+            coverImageUrl={coverImageUrl}
+            finalVersion={versions.find((v) => v.versionType === "final")}
+            stage11Status={stageMap[11]?.status ?? "pending"}
+            stage12Status={status}
+            onRunningChange={setStep12Running}
+          />
         );
 
       case 13:
         const canRunStep13 = stageMap[12]?.status === "completed";
+        const canTriggerStep13 = status === "completed" || canRunStep13;
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {status !== "completed" && (
-              <StepTrigger
-                projectId={project.id}
-                stepNumber={13}
-                label="Generate HTML Export"
-                currentStatus={status}
-                disabled={!canRunStep13}
-                disabledReason="Complete Step 12 to run this step."
-                onRunningChange={setStep13Running}
-              />
-            )}
+            <StepTrigger
+              key={`step13-${step13RunId}`}
+              projectId={project.id}
+              stepNumber={13}
+              label={status === "completed" ? "Regenerate HTML Export" : "Generate HTML Export"}
+              currentStatus={status}
+              disabled={!canTriggerStep13}
+              disabledReason="Complete Step 12 to run this step."
+              onRunningChange={setStep13Running}
+            />
             {status === "completed" && (
               <div className="flex items-center gap-3">
                 <Link
@@ -478,7 +543,6 @@ export function PipelineView({
               ...(step4Running ? { 4: "running" as const } : {}),
               ...(step5Running ? { 5: "running" as const } : {}),
               ...(coverImagesGenerating ? { 6: "running" as const } : {}),
-              ...(step7Running ? { 7: "running" as const } : {}),
               ...(step8Running ? { 8: "running" as const } : {}),
               ...(step9Running ? { 9: "running" as const } : {}),
               ...(step11Running ? { 11: "running" as const } : {}),
@@ -511,7 +575,7 @@ export function PipelineView({
           <div className="relative">
             {renderStepContent()}
             {showFloatingStepBar && !(activeStep === 4 && versions.length > 0) && (
-              <div className="sticky bottom-4 mt-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 px-5 py-3.5 shadow-lg backdrop-blur">
+              <div className="sticky bottom-4 z-30 mt-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 px-5 py-3.5 shadow-lg backdrop-blur">
                 <div className="flex items-center gap-2.5 min-w-0">
                   {activeStatus === "completed" && (
                     <CheckCircle2 className="size-4 text-green-600 shrink-0" />
@@ -526,6 +590,30 @@ export function PipelineView({
                           ? "Awaiting your input to continue."
                           : "Complete this step to continue."}
                   </span>
+
+                  {activeStep === 7 && activeStatus === "completed" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStep7FormatRunId((curr) => curr + 1)}
+                      className="gap-1.5 shrink-0"
+                    >
+                      <RefreshCw className="size-3.5" />
+                      Regenerate
+                    </Button>
+                  )}
+
+                  {activeStep === 13 && activeStatus === "completed" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStep13RunId((curr) => curr + 1)}
+                      className="gap-1.5 shrink-0"
+                    >
+                      <RefreshCw className="size-3.5" />
+                      Regenerate
+                    </Button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
@@ -552,10 +640,26 @@ export function PipelineView({
                     isNewStep ? (
                       <Button
                         size="sm"
-                        disabled={activeStatus !== "completed"}
-                        onClick={goToNextStep}
+                        disabled={
+                          activeStep === 11
+                            ? !["completed", "awaiting_human"].includes(activeStatus) || step11Submitting
+                            : activeStep === 12
+                              ? step12Skipping
+                              : activeStatus !== "completed"
+                        }
+                        onClick={
+                          activeStep === 11
+                            ? () => void handleStep11Continue()
+                            : activeStep === 12
+                              ? () => void handleStep12SkipContinue()
+                              : goToNextStep
+                        }
                       >
-                        Save and continue to Step {activeStep + 1}
+                        {activeStep === 11 && step11Submitting
+                          ? "Saving…"
+                          : activeStep === 12 && step12Skipping
+                            ? "Saving…"
+                          : `Save and continue to Step ${activeStep + 1}`}
                       </Button>
                     ) : (
                       activeStatus === "completed" && (
@@ -589,7 +693,7 @@ export function PipelineView({
 
           {/* Floating step bar for Step 4 (after versions) */}
           {showFloatingStepBar && activeStep === 4 && versions.length > 0 && (
-            <div className="sticky bottom-4 mt-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 px-5 py-3.5 shadow-lg backdrop-blur">
+            <div className="sticky bottom-4 z-30 mt-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 px-5 py-3.5 shadow-lg backdrop-blur">
               <div className="flex items-center gap-2.5 min-w-0">
                 {activeStatus === "completed" && (
                   <CheckCircle2 className="size-4 text-green-600 shrink-0" />

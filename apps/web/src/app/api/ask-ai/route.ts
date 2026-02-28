@@ -9,6 +9,8 @@ interface AskAiBody {
   projectId?: unknown;
 }
 
+const ASK_AI_PROMPT_MAX_LENGTH = 20000;
+
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -33,8 +35,11 @@ export async function POST(req: NextRequest) {
   if (!prompt) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
   }
-  if (prompt.length > 10000) {
-    return NextResponse.json({ error: "Prompt is too long" }, { status: 400 });
+  if (prompt.length > ASK_AI_PROMPT_MAX_LENGTH) {
+    return NextResponse.json(
+      { error: `Prompt is too long (max ${ASK_AI_PROMPT_MAX_LENGTH} characters)` },
+      { status: 400 },
+    );
   }
 
   const rawProjectId = body.projectId;

@@ -11,7 +11,8 @@ Instructions:
 - Ensure headings are parallel and professional
 - Do NOT change any facts, figures, or analytical conclusions
 - Do NOT add new content or opinions
-- Return ONLY the polished memo content — no preamble, no commentary`;
+- Return ONLY the polished memo content, no preamble, no commentary
+- Never use em dashes (—); replace them with a comma, colon, or rewrite the sentence instead`;
 }
 
 export function buildFinalStyleUserMessage(factCheckedContent: string): string {

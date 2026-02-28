@@ -10,7 +10,8 @@ Requirements:
 - Proper section hierarchy using h2 and h3
 - Page break hints using CSS (page-break-before: always) before major sections
 - Clean, print-friendly layout with appropriate margins
-- Return ONLY the complete HTML document — no markdown fences, no commentary`;
+- Return ONLY the complete HTML document, no markdown fences, no commentary
+- Never use em dashes (—) in any text content; replace them with a comma, colon, or rewrite the sentence instead`;
 }
 
 export function buildHtmlExportUserMessage(

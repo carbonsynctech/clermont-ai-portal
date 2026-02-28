@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "re
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { emitProjectSaved } from "@/lib/project-save-events";
 
@@ -16,6 +17,7 @@ interface InlineEditorProps {
   projectId: string;
   initialContent: string;
   versionLabel: string;
+  compareContent?: string;
   /** When true, hides the internal action buttons (Reset / Save & Approve). */
   hideActions?: boolean;
   /** Called whenever the dirty state changes (content differs from initialContent). */
@@ -30,17 +32,22 @@ function countWords(text: string): number {
 
 export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(
   function InlineEditor(
-    { projectId, initialContent, versionLabel, hideActions, onContentChange, onApproveSuccess },
+    { projectId, initialContent, versionLabel, compareContent, hideActions, onContentChange, onApproveSuccess },
     ref,
   ) {
     const router = useRouter();
     const [content, setContent] = useState<string>(initialContent);
+    const [reviewNotes, setReviewNotes] = useState("");
     const [isApproving, setIsApproving] = useState(false);
     const [isDraftSaving, setIsDraftSaving] = useState(false);
     const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
     const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastSavedContentRef = useRef(initialContent);
     const failedContentRef = useRef<string | null>(null);
+    const leftScrollRef = useRef<HTMLDivElement | null>(null);
+    const rightTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const rightOverlayRef = useRef<HTMLDivElement | null>(null);
+    const isSyncingScrollRef = useRef(false);
 
     const wordCount = countWords(content);
     const originalWordCount = countWords(initialContent);
@@ -49,6 +56,7 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(
     useEffect(() => {
       setContent(initialContent);
       lastSavedContentRef.current = initialContent;
+      setReviewNotes("");
     }, [initialContent]);
 
     // Notify parent when dirty state changes
@@ -115,7 +123,7 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(
         const res = await fetch(`/api/projects/${projectId}/review`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
+          body: JSON.stringify({ content, reviewNotes }),
         });
         if (!res.ok) {
           const data = (await res.json()) as { error?: string };
@@ -133,8 +141,52 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(
 
     function handleReset() {
       setContent(initialContent);
+      setReviewNotes("");
       failedContentRef.current = null;
       setDraftSaveError(null);
+    }
+
+    function syncScroll(from: "left" | "right") {
+      if (isSyncingScrollRef.current) return;
+
+      const leftEl = leftScrollRef.current;
+      const rightEl = rightTextareaRef.current;
+      const rightOverlayEl = rightOverlayRef.current;
+      if (!leftEl || !rightEl) return;
+
+      isSyncingScrollRef.current = true;
+
+      if (from === "left") {
+        rightEl.scrollTop = leftEl.scrollTop;
+        if (rightOverlayEl) {
+          rightOverlayEl.scrollTop = leftEl.scrollTop;
+        }
+      } else {
+        leftEl.scrollTop = rightEl.scrollTop;
+        if (rightOverlayEl) {
+          rightOverlayEl.scrollTop = rightEl.scrollTop;
+        }
+      }
+
+      requestAnimationFrame(() => {
+        isSyncingScrollRef.current = false;
+      });
+    }
+
+    const reviewTextClass = "text-sm leading-relaxed font-sans";
+
+    const originalWordSet = new Set(
+      (compareContent ?? "")
+        .split(/\s+/)
+        .map((word) => word.trim().toLowerCase())
+        .filter(Boolean),
+    );
+
+    const editedTokens = content.split(/(\s+)/);
+
+    function isChangedToken(token: string) {
+      if (!token.trim()) return false;
+      return !originalWordSet.has(token.toLowerCase());
     }
 
     useImperativeHandle(ref, () => ({
@@ -162,13 +214,78 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(
           </div>
         </div>
 
-        <Textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          className="min-h-[500px] font-mono"
-          disabled={isApproving}
-          spellCheck
-        />
+        {compareContent ? (
+          <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="w-full min-w-0 rounded-md border">
+                <div className="border-b px-3 py-2 text-xs text-muted-foreground">Original (Final Styled V4)</div>
+                <ScrollArea className="h-[500px]">
+                  <div
+                    ref={leftScrollRef}
+                    onScroll={() => syncScroll("left")}
+                    className="h-[500px] overflow-y-auto px-3 py-2"
+                  >
+                    <p className={`whitespace-pre-wrap break-words ${reviewTextClass}`}>
+                      {compareContent ?? ""}
+                    </p>
+                  </div>
+                </ScrollArea>
+              </div>
+
+              <div className="w-full min-w-0 rounded-md border">
+                <div className="border-b px-3 py-2 text-xs text-muted-foreground">Edited (Human Review)</div>
+                <div className="relative h-[500px]">
+                  <div
+                    ref={rightOverlayRef}
+                    className="absolute inset-0 overflow-y-auto px-3 py-2 pointer-events-none"
+                    aria-hidden="true"
+                  >
+                    <p className={`whitespace-pre-wrap break-words text-transparent ${reviewTextClass}`}>
+                      {editedTokens.map((token, index) =>
+                        isChangedToken(token) ? (
+                          <mark key={`token-${index}`} className="rounded bg-purple-200/70 text-transparent px-0.5">
+                            {token}
+                          </mark>
+                        ) : (
+                          <span key={`token-${index}`}>{token}</span>
+                        ),
+                      )}
+                    </p>
+                  </div>
+
+                  <Textarea
+                    ref={rightTextareaRef}
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    onScroll={() => syncScroll("right")}
+                    className={`h-[500px] min-h-[500px] resize-none border-0 rounded-none bg-transparent relative z-10 ${reviewTextClass}`}
+                    disabled={isApproving}
+                    spellCheck
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">Review Notes</p>
+              <Textarea
+                value={reviewNotes}
+                onChange={(e) => setReviewNotes(e.target.value)}
+                placeholder="Add review notes or comments…"
+                className="min-h-[80px]"
+                disabled={isApproving}
+              />
+            </div>
+          </div>
+        ) : (
+          <Textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className={`min-h-[500px] ${reviewTextClass}`}
+            disabled={isApproving}
+            spellCheck
+          />
+        )}
 
         {draftSaveError && <p className="text-sm text-destructive">{draftSaveError}</p>}
 

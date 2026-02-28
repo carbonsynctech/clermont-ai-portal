@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const body = (await req.json()) as { content?: unknown };
+  const body = (await req.json()) as { content?: unknown; reviewNotes?: unknown };
 
   if (!body.content || typeof body.content !== "string" || body.content.trim() === "") {
     return NextResponse.json({ error: "content is required" }, { status: 400 });
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const content = body.content as string;
   const wordCount = content.trim().split(/\s+/).length;
+  const reviewNotes = typeof body.reviewNotes === "string" ? body.reviewNotes.trim() : "";
 
   // Insert human_reviewed version
   const [newVersion] = await db
@@ -68,13 +69,24 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     userId: user.id,
     action: "human_review_approved",
     stepNumber: 10,
-    payload: { wordCount },
+    payload: {
+      wordCount,
+      ...(reviewNotes ? { reviewNotes } : {}),
+    },
   });
 
   // Update stage 10 to completed
   await db
     .update(stages)
-    .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+    .set({
+      status: "completed",
+      completedAt: new Date(),
+      updatedAt: new Date(),
+      metadata: {
+        reviewDraftContent: content,
+        ...(reviewNotes ? { reviewNotes } : {}),
+      },
+    })
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 10)));
 
   // Advance project to stage 11

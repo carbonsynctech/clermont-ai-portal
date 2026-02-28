@@ -7,7 +7,7 @@ Format each critique EXACTLY as follows:
 [N]. [Critique Title]
 [2–3 sentence explanation of the weakness or challenge, with specific reference to the memo's claims or omissions.]
 
-Be rigorous, direct, and specific. Avoid generic platitudes.`;
+Be rigorous, direct, and specific. Avoid generic platitudes. Never use em dashes (—); use a comma, colon, or rewrite the sentence instead.`;
 }
 
 export function buildDevilsAdvocateUserMessage(memoContent: string, masterPrompt: string): string {
@@ -50,7 +50,7 @@ Your task:
 - Do NOT simply append a rebuttal section — weave improvements throughout the document
 - Return the complete, improved investment memo
 
-Use extended reasoning to ensure each critique is thoughtfully addressed.`;
+Use extended reasoning to ensure each critique is thoughtfully addressed. Never use em dashes (—); use a comma, colon, or rewrite the sentence instead.`;
 }
 
 export function buildCritiqueIntegrationUserMessage(

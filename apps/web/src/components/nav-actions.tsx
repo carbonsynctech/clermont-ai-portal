@@ -4,17 +4,13 @@ import * as React from "react"
 import {
   ArrowDown,
   ArrowUp,
-  Bell,
   Copy,
   CornerUpLeft,
   CornerUpRight,
   GalleryVerticalEnd,
-  LineChart,
   Link,
   MoreHorizontal,
-  Settings2,
   Star,
-  Trash,
   Trash2,
 } from "lucide-react"
 
@@ -35,65 +31,35 @@ import {
 } from "@/components/ui/sidebar"
 
 const data = [
+  [],
   [
-    {
-      label: "Customize Page",
-      icon: Settings2,
-    },
-    {
-      label: "Turn into wiki",
-      icon: Settings2,
-    },
+    { label: "Copy Link", icon: Link, onClick: () => {
+      navigator.clipboard.writeText(window.location.href);
+    } },
+    { label: "Duplicate", icon: Copy, onClick: async () => {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: document.title + " (Copy)",
+          // TODO: pass briefData if available
+        }),
+      });
+      const json = await res.json();
+      if (json?.id) {
+        window.location.href = `/projects/${json.id}`;
+      }
+    } },
+    { label: "Move to", icon: CornerUpRight },
+    { label: "Move to Trash", icon: Trash2 },
   ],
   [
-    {
-      label: "Copy Link",
-      icon: Link,
-    },
-    {
-      label: "Duplicate",
-      icon: Copy,
-    },
-    {
-      label: "Move to",
-      icon: CornerUpRight,
-    },
-    {
-      label: "Move to Trash",
-      icon: Trash2,
-    },
+    { label: "Undo", icon: CornerUpLeft },
+    { label: "Version History", icon: GalleryVerticalEnd },
   ],
   [
-    {
-      label: "Undo",
-      icon: CornerUpLeft,
-    },
-    {
-      label: "View analytics",
-      icon: LineChart,
-    },
-    {
-      label: "Version History",
-      icon: GalleryVerticalEnd,
-    },
-    {
-      label: "Show delete pages",
-      icon: Trash,
-    },
-    {
-      label: "Notifications",
-      icon: Bell,
-    },
-  ],
-  [
-    {
-      label: "Import",
-      icon: ArrowUp,
-    },
-    {
-      label: "Export",
-      icon: ArrowDown,
-    },
+    { label: "Import", icon: ArrowUp },
+    { label: "Export", icon: ArrowDown },
   ],
 ]
 
@@ -130,7 +96,7 @@ export function NavActions() {
                     <SidebarMenu>
                       {group.map((item, index) => (
                         <SidebarMenuItem key={index}>
-                          <SidebarMenuButton>
+                          <SidebarMenuButton onClick={item.onClick}>
                             <item.icon /> <span>{item.label}</span>
                           </SidebarMenuButton>
                         </SidebarMenuItem>

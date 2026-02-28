@@ -58,14 +58,18 @@ interface CoverImagesResponse {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+export type ColorPaletteEntry = { name: string; hex: string; description: string };
+
 interface StyleGuidePreviewProps {
   projectId: string;
   projectTitle: string;
   companyName?: string;
   onGeneratingChange?: (generating: boolean) => void;
+  onColorsChange?: (palette: ColorPaletteEntry[]) => void;
+  onCoverImageChange?: (url: string | undefined) => void;
 }
 
-export function StyleGuidePreview({ projectId, projectTitle, companyName, onGeneratingChange }: StyleGuidePreviewProps) {
+export function StyleGuidePreview({ projectId, projectTitle, companyName, onGeneratingChange, onColorsChange, onCoverImageChange }: StyleGuidePreviewProps) {
   const [typographyOpen, setTypographyOpen] = useState(true);
   const [colorsOpen, setColorsOpen] = useState(true);
   const [colorPalette, setColorPalette] = useState(DEFAULT_COLOR_PALETTE);
@@ -82,9 +86,17 @@ export function StyleGuidePreview({ projectId, projectTitle, companyName, onGene
   const { status: jobStatus, isPolling, error: jobError } = useJobStatus(jobId);
 
   const handleColorChange = useCallback((index: number, newHex: string) => {
-    setColorPalette((prev) =>
-      prev.map((c, i) => (i === index ? { ...c, hex: newHex } : c))
-    );
+    setColorPalette((prev) => {
+      const next = prev.map((c, i) => (i === index ? { ...c, hex: newHex } : c));
+      onColorsChange?.(next);
+      return next;
+    });
+  }, [onColorsChange]);
+
+  // Notify parent of initial palette on mount
+  useEffect(() => {
+    onColorsChange?.(colorPalette);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch existing cover images on mount
@@ -97,6 +109,10 @@ export function StyleGuidePreview({ projectId, projectTitle, companyName, onGene
         if (data.images.length > 0) {
           setCoverImages(data.images);
           setSelectedStyle(data.selectedStyle);
+          if (data.selectedStyle) {
+            const img = data.images.find((i) => i.style === data.selectedStyle);
+            onCoverImageChange?.(img?.signedUrl);
+          }
         }
       } catch {
         // silently ignore — user can regenerate
@@ -105,6 +121,8 @@ export function StyleGuidePreview({ projectId, projectTitle, companyName, onGene
       }
     }
     void fetchImages();
+  // onCoverImageChange intentionally omitted — stable ref not guaranteed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   // When job completes, fetch the generated images
@@ -119,6 +137,10 @@ export function StyleGuidePreview({ projectId, projectTitle, companyName, onGene
         const data = (await res.json()) as CoverImagesResponse;
         setCoverImages(data.images);
         setSelectedStyle(data.selectedStyle);
+        if (data.selectedStyle) {
+          const img = data.images.find((i) => i.style === data.selectedStyle);
+          onCoverImageChange?.(img?.signedUrl);
+        }
       } catch {
         setGenerateError("Images generated but failed to load. Please refresh.");
       }
@@ -147,6 +169,8 @@ export function StyleGuidePreview({ projectId, projectTitle, companyName, onGene
 
   async function selectCoverStyle(style: CoverStyle) {
     setSelectedStyle(style);
+    const img = coverImages.find((i) => i.style === style);
+    onCoverImageChange?.(img?.signedUrl);
     try {
       await fetch(`/api/projects/${projectId}/cover-images`, {
         method: "PATCH",

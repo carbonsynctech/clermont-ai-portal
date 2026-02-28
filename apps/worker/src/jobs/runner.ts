@@ -68,7 +68,7 @@ export async function runJob(jobId: string): Promise<void> {
           await styleEdit(projectId, userId, onChunk);
           break;
         case 8:
-          await factCheck(projectId, userId);
+          await factCheck(projectId, userId, onChunk);
           break;
         case 9:
           await finalStylePass(projectId, userId);

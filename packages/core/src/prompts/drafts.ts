@@ -11,7 +11,8 @@ Output format requirements:
 - Structure your draft with clear headings and logical flow
 - Include specific analysis, data points, and reasoning that reflect your expert perspective
 - Aim for 1,500–2,500 words
-- Do not add meta-commentary about your role; write as if producing the final document section`;
+- Do not add meta-commentary about your role; write as if producing the final document section
+- Never use em dashes (—); replace them with a comma, colon, or rewrite the sentence instead`;
 }
 
 export function buildPersonaDraftUserMessage(

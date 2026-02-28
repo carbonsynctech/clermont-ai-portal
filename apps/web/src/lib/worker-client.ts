@@ -82,6 +82,12 @@ export const workerClient = {
       body: JSON.stringify({ projectId, userId, userMessage }),
     }) as Promise<{ jobId: string; status: string }>,
 
+  fixFinalStyle: async (projectId: string, userId: string, userMessage: string) =>
+    workerFetch("/jobs/final-style-fix", {
+      method: "POST",
+      body: JSON.stringify({ projectId, userId, userMessage }),
+    }) as Promise<{ jobId: string; status: string }>,
+
   generateCoverImages: async (projectId: string, userId: string, styleGuideId: string) =>
     workerFetch("/jobs/generate-cover-images", {
       method: "POST",

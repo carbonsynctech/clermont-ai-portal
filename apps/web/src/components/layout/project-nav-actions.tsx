@@ -3,23 +3,18 @@
 import * as React from "react";
 import {
   ArrowDown,
-  Bell,
+  ArrowUp,
   Copy,
   CornerUpLeft,
   CornerUpRight,
   GalleryVerticalEnd,
-  LineChart,
   Link,
   Loader2,
   MoreHorizontal,
   Save,
-  Settings2,
   Star,
-  Trash,
   Trash2,
-  ClipboardList,
 } from "lucide-react";
-import NextLink from "next/link";
 import {
   PROJECT_SAVED_EVENT,
   type ProjectSavedEventDetail,
@@ -33,19 +28,16 @@ import {
 
 import { Button } from "@/components/ui/button";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+// Removed unused Popover/Sidebar imports
 
 interface ProjectNavActionsProps {
   projectId: string;
@@ -54,7 +46,6 @@ interface ProjectNavActionsProps {
 }
 
 export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNavActionsProps) {
-  const [isOpen, setIsOpen] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [isFavorite, setIsFavorite] = React.useState(false);
   const createdDate = React.useMemo(() => new Date(createdAt), [createdAt]);
@@ -119,28 +110,7 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
       })
     : null;
 
-  const actionGroups = [
-    [
-      { label: "View Audit Log", icon: ClipboardList, href: `/projects/${projectId}/audit` },
-      { label: "Customize Page", icon: Settings2 },
-    ],
-    [
-      { label: "Copy Link", icon: Link },
-      { label: "Duplicate", icon: Copy },
-      { label: "Move to", icon: CornerUpRight },
-      { label: "Move to Trash", icon: Trash2 },
-    ],
-    [
-      { label: "Undo", icon: CornerUpLeft },
-      { label: "View analytics", icon: LineChart },
-      { label: "Version History", icon: GalleryVerticalEnd },
-      { label: "Show deleted pages", icon: Trash },
-      { label: "Notifications", icon: Bell },
-    ],
-    [
-      { label: "Export", icon: ArrowDown },
-    ],
-  ];
+  // Removed unused actionGroups and isOpen/setIsOpen
 
   return (
     <div className="flex items-center gap-2 text-sm">
@@ -165,48 +135,67 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
       >
         <Star className={isFavorite ? "fill-current text-yellow-500" : undefined} />
       </Button>
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="data-[state=open]:bg-accent h-7 w-7"
-          >
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7">
             <MoreHorizontal />
           </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-56 overflow-hidden rounded-lg p-0" align="end">
-          <Sidebar collapsible="none" className="bg-transparent">
-            <SidebarContent>
-              {actionGroups.map((group, i) => (
-                <SidebarGroup key={i} className="border-b last:border-none">
-                  <SidebarGroupContent className="gap-0">
-                    <SidebarMenu>
-                      {group.map((item) => (
-                        <SidebarMenuItem key={item.label}>
-                          {"href" in item && item.href ? (
-                            <SidebarMenuButton asChild>
-                              <NextLink href={item.href}>
-                                <item.icon />
-                                <span>{item.label}</span>
-                              </NextLink>
-                            </SidebarMenuButton>
-                          ) : (
-                            <SidebarMenuButton>
-                              <item.icon />
-                              <span>{item.label}</span>
-                            </SidebarMenuButton>
-                          )}
-                        </SidebarMenuItem>
-                      ))}
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              ))}
-            </SidebarContent>
-          </Sidebar>
-        </PopoverContent>
-      </Popover>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-56" align="end">
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={() => window.location.href = `/projects/${projectId}/audit`}>
+              <GalleryVerticalEnd className="mr-2 size-4" /> Version History
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {/* TODO: implement undo logic */}}>
+              <CornerUpLeft className="mr-2 size-4" /> Undo
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={() => navigator.clipboard.writeText(window.location.href)}>
+              <Link className="mr-2 size-4" /> Copy Link
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={async () => {
+              const res = await fetch("/api/projects", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  title: document.title + " (Copy)",
+                }),
+              });
+              const json = await res.json();
+              if (json?.id) {
+                window.location.href = `/projects/${json.id}`;
+              }
+            }}>
+              <Copy className="mr-2 size-4" /> Duplicate
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {/* TODO: implement move to logic */}}>
+              <CornerUpRight className="mr-2 size-4" /> Move to
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={async () => {
+              // Move to Trash logic
+              const res = await fetch(`/api/projects/${projectId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "trash" }),
+              });
+              if (res.ok) window.location.reload();
+            }} className="text-destructive">
+              <Trash2 className="mr-2 size-4" /> Move to Trash
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={() => {/* TODO: implement import logic */}}>
+              <ArrowUp className="mr-2 size-4" /> Import
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {/* TODO: implement export logic */}}>
+              <ArrowDown className="mr-2 size-4" /> Export
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

@@ -18,6 +18,7 @@ export const auditActionEnum = pgEnum("audit_action", [
   "persona_selected",
   "source_uploaded",
   "nda_acknowledged",
+  "fact_check_approved",
   "human_review_approved",
   "human_review_revised",
   "critique_selected",

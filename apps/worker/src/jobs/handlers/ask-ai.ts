@@ -10,7 +10,7 @@ import {
 import type { AskAiPayload, ClaudeCallResult } from "@repo/core";
 import { eq } from "drizzle-orm";
 
-const ASK_AI_MODEL = "claude-sonnet-4-6";
+const ASK_AI_MODEL = "claude-opus-4-6";
 const CONTEXT_RESERVE_TOKENS = 4000;
 
 async function getProjectContextText(projectId: string, prompt: string): Promise<string | undefined> {

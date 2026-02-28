@@ -10,7 +10,7 @@ Your task is to synthesize multiple expert drafts into a single, authoritative i
 5. Eliminate redundancy while retaining depth
 6. Maintain an authoritative, professional tone appropriate for institutional investors
 
-The output should be a complete, polished investment memo — not a summary of the drafts. Write as if producing the definitive document.`;
+The output should be a complete, polished investment memo. Write as if producing the definitive document. Never use em dashes (—); replace them with a comma, colon, or rewrite the sentence instead.`;
 }
 
 export function buildSynthesisUserMessage(

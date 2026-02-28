@@ -17,7 +17,8 @@ The full edited draft with all style rules applied.
 Preserve all substantive content — your job is style, not substance.
 </edited_draft>
 
-Important: Do not add meta-commentary outside the XML tags. Your entire response must be the two XML blocks.`;
+Important: Do not add meta-commentary outside the XML tags. Your entire response must be the two XML blocks.
+Never use em dashes (—) in the edited draft; replace them with a comma, colon, or rewrite the sentence instead.`;
 }
 
 export function buildStyleEditUserMessage(

@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GoogleGenAI } from "@google/genai";
 
-const DEFAULT_MODEL = "gemini-2.0-flash";
+const DEFAULT_MODEL = "gemini-2.5-pro";
 const IMAGE_MODEL = process.env["NANO_BANANA_MODEL"] ?? "gemini-2.5-flash-image";
 
 class GeminiClient {

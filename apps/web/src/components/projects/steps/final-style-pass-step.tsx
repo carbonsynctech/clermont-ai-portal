@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ArrowUp, Loader2, Wand2, Paintbrush } from "lucide-react";
+import { ArrowUp, Loader2, Wand2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { StepTriggerButton, StepTriggerOutput, useStepTrigger } from "@/components/projects/step-trigger";
+import { StyledDocumentPreview } from "./styled-document-preview";
 import { useJobStatus } from "@/hooks/use-job-status";
 import { cn } from "@/lib/utils";
 import {
@@ -14,56 +17,54 @@ import {
   AssistantContent,
   CopyButton,
 } from "./chat-utils";
-import { StyledDocumentPreview } from "./styled-document-preview";
-import type { DocumentColors } from "./document-template";
-import type { Version, StyleGuide } from "@repo/db";
+import type { Version } from "@repo/db";
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
-interface StyleEditStepProps {
+interface FinalStylePassStepProps {
   projectId: string;
   projectTitle: string;
   companyName?: string;
   dealType?: string;
-  stage5Status: string;
-  stage7Status: string;
-  styledVersion: Version | undefined;
-  synthesisVersion?: Version | undefined;
-  latestStyleGuide: StyleGuide | null;
   coverImageUrl?: string;
-  colors?: DocumentColors;
+  finalStyledVersion?: Version;
+  stage8Status: string;
+  stage9Status: string;
   onRunningChange?: (running: boolean) => void;
-  formatRunId?: number;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function StyleEditStep({
+export function FinalStylePassStep({
   projectId,
   projectTitle,
   companyName,
   dealType,
-  stage5Status,
-  styledVersion,
-  synthesisVersion,
   coverImageUrl,
-  colors,
-  formatRunId,
-}: StyleEditStepProps) {
-  const sourceContent = styledVersion?.content ?? synthesisVersion?.content ?? "";
-  const versionId = styledVersion?.id ?? synthesisVersion?.id ?? "";
-  const wordCount = (styledVersion ?? synthesisVersion)?.wordCount;
-  const hasContent = !!sourceContent;
+  finalStyledVersion,
+  stage8Status,
+  stage9Status,
+  onRunningChange,
+}: FinalStylePassStepProps) {
+  const canRun = stage8Status === "completed";
+  const trigger = useStepTrigger(projectId, 9, stage9Status, canRun);
+
+  useEffect(() => {
+    onRunningChange?.(trigger.isRunning);
+  }, [onRunningChange, trigger.isRunning]);
 
   // ── sessionStorage keys ───────────────────────────────────────────────────
-  const chatKey = `style-edit-chat-${projectId}`;
-  const contentKey = `style-edit-content-${projectId}`;
-  const versionKey = `style-edit-version-${projectId}`;
+  const versionId = finalStyledVersion?.id ?? "";
+  const chatKey = `final-style-chat-${projectId}`;
+  const contentKey = `final-style-content-${projectId}`;
+  const versionKey = `final-style-version-${projectId}`;
+  const sourceContent = finalStyledVersion?.content ?? "";
 
   const prevVersionIdRef = useRef(versionId);
 
   // ── displayContent: live-patchable by AI fixes ────────────────────────────
   const [displayContent, setDisplayContent] = useState<string>(() => {
+    if (!finalStyledVersion) return "";
     try {
       const savedVer = sessionStorage.getItem(versionKey);
       const savedContent = sessionStorage.getItem(contentKey);
@@ -75,14 +76,16 @@ export function StyleEditStep({
   });
 
   useEffect(() => {
+    if (!finalStyledVersion) return;
     try {
       sessionStorage.setItem(contentKey, displayContent);
       sessionStorage.setItem(versionKey, versionId);
     } catch { /* ignore */ }
-  }, [displayContent, contentKey, versionKey, versionId]);
+  }, [displayContent, contentKey, versionKey, versionId, finalStyledVersion]);
 
   // ── Chat messages ─────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMsg[]>(() => {
+    if (!finalStyledVersion) return [];
     try {
       const savedVer = sessionStorage.getItem(versionKey);
       const raw = sessionStorage.getItem(chatKey);
@@ -173,7 +176,7 @@ export function StyleEditStep({
     setIsDispatching(true);
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/style-edit/fix`, {
+      const res = await fetch(`/api/projects/${projectId}/final-style/fix`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
@@ -201,13 +204,17 @@ export function StyleEditStep({
     }
   }
 
-  // ── Not ready ─────────────────────────────────────────────────────────────
-  if (stage5Status !== "completed" || !hasContent) {
+  // ── No version yet: show trigger only ────────────────────────────────────
+  if (!finalStyledVersion) {
     return (
-      <div className="rounded-xl border bg-card p-6">
-        <p className="text-base text-muted-foreground">
-          Complete Step 5 (Synthesis) to generate the styled document preview.
-        </p>
+      <div className="rounded-xl border bg-card p-6 space-y-3">
+        <StepTriggerButton
+          trigger={trigger}
+          label="Apply Final Style Pass"
+          disabled={!canRun}
+          disabledReason="Complete Step 8 to run this step."
+        />
+        <StepTriggerOutput trigger={trigger} />
       </div>
     );
   }
@@ -216,34 +223,40 @@ export function StyleEditStep({
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
 
-      {/* Left – styled document preview */}
-      <div className="rounded-xl border bg-card p-4 space-y-3 min-w-0">
-        <div className="flex items-center justify-between px-2">
-          <div className="flex items-center gap-2">
-            <Paintbrush className="size-4 text-primary" />
-            <h3 className="font-medium text-base text-foreground">Document Preview</h3>
-          </div>
-          {wordCount != null && (
-            <span className="text-sm text-muted-foreground">
-              {wordCount.toLocaleString()} words
-            </span>
-          )}
-        </div>
-
+      {/* Left – final styled document */}
+      <div className="rounded-xl border bg-card p-4">
         <StyledDocumentPreview
-          key={`local-format-${formatRunId ?? 0}`}
           content={displayContent}
           projectTitle={projectTitle}
           companyName={companyName}
           dealType={dealType}
           coverImageUrl={coverImageUrl}
-          colors={colors}
         />
       </div>
 
-      {/* Right – chat panel */}
-      <div className="sticky top-4">
-        <div className="rounded-xl border bg-card flex flex-col max-h-[calc(100vh-6rem)] min-h-[400px] overflow-hidden">
+      {/* Right – re-run card + chat panel */}
+      <div className="sticky top-4 space-y-3">
+
+        {/* Re-run info card */}
+        <div className="rounded-xl border bg-card p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Wand2 className="size-4 text-primary" />
+            <h3 className="font-medium text-base">Final Style Pass V4</h3>
+          </div>
+          <Badge variant="outline">
+            {finalStyledVersion.wordCount?.toLocaleString() ?? "?"} words
+          </Badge>
+          <StepTriggerButton
+            trigger={trigger}
+            label="Re-run Final Style Pass"
+            disabled={!canRun}
+            disabledReason="Complete Step 8 to run this step."
+          />
+          <StepTriggerOutput trigger={trigger} />
+        </div>
+
+        {/* Chat panel */}
+        <div className="rounded-xl border bg-card flex flex-col max-h-[calc(100vh-20rem)] min-h-[360px] overflow-hidden">
 
           {/* Header */}
           <div className="flex items-center gap-2 px-4 py-3 border-b shrink-0">
@@ -261,14 +274,14 @@ export function StyleEditStep({
           <ScrollArea className="flex-1 min-h-0">
             <div className="px-4 py-4 space-y-4">
               {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full py-12 gap-3 text-center">
+                <div className="flex flex-col items-center justify-center h-full py-8 gap-3 text-center">
                   <div className="rounded-full bg-primary/10 dark:bg-primary/20 p-3">
                     <Wand2 className="size-5 text-primary" />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">Refine with natural language</p>
                     <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
-                      Describe a style change and I&apos;ll suggest a rewrite with changes highlighted in{" "}
+                      Describe a change and I&apos;ll suggest a rewrite with changes highlighted in{" "}
                       <mark className="bg-primary/15 text-primary dark:bg-primary/30 dark:text-primary-foreground rounded-sm px-0.5 not-italic">
                         violet
                       </mark>
@@ -277,9 +290,9 @@ export function StyleEditStep({
                   </div>
                   <div className="grid gap-1.5 w-full max-w-[280px] text-left">
                     {[
-                      "Make the executive summary more concise",
-                      "Rewrite the risk section in a more assertive tone",
-                      "Simplify the financial analysis paragraph",
+                      "Make the conclusion more impactful",
+                      "Tighten the executive summary",
+                      "Improve the risk section flow",
                     ].map((s) => (
                       <button
                         key={s}
@@ -339,7 +352,7 @@ export function StyleEditStep({
             <div className="flex items-end gap-2">
               <Textarea
                 ref={inputRef}
-                placeholder="Describe a style change… (Enter to send, Shift+Enter for newline)"
+                placeholder="Describe what to refine… (Enter to send, Shift+Enter for newline)"
                 defaultValue=""
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {

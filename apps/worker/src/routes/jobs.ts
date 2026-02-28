@@ -232,4 +232,75 @@ jobsRoute.post("/style-edit-fix", async (c) => {
   return c.json({ jobId: job.id, status: job.status });
 });
 
+const finalStyleFixSchema = z.object({
+  projectId: z.string().uuid(),
+  userId: z.string().uuid(),
+  userMessage: z.string().trim().min(1).max(4000),
+});
+
+jobsRoute.post("/final-style-fix", async (c) => {
+  const body = await c.req.json();
+  const parsed = finalStyleFixSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json({ error: "Invalid request", details: parsed.error.flatten() }, 400);
+  }
+
+  const { projectId, userId, userMessage } = parsed.data;
+
+  const finalStyledVersion = await db.query.versions.findFirst({
+    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "final_styled")),
+    orderBy: [desc(versions.createdAt)],
+  });
+
+  if (!finalStyledVersion) {
+    return c.json({ error: "Final styled version not found" }, 404);
+  }
+
+  const styleGuide = await db.query.styleGuides.findFirst({
+    where: eq(styleGuides.projectId, projectId),
+    orderBy: [desc(styleGuides.uploadedAt)],
+  });
+
+  const rulesContext = styleGuide?.condensedRulesText
+    ? `\nStyle rules that were applied:\n---\n${styleGuide.condensedRulesText}\n---\n`
+    : "";
+
+  const prompt = [
+    "You are an expert editor refining a final investment memo.",
+    "The document has been through a full style pass and represents the polished final version.",
+    rulesContext,
+    "Here is the full document:",
+    "---",
+    finalStyledVersion.content,
+    "---",
+    "",
+    `The user wants: ${userMessage}`,
+    "",
+    "Return your response in this EXACT format — keep the section headers verbatim:",
+    "",
+    "EXPLANATION: [One sentence explaining what you changed]",
+    "",
+    "ORIGINAL:",
+    "[Copy the exact original paragraph(s) from the document verbatim — no changes]",
+    "",
+    "REPLACEMENT:",
+    "[The rewritten paragraph(s). Wrap new or changed phrases in <mark>text</mark> tags]",
+    "",
+    "Rules:",
+    "- Only rewrite the minimum necessary paragraph(s).",
+    "- The ORIGINAL section must be copied verbatim from the document.",
+    "- Keep the polished, professional style and tone.",
+    "- Preserve all style guide conventions already applied.",
+  ].join("\n");
+
+  const job = enqueueJob("ask_ai", { prompt, userId });
+
+  void runJob(job.id).catch((err: unknown) => {
+    console.error(`Background job ${job.id} error:`, err);
+  });
+
+  return c.json({ jobId: job.id, status: job.status });
+});
+
 export { jobsRoute };

@@ -27,7 +27,23 @@ export function useStepTrigger(
   autoRun = false,
 ): StepTriggerState {
   const router = useRouter();
-  const [jobId, setJobId] = useState<string | null>(null);
+
+  // sessionStorage keys — stable per project+step
+  const jobKey = `job-${projectId}-${stepNumber}`;
+  const outputKey = `output-${projectId}-${stepNumber}`;
+
+  // Restore jobId from sessionStorage so polling survives navigation
+  const [jobId, setJobId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return sessionStorage.getItem(jobKey);
+  });
+
+  // Restore last output so completed steps stay visible after navigation
+  const [cachedOutput, setCachedOutput] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem(outputKey) ?? "";
+  });
+
   const [isDispatching, setIsDispatching] = useState(false);
   const [hasDispatched, setHasDispatched] = useState(false);
   const [hasAbandoned, setHasAbandoned] = useState(false);
@@ -43,45 +59,64 @@ export function useStepTrigger(
   const isRunning = serverRunning || isDispatching || isPolling || (hasDispatched && !isDone);
   const showError = dispatchError ?? (isFailed ? (pollError ?? "Job failed. Please try again.") : null);
 
+  // Prefer live partialOutput; fall back to last saved output
+  const effectiveOutput = partialOutput || cachedOutput;
+
   const phase: StepTriggerState["phase"] = (() => {
     if (isDispatching) return "dispatching";
     if (hasDispatched || isPolling) {
-      if (!isPolling && !partialOutput) return "dispatching";
-      if (isPolling && !partialOutput) return "waiting";
-      if (isPolling && partialOutput) return "streaming";
-      if (!isPolling && partialOutput) return "done";
+      if (!isPolling && !effectiveOutput) return "dispatching";
+      if (isPolling && !effectiveOutput) return "waiting";
+      if (isPolling && effectiveOutput) return "streaming";
+      if (!isPolling && effectiveOutput) return "done";
     }
-    // Server reports running but local state was lost (e.g. navigated away and back)
+    // Server reports running but local jobId was lost (navigated away and back)
     if (serverRunning) return "waiting";
+    // Show persisted output for a previously-completed step
+    if (effectiveOutput) return "done";
     return null;
   })();
 
   useEffect(() => {
     if (status === "completed") {
+      // Persist the output before clearing the jobId
+      if (partialOutput && typeof window !== "undefined") {
+        sessionStorage.setItem(outputKey, partialOutput);
+        setCachedOutput(partialOutput);
+      }
+      if (typeof window !== "undefined") sessionStorage.removeItem(jobKey);
       setHasDispatched(false);
       setHasAbandoned(false);
       router.refresh();
     }
-  }, [status, router]);
+  }, [status, router, partialOutput, jobKey, outputKey]);
 
   useEffect(() => {
-    if (isFailed) setHasDispatched(false);
-  }, [isFailed]);
+    if (isFailed) {
+      if (typeof window !== "undefined") sessionStorage.removeItem(jobKey);
+      setHasDispatched(false);
+    }
+  }, [isFailed, jobKey]);
 
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
-  }, [partialOutput]);
+  }, [effectiveOutput]);
 
   function handleReset() {
     setJobId(null);
+    if (typeof window !== "undefined") sessionStorage.removeItem(jobKey);
     setHasDispatched(false);
     setHasAbandoned(true);
     setDispatchError(null);
   }
 
   const handleRun = useCallback(async () => {
+    // Clear previous cached output when re-running
+    setCachedOutput("");
+    if (typeof window !== "undefined") sessionStorage.removeItem(outputKey);
+
     setIsDispatching(true);
     setHasDispatched(true);
     setHasAbandoned(false);
@@ -105,14 +140,17 @@ export function useStepTrigger(
       }
 
       const data = (await res.json()) as { jobId?: string };
-      if (data.jobId) setJobId(data.jobId);
+      if (data.jobId) {
+        setJobId(data.jobId);
+        if (typeof window !== "undefined") sessionStorage.setItem(jobKey, data.jobId);
+      }
     } catch {
       setDispatchError("Network error — is the worker running on port 3001?");
       setHasDispatched(false);
     } finally {
       setIsDispatching(false);
     }
-  }, [projectId, stepNumber]);
+  }, [projectId, stepNumber, jobKey, outputKey]);
 
   useEffect(() => {
     if (!autoRun || autoRunFiredRef.current) return;
@@ -121,7 +159,7 @@ export function useStepTrigger(
     void handleRun();
   }, [autoRun, currentStatus, handleRun]);
 
-  return { isRunning, isDispatching, phase, showError, elapsedSeconds, partialOutput, outputRef, handleRun, handleReset };
+  return { isRunning, isDispatching, phase, showError, elapsedSeconds, partialOutput: effectiveOutput, outputRef, handleRun, handleReset };
 }
 
 function formatElapsed(seconds: number): string {
@@ -238,6 +276,7 @@ interface StepTriggerProps {
   disabledReason?: string;
   autoRun?: boolean;
   onRunningChange?: (running: boolean) => void;
+  hideButton?: boolean;
 }
 
 export function StepTrigger({
@@ -249,6 +288,7 @@ export function StepTrigger({
   disabledReason,
   autoRun = false,
   onRunningChange,
+  hideButton = false,
 }: StepTriggerProps) {
   const trigger = useStepTrigger(projectId, stepNumber, currentStatus, autoRun);
 
@@ -258,7 +298,9 @@ export function StepTrigger({
 
   return (
     <div className="space-y-3">
-      <StepTriggerButton trigger={trigger} label={label} disabled={disabled} disabledReason={disabledReason} />
+      {!hideButton && (
+        <StepTriggerButton trigger={trigger} label={label} disabled={disabled} disabledReason={disabledReason} />
+      )}
       <StepTriggerOutput trigger={trigger} />
     </div>
   );
