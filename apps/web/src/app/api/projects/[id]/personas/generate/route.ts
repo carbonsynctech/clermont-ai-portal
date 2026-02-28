@@ -28,11 +28,16 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const body = (await req.json()) as {
-    name?: unknown;
-    linkedinUrl?: unknown;
-    context?: unknown;
-  };
+  let body: { name?: unknown; linkedinUrl?: unknown; context?: unknown };
+  try {
+    const raw: unknown = await req.json();
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+    body = raw as { name?: unknown; linkedinUrl?: unknown; context?: unknown };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
 
   if (typeof body.name !== "string" || body.name.trim() === "") {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
