@@ -5,6 +5,7 @@ import { logger } from "hono/logger";
 import { health } from "./routes/health";
 import { jobsRoute } from "./routes/jobs";
 import { stagesRoute } from "./routes/stages";
+import { exportRoute } from "./routes/export";
 
 const app = new Hono();
 
@@ -21,6 +22,7 @@ app.use(
 app.route("/health", health);
 app.route("/jobs", jobsRoute);
 app.route("/stages", stagesRoute);
+app.route("/export", exportRoute);
 
 const port = Number(process.env["PORT"] ?? 3001);
 

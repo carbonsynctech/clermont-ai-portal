@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@repo/db";
@@ -485,6 +486,40 @@ export default async function ProjectPage({ params }: PageProps) {
                   <p className="text-xs text-muted-foreground">
                     Final V6 — critique integration complete.
                   </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 13: Export */}
+          {stageMap[12]?.status === "completed" && (
+            <Card className="col-span-full">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Step 13: Export</CardTitle>
+                <CardDescription className="text-xs">
+                  {stageMap[13]?.status === "completed"
+                    ? "HTML export generated — download the PDF below."
+                    : "Generate a professional HTML export and download as PDF."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {stageMap[13]?.status !== "completed" && (
+                  <StepTrigger
+                    projectId={project.id}
+                    stepNumber={13}
+                    label="Generate HTML Export"
+                    currentStatus={stageMap[13]?.status ?? "pending"}
+                  />
+                )}
+                {stageMap[13]?.status === "completed" && (
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`/api/projects/${project.id}/export`}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      Download PDF
+                    </Link>
+                  </div>
                 )}
               </CardContent>
             </Card>

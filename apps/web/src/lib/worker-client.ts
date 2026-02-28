@@ -44,4 +44,7 @@ export const workerClient = {
       method: "POST",
       body: JSON.stringify({ materialId, projectId }),
     }) as Promise<{ jobId: string; status: string }>,
+
+  // PDF export is proxied through /api/projects/[id]/export to keep WORKER_SECRET server-side
+  getPdfDownloadPath: (projectId: string) => `/api/projects/${projectId}/export`,
 };
