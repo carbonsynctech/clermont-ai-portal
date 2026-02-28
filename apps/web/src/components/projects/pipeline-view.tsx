@@ -5,13 +5,15 @@ import Link from "next/link";
 import { PipelineStepNav } from "./pipeline-step-nav";
 import { DefineTaskStep } from "./steps/define-task-step";
 import { StepTrigger } from "./step-trigger";
-import { PersonaSelector } from "@/components/personas/persona-selector";
+import { SelectPersonasStep } from "./steps/select-personas-step";
 import { MaterialUpload } from "@/components/sources/material-upload";
 import { StyleGuideUpload } from "@/components/sources/style-guide-upload";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 import { InlineEditor } from "@/components/review/inline-editor";
 import { CritiqueSelector } from "@/components/review/critique-selector";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangleIcon } from "lucide-react";
 import type {
   Stage,
   Persona,
@@ -81,6 +83,9 @@ export function PipelineView({
     setActiveStep(step);
   }
 
+  const prerequisiteMessage = getPrerequisiteMessage(activeStep, stageMap);
+  const isLockedStep = prerequisiteMessage !== null;
+
   function renderStepContent() {
     const step = activeStep;
     const stage = stageMap[step];
@@ -98,52 +103,28 @@ export function PipelineView({
           />
         );
 
-      case 2:
-        const canRunStep2 = stageMap[1]?.status === "completed";
+      case 2: {
+        const s2Stage = stageMap[2];
+        const s2Status = s2Stage?.status ?? "pending";
         return (
-          <div className="space-y-5">
-            {!canRunStep2 && <PrerequisiteNotice message="Complete Step 1 to run this step." />}
-            {status === "completed" && selectedPersonas.length > 0 && (
-              <div className="rounded-xl border bg-card p-6 space-y-3">
-                <h3 className="font-medium text-sm">Selected Personas</h3>
-                <div className="space-y-2">
-                  {selectedPersonas.map((p, i) => (
-                    <div key={p.id} className="flex items-center gap-3">
-                      <Badge variant="outline" className="text-xs h-5 px-1.5 shrink-0">{i + 1}</Badge>
-                      <span className="text-sm text-foreground">{p.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {status === "awaiting_human" && (
-              <PersonaSelector projectId={project.id} personas={personas} />
-            )}
-            {(status === "pending" || !stage) && (
-              <div className="rounded-xl border bg-card p-6">
-                <StepTrigger
-                  projectId={project.id}
-                  stepNumber={2}
-                  label="Suggest Expert Personas"
-                  currentStatus={status}
-                  disabled={!canRunStep2}
-                  disabledReason="Complete Step 1 to run this step."
-                />
-              </div>
-            )}
-          </div>
+          <SelectPersonasStep
+            projectId={project.id}
+            stage1Status={stageMap[1]?.status ?? "pending"}
+            stage2Status={s2Status}
+            projectPersonas={personas}
+          />
         );
+      }
 
       case 3:
         const canRunStep3 = stageMap[2]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6">
-            {!canRunStep3 && <PrerequisiteNotice message="Complete Step 2 to run this step." />}
             {status === "completed" ? (
               <div className="space-y-2">
-                <h3 className="font-medium text-sm mb-3">Uploaded Files</h3>
+                <h3 className="font-medium text-base mb-3">Uploaded Files</h3>
                 {materials.map((m) => (
-                  <div key={m.id} className="flex items-center justify-between text-sm">
+                  <div key={m.id} className="flex items-center justify-between text-base">
                     <span className="truncate text-foreground">{m.originalFilename}</span>
                     <span className="text-muted-foreground shrink-0 ml-2">{m.chunkCount} chunks</span>
                   </div>
@@ -159,12 +140,11 @@ export function PipelineView({
         const canRunStep4 = stageMap[3]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {!canRunStep4 && <PrerequisiteNotice message="Complete Step 3 to run this step." />}
             {status === "completed" && personaDrafts.length > 0 && (
               <div className="space-y-2">
-                <h3 className="font-medium text-sm mb-1">Generated Drafts</h3>
+                <h3 className="font-medium text-base mb-1">Generated Drafts</h3>
                 {personaDrafts.map((v) => (
-                  <div key={v.id} className="flex items-center justify-between text-sm">
+                  <div key={v.id} className="flex items-center justify-between text-base">
                     <span className="truncate text-foreground">{v.internalLabel}</span>
                     <span className="text-muted-foreground shrink-0 ml-2">
                       {v.wordCount?.toLocaleString() ?? "–"} words
@@ -190,9 +170,8 @@ export function PipelineView({
         const canRunStep5 = stageMap[4]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {!canRunStep5 && <PrerequisiteNotice message="Complete Step 4 to run this step." />}
             {status === "completed" && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 Synthesis complete —{" "}
                 {versions.find((v) => v.versionType === "synthesis")?.wordCount?.toLocaleString() ?? "?"} words.
               </p>
@@ -215,9 +194,8 @@ export function PipelineView({
         const canRunStep67 = stageMap[5]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {!canRunStep67 && <PrerequisiteNotice message="Complete Step 5 to run this step." />}
             {stageMap[7]?.status === "completed" ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 Styled V2 —{" "}
                 {versions.find((v) => v.versionType === "styled")?.wordCount?.toLocaleString() ?? "?"} words.
               </p>
@@ -243,9 +221,8 @@ export function PipelineView({
         const canRunStep8 = stageMap[7]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {!canRunStep8 && <PrerequisiteNotice message="Complete Step 7 to run this step." />}
             {status === "completed" && factCheckVersion && (
-              <p className="text-sm text-muted-foreground">{factCheckVersion.internalLabel}</p>
+              <p className="text-base text-muted-foreground">{factCheckVersion.internalLabel}</p>
             )}
             {status !== "completed" && (
               <StepTrigger
@@ -264,9 +241,8 @@ export function PipelineView({
         const canRunStep9 = stageMap[8]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {!canRunStep9 && <PrerequisiteNotice message="Complete Step 8 to run this step." />}
             {status === "completed" && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 Final Styled V4 —{" "}
                 {versions.find((v) => v.versionType === "final_styled")?.wordCount?.toLocaleString() ?? "?"} words.
               </p>
@@ -288,7 +264,6 @@ export function PipelineView({
         const canRunStep10 = stageMap[9]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {!canRunStep10 && <PrerequisiteNotice message="Complete Step 9 to run this step." />}
             {status !== "completed" && (
               <InlineEditor
                 projectId={project.id}
@@ -297,7 +272,7 @@ export function PipelineView({
               />
             )}
             {status === "completed" && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 Human Review V5 — approved and locked.
               </p>
             )}
@@ -308,7 +283,6 @@ export function PipelineView({
         const canRunStep11 = stageMap[10]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {!canRunStep11 && <PrerequisiteNotice message="Complete Step 10 to run this step." />}
             {(status === "pending" || status === "running" || !stage) && (
               <StepTrigger
                 projectId={project.id}
@@ -326,7 +300,7 @@ export function PipelineView({
               />
             )}
             {status === "completed" && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 Critiques confirmed — proceeding to integration.
               </p>
             )}
@@ -337,7 +311,6 @@ export function PipelineView({
         const canRunStep12 = stageMap[11]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {!canRunStep12 && <PrerequisiteNotice message="Complete Step 11 to run this step." />}
             {status !== "completed" && (
               <StepTrigger
                 projectId={project.id}
@@ -349,7 +322,7 @@ export function PipelineView({
               />
             )}
             {status === "completed" && (
-              <p className="text-sm text-muted-foreground">Final V6 — critique integration complete.</p>
+              <p className="text-base text-muted-foreground">Final V6 — critique integration complete.</p>
             )}
           </div>
         );
@@ -358,7 +331,6 @@ export function PipelineView({
         const canRunStep13 = stageMap[12]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {!canRunStep13 && <PrerequisiteNotice message="Complete Step 12 to run this step." />}
             {status !== "completed" && (
               <StepTrigger
                 projectId={project.id}
@@ -429,7 +401,25 @@ export function PipelineView({
             <h1 className="text-2xl font-bold tracking-tight">{STEP_TITLES[activeStep]}</h1>
           </div>
 
-          {renderStepContent()}
+          {prerequisiteMessage && (
+            <Alert className="mb-4 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-50">
+              <AlertTriangleIcon />
+              <AlertTitle>{prerequisiteMessage}</AlertTitle>
+              <AlertDescription>
+                Preview mode is enabled for navigation/testing.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="relative">
+            {renderStepContent()}
+            {isLockedStep && (
+              <div
+                className="absolute inset-0 rounded-xl bg-gray-500/12"
+                aria-hidden="true"
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -447,10 +437,35 @@ export function PipelineView({
   );
 }
 
-function PrerequisiteNotice({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg border bg-muted/20 px-3 py-2">
-      <p className="text-sm text-muted-foreground">{message} Preview mode is enabled for navigation/testing.</p>
-    </div>
-  );
+function getPrerequisiteMessage(
+  step: number,
+  stageMap: Record<number, Stage | undefined>,
+): string | null {
+  if (step <= 1) {
+    return null;
+  }
+
+  const prerequisiteStep: Record<number, number> = {
+    2: 1,
+    3: 2,
+    4: 3,
+    5: 4,
+    6: 5,
+    7: 5,
+    8: 7,
+    9: 8,
+    10: 9,
+    11: 10,
+    12: 11,
+    13: 12,
+  };
+
+  const requiredStep = prerequisiteStep[step];
+  if (!requiredStep) {
+    return null;
+  }
+
+  return stageMap[requiredStep]?.status === "completed"
+    ? null
+    : `Complete Step ${requiredStep} to run this step.`;
 }
