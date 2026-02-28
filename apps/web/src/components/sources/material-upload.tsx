@@ -33,6 +33,7 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
   const [lastUploaded, setLastUploaded] = useState<string | null>(null);
 
   const canUpload = selectedFiles.length > 0 && ndaAcknowledged;
+  const hasMaterials = materials.length > 0;
 
   async function handleUpload() {
     const selectedFile = selectedFiles[0];
@@ -88,6 +89,15 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
     } finally {
       setIsFinalizing(false);
     }
+  }
+
+  async function handlePrimaryAction() {
+    if (hasMaterials) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    await handleFinalize();
   }
 
   return (
@@ -218,9 +228,10 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         </div>
 
         <Button
+          variant={hasMaterials ? "outline" : "default"}
           className="shrink-0"
-          disabled={isFinalizing || isUploading}
-          onClick={() => void handleFinalize()}
+          disabled={hasMaterials ? isUploading : isFinalizing || isUploading}
+          onClick={() => void handlePrimaryAction()}
         >
           {isFinalizing ? (
             <>
@@ -228,7 +239,7 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
               Saving…
             </>
           ) : (
-            "Save & Continue to Step 4"
+            hasMaterials ? "Update Step 3" : "Save & Continue to Step 4"
           )}
         </Button>
       </div>

@@ -88,6 +88,8 @@ interface PipelineStepNavProps {
   activeStep: number;
   currentStep: number;
   onStepClick: (step: number) => void;
+  /** Override the displayed status for specific steps (e.g. background jobs not tied to stage status) */
+  stepStatusOverrides?: Partial<Record<number, StageStatus>>;
 }
 
 export function PipelineStepNav({
@@ -95,6 +97,7 @@ export function PipelineStepNav({
   stages,
   activeStep,
   onStepClick,
+  stepStatusOverrides,
 }: PipelineStepNavProps) {
   const stageMap = new Map(stages.map((s) => [s.stepNumber, s]));
 
@@ -110,7 +113,8 @@ export function PipelineStepNav({
             <div className="space-y-0.5">
               {group.steps.map((step) => {
                 const stage = stageMap.get(step);
-                const status = (stage?.status as StageStatus) ?? "pending";
+                const baseStatus = (stage?.status as StageStatus) ?? "pending";
+                const status = stepStatusOverrides?.[step] ?? baseStatus;
                 const isActive = step === activeStep;
 
                 return (

@@ -13,7 +13,7 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).length;
 }
 
-export async function styleEdit(projectId: string, userId: string): Promise<void> {
+export async function styleEdit(projectId: string, userId: string, onChunk?: (chunk: string) => void): Promise<void> {
   // 1. Fetch project
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
@@ -88,16 +88,19 @@ export async function styleEdit(projectId: string, userId: string): Promise<void
   }
 
   // 6. Call Claude: extract rules + apply in one pass
-  const result = await claude.call({
+  const callOptions = {
     system: buildStyleEditSystemPrompt(),
     messages: [
       {
-        role: "user",
+        role: "user" as const,
         content: buildStyleEditUserMessage(styleGuideText, synthesisContent),
       },
     ],
     maxTokens: 8192,
-  });
+  };
+  const result = onChunk
+    ? await claude.stream(callOptions, onChunk)
+    : await claude.call(callOptions);
 
   const durationMs = Date.now() - startedAt;
 

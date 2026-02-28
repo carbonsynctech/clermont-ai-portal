@@ -168,9 +168,9 @@ export function SelectPersonasStep({
             {isConfirming ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirming…</>
             ) : isConfirmed ? (
-              "Update Confirmed Personas"
+              "Update Step 2"
             ) : (
-              "Confirm & Continue to Step 3"
+              "Save & Continue to Step 3"
             )}
           </Button>
         </div>

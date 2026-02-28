@@ -16,6 +16,19 @@ export interface StyleGuideRules {
   prohibitions: string[];
 }
 
+export interface CoverImageEntry {
+  storagePath: string;
+  style: "corporate" | "modern" | "minimal" | "bold";
+  prompt: string;
+  mimeType: string;
+}
+
+export interface CoverImagesData {
+  images: CoverImageEntry[];
+  selectedStyle: "corporate" | "modern" | "minimal" | "bold" | null;
+  generatedAt: string; // ISO timestamp
+}
+
 export const styleGuides = pgTable("style_guides", {
   id: uuid("id").defaultRandom().primaryKey(),
   projectId: uuid("project_id")
@@ -26,6 +39,7 @@ export const styleGuides = pgTable("style_guides", {
   extractedRules: jsonb("extracted_rules").$type<StyleGuideRules>(),
   isProcessed: boolean("is_processed").default(false).notNull(),
   condensedRulesText: text("condensed_rules_text"),
+  coverImages: jsonb("cover_images").$type<CoverImagesData>(),
   uploadedAt: timestamp("uploaded_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

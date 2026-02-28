@@ -1,14 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ArrowUp, ArrowRight, Loader2, Wand2 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
+import { ArrowUp, Loader2, Wand2, Paintbrush } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { StepTrigger } from "@/components/projects/step-trigger";
+import { useStepTrigger, StepTriggerButton, StepTriggerOutput } from "@/components/projects/step-trigger";
+import { StyledDocumentPreview } from "./styled-document-preview";
 import { useJobStatus } from "@/hooks/use-job-status";
 import { cn } from "@/lib/utils";
 import {
@@ -18,71 +16,87 @@ import {
   AssistantContent,
   CopyButton,
 } from "./chat-utils";
-import type { Version } from "@repo/db";
+import type { DocumentColors } from "./document-template";
+import type { Version, StyleGuide } from "@repo/db";
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Props ────────────────────────────────────────────────────────────────────
 
-interface SynthesisStepProps {
+interface StyleEditStepProps {
   projectId: string;
-  stage4Status: string;
+  projectTitle: string;
+  companyName?: string;
+  dealType?: string;
   stage5Status: string;
-  synthesisVersion: Version | undefined;
-  onContinue?: () => void;
+  stage7Status: string;
+  styledVersion: Version | undefined;
+  latestStyleGuide: StyleGuide | null;
+  coverImageUrl?: string;
+  colors?: DocumentColors;
   onRunningChange?: (running: boolean) => void;
 }
 
-export function SynthesisStep({
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function StyleEditStep({
   projectId,
-  stage4Status,
+  projectTitle,
+  companyName,
+  dealType,
   stage5Status,
-  synthesisVersion,
-  onContinue,
+  stage7Status,
+  styledVersion,
+  latestStyleGuide,
+  coverImageUrl,
+  colors,
   onRunningChange,
-}: SynthesisStepProps) {
-  const canRun = stage4Status === "completed";
-  const isCompleted = stage5Status === "completed";
+}: StyleEditStepProps) {
+  const canRun = stage5Status === "completed";
+  const isCompleted = stage7Status === "completed";
 
-  // ── sessionStorage keys (stable per project) ──────────────────────────────
-  const chatKey = `synthesis-chat-${projectId}`;
-  const contentKey = `synthesis-content-${projectId}`;
-  const versionKey = `synthesis-version-${projectId}`;
+  const trigger = useStepTrigger(projectId, 7, stage7Status, canRun && !!latestStyleGuide);
 
-  // Track the version ID seen on mount so we can detect genuine re-generations
-  const prevVersionIdRef = useRef(synthesisVersion?.id);
+  useEffect(() => {
+    onRunningChange?.(trigger.isRunning);
+  }, [trigger.isRunning, onRunningChange]);
 
-  // ── Document display state (survives navigation, resets on new synthesis) ─
+  // ── sessionStorage keys ─────────────────────────────────────────────────
+  const chatKey = `style-edit-chat-${projectId}`;
+  const contentKey = `style-edit-content-${projectId}`;
+  const versionKey = `style-edit-version-${projectId}`;
+
+  const prevVersionIdRef = useRef(styledVersion?.id);
+
+  // ── Document display state ──────────────────────────────────────────────
   const [displayContent, setDisplayContent] = useState<string>(() => {
     try {
       const savedVer = sessionStorage.getItem(versionKey);
       const savedContent = sessionStorage.getItem(contentKey);
-      if (savedVer === (synthesisVersion?.id ?? "") && savedContent !== null) {
+      if (savedVer === (styledVersion?.id ?? "") && savedContent !== null) {
         return savedContent;
       }
     } catch { /* ignore */ }
-    return synthesisVersion?.content ?? "";
+    return styledVersion?.content ?? "";
   });
 
-  // Persist displayContent to sessionStorage
   useEffect(() => {
     try {
       sessionStorage.setItem(contentKey, displayContent);
-      sessionStorage.setItem(versionKey, synthesisVersion?.id ?? "");
+      sessionStorage.setItem(versionKey, styledVersion?.id ?? "");
     } catch { /* ignore */ }
-  }, [displayContent, contentKey, versionKey, synthesisVersion?.id]);
+  }, [displayContent, contentKey, versionKey, styledVersion?.id]);
 
-  // ── Chat state (survives navigation via sessionStorage) ───────────────────
+  // ── Chat state ──────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMsg[]>(() => {
     try {
       const savedVer = sessionStorage.getItem(versionKey);
       const raw = sessionStorage.getItem(chatKey);
-      if (savedVer === (synthesisVersion?.id ?? "") && raw) {
+      if (savedVer === (styledVersion?.id ?? "") && raw) {
         return JSON.parse(raw) as ChatMsg[];
       }
     } catch { /* ignore */ }
     return [];
   });
 
-  // Persist messages to sessionStorage (skip in-progress loading bubbles)
   useEffect(() => {
     const stable = messages.filter((m) => !m.isLoading && !m.isStreaming);
     try {
@@ -90,19 +104,19 @@ export function SynthesisStep({
     } catch { /* ignore */ }
   }, [messages, chatKey]);
 
-  // Reset when a genuinely new synthesis version is generated (via ref, avoids race with persist effect)
+  // Reset on new version
   useEffect(() => {
-    if (prevVersionIdRef.current === synthesisVersion?.id) return;
-    prevVersionIdRef.current = synthesisVersion?.id;
+    if (prevVersionIdRef.current === styledVersion?.id) return;
+    prevVersionIdRef.current = styledVersion?.id;
     try {
       sessionStorage.removeItem(chatKey);
       sessionStorage.removeItem(contentKey);
     } catch { /* ignore */ }
-    setDisplayContent(synthesisVersion?.content ?? "");
+    setDisplayContent(styledVersion?.content ?? "");
     setMessages([]);
-  }, [synthesisVersion?.id, synthesisVersion?.content, chatKey, contentKey]);
+  }, [styledVersion?.id, styledVersion?.content, chatKey, contentKey]);
 
-  // Uncontrolled ref — reading value on send avoids re-rendering ReactMarkdown on every keystroke
+  // ── Chat I/O ────────────────────────────────────────────────────────────
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [isDispatching, setIsDispatching] = useState(false);
@@ -111,7 +125,7 @@ export function SynthesisStep({
   const { status: jobStatus, partialOutput } = useJobStatus(activeJobId);
   const isGenerating = isDispatching || activeJobId !== null;
 
-  // Stream tokens into the active assistant bubble
+  // Stream tokens
   useEffect(() => {
     if (!partialOutput || !activeJobId) return;
     setMessages((prev) =>
@@ -121,7 +135,7 @@ export function SynthesisStep({
     );
   }, [partialOutput, activeJobId]);
 
-  // Finalise assistant bubble when job completes or fails
+  // Finalise
   useEffect(() => {
     if (!activeJobId) return;
     if (jobStatus === "completed" || jobStatus === "failed") {
@@ -133,12 +147,14 @@ export function SynthesisStep({
                 isStreaming: false,
                 isLoading: false,
                 isError: jobStatus === "failed",
-                content: jobStatus === "failed" && !m.content ? "Generation failed. Please try again." : m.content,
+                content:
+                  jobStatus === "failed" && !m.content
+                    ? "Generation failed. Please try again."
+                    : m.content,
               }
             : m,
         ),
       );
-      // Auto-apply fix to the left-side document
       if (jobStatus === "completed" && partialOutput) {
         setDisplayContent((curr) => applyFixToDocument(curr, partialOutput));
       }
@@ -146,7 +162,7 @@ export function SynthesisStep({
     }
   }, [jobStatus, activeJobId, partialOutput]);
 
-  // Auto-scroll to latest message
+  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -159,12 +175,17 @@ export function SynthesisStep({
 
     const userMsg: ChatMsg = { id: crypto.randomUUID(), role: "user", content: text };
     const placeholderId = crypto.randomUUID();
-    const placeholder: ChatMsg = { id: placeholderId, role: "assistant", content: "", isLoading: true };
+    const placeholder: ChatMsg = {
+      id: placeholderId,
+      role: "assistant",
+      content: "",
+      isLoading: true,
+    };
     setMessages((prev) => [...prev, userMsg, placeholder]);
     setIsDispatching(true);
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/synthesis/fix`, {
+      const res = await fetch(`/api/projects/${projectId}/style-edit/fix`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
@@ -183,7 +204,6 @@ export function SynthesisStep({
         return;
       }
 
-      // Replace placeholder id with real jobId so polling updates the right bubble
       setMessages((prev) =>
         prev.map((m) => (m.id === placeholderId ? { ...m, id: data.jobId! } : m)),
       );
@@ -193,75 +213,70 @@ export function SynthesisStep({
     }
   }
 
-  // ── Not completed: show trigger ───────────────────────────────────────────
-  if (!isCompleted || !synthesisVersion) {
+  // ── Pre-completion: show trigger ────────────────────────────────────────
+  if (!isCompleted || !styledVersion) {
     return (
-      <div className="space-y-4">
-        <div className="rounded-xl border bg-card p-6 space-y-4">
-          <h3 className="font-medium text-base text-foreground">Synthesis</h3>
+      <div className="rounded-xl border bg-card p-6 space-y-4">
+        {latestStyleGuide ? (
+          <>
+            <div className="space-y-2">
+              <h3 className="font-medium text-base mb-1">Style Guide</h3>
+              <div className="flex items-center justify-between text-base">
+                <span className="truncate text-foreground">
+                  {latestStyleGuide.originalFilename}
+                </span>
+                <span className="text-muted-foreground shrink-0 ml-2">Ready</span>
+              </div>
+            </div>
+            <StepTriggerButton
+              trigger={trigger}
+              label="Apply Style Guide & Edit"
+              disabled={!canRun}
+              disabledReason="Complete Step 5 to run this step."
+            />
+            <StepTriggerOutput trigger={trigger} />
+          </>
+        ) : (
           <p className="text-base text-muted-foreground">
-            Claude synthesises all 5 persona drafts into a single unified document using extended
-            thinking. This becomes Version 1 of the memo.
+            Upload a style guide in Step 6 before running this step.
           </p>
-          <StepTrigger
-            projectId={projectId}
-            stepNumber={5}
-            label="Synthesise Drafts"
-            currentStatus={stage5Status}
-            disabled={!canRun}
-            disabledReason="Complete Step 4 to run this step."
-            autoRun={canRun}
-            onRunningChange={onRunningChange}
-          />
-        </div>
+        )}
       </div>
     );
   }
 
-  // ── Completed: two-column layout ─────────────────────────────────────────
+  // ── Post-completion: two-column layout ──────────────────────────────────
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
-
-      {/* Left – synthesis document */}
-      <div className="rounded-xl border bg-card p-6 space-y-4 min-w-0">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium text-base text-foreground">Synthesis V1</h3>
+      {/* Left – styled document preview */}
+      <div className="rounded-xl border bg-card p-4 space-y-3 min-w-0">
+        <div className="flex items-center justify-between px-2">
+          <div className="flex items-center gap-2">
+            <Paintbrush className="size-4 text-primary" />
+            <h3 className="font-medium text-base text-foreground">Styled V2 Preview</h3>
+          </div>
           <span className="text-sm text-muted-foreground">
-            {synthesisVersion.wordCount?.toLocaleString() ?? "?"} words
+            {styledVersion.wordCount?.toLocaleString() ?? "?"} words
           </span>
         </div>
 
-        <div
-          className="prose prose-sm dark:prose-invert max-w-none text-foreground
-            [&_h1]:scroll-m-20 [&_h1]:text-2xl [&_h1]:font-extrabold [&_h1]:tracking-tight
-            [&_h2]:scroll-m-20 [&_h2]:border-b [&_h2]:pb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:first:mt-0
-            [&_h3]:scroll-m-20 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:tracking-tight
-            [&_h4]:scroll-m-20 [&_h4]:text-base [&_h4]:font-semibold [&_h4]:tracking-tight
-            [&_p]:leading-7 [&_p:not(:first-child)]:mt-4
-            [&_ul]:my-4 [&_ul]:ml-6 [&_ul]:list-disc [&_ul>li]:mt-1
-            [&_ol]:my-4 [&_ol]:ml-6 [&_ol]:list-decimal [&_ol>li]:mt-1
-            [&_blockquote]:mt-4 [&_blockquote]:border-l-2 [&_blockquote]:pl-6 [&_blockquote]:italic
-            [&_strong]:font-semibold
-            [&_table]:w-full [&_table]:my-4 [&_tr]:m-0 [&_tr]:border-t [&_tr]:p-0 [&_tr:nth-child(even)]:bg-muted
-            [&_th]:border [&_th]:px-4 [&_th]:py-2 [&_th]:text-left [&_th]:font-bold
-            [&_td]:border [&_td]:px-4 [&_td]:py-2 [&_td]:text-left
-            [&_hr]:my-4 [&_hr]:border [&_hr]:border-muted-foreground/20
-            [&_mark]:bg-primary/15 [&_mark]:text-primary [&_mark]:dark:bg-primary/30 [&_mark]:dark:text-white [&_mark]:rounded-sm [&_mark]:px-0.5 [&_mark]:not-italic"
-        >
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-            {displayContent}
-          </ReactMarkdown>
-        </div>
+        <StyledDocumentPreview
+          content={displayContent}
+          projectTitle={projectTitle}
+          companyName={companyName}
+          dealType={dealType}
+          coverImageUrl={coverImageUrl}
+          colors={colors}
+        />
       </div>
 
       {/* Right – chat panel (sticky) */}
       <div className="sticky top-4">
         <div className="rounded-xl border bg-card flex flex-col max-h-[calc(100vh-6rem)] min-h-[400px] overflow-hidden">
-
           {/* Header */}
           <div className="flex items-center gap-2 px-4 py-3 border-b shrink-0">
-            <Wand2 className="size-4 text-muted-foreground" />
-            <h3 className="font-medium text-base text-foreground">Fix an Issue</h3>
+            <Wand2 className="size-4 text-primary" />
+            <h3 className="font-medium text-sm text-foreground">Refine Style</h3>
             {isGenerating && (
               <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
                 <Loader2 className="size-3 animate-spin" />
@@ -279,10 +294,12 @@ export function SynthesisStep({
                     <Wand2 className="size-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-foreground">Describe an issue to fix</p>
+                    <p className="text-sm font-medium text-foreground">
+                      Refine the styled document
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
-                      Paste a paragraph, describe what's wrong, and I'll suggest a replacement
-                      with changes highlighted in{" "}
+                      Describe changes you'd like — tone adjustments, section rewrites, or
+                      formatting tweaks. Changes are highlighted in{" "}
                       <mark className="bg-primary/15 text-primary dark:bg-primary/30 dark:text-primary-foreground rounded-sm px-0.5 not-italic">
                         violet
                       </mark>
@@ -291,13 +308,18 @@ export function SynthesisStep({
                   </div>
                   <div className="grid gap-1.5 w-full max-w-[280px] text-left">
                     {[
-                      "The opening paragraph is too technical — simplify it",
-                      "Rewrite the risk section to be more concise",
-                      "The conclusion feels abrupt — expand it",
+                      "Make the executive summary more concise",
+                      "The risk section needs a stronger warning tone",
+                      "Add more transitional sentences between sections",
                     ].map((s) => (
                       <button
                         key={s}
-                        onClick={() => { if (inputRef.current) { inputRef.current.value = s; inputRef.current.focus(); } }}
+                        onClick={() => {
+                          if (inputRef.current) {
+                            inputRef.current.value = s;
+                            inputRef.current.focus();
+                          }
+                        }}
                         className="text-xs text-left rounded-lg border px-3 py-2 hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                       >
                         {s}
@@ -329,9 +351,14 @@ export function SynthesisStep({
                       <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                     ) : (
                       <>
-                        <AssistantContent content={msg.content} isStreaming={msg.isStreaming} />
+                        <AssistantContent
+                          content={msg.content}
+                          isStreaming={msg.isStreaming}
+                        />
                         {!msg.isStreaming && !msg.isLoading && !msg.isError && msg.content && (
-                          <CopyButton text={parseFixResponse(msg.content)?.replacement ?? msg.content} />
+                          <CopyButton
+                            text={parseFixResponse(msg.content)?.replacement ?? msg.content}
+                          />
                         )}
                       </>
                     )}
@@ -348,7 +375,7 @@ export function SynthesisStep({
             <div className="flex items-end gap-2">
               <Textarea
                 ref={inputRef}
-                placeholder="Describe what to fix… (Enter to send, Shift+Enter for newline)"
+                placeholder="Describe what to change… (Enter to send)"
                 defaultValue=""
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -374,23 +401,8 @@ export function SynthesisStep({
               </Button>
             </div>
           </div>
-
         </div>
       </div>
-
-      {/* Optional follow-up CTA */}
-      {onContinue && (
-        <div className="rounded-xl border bg-card px-5 py-4 flex items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            Synthesis is complete. You can keep editing this step.
-          </p>
-          <Button variant="outline" onClick={onContinue} className="shrink-0">
-            Update Synthesis
-            <ArrowRight className="size-4 ml-1.5" />
-          </Button>
-        </div>
-      )}
-
     </div>
   );
 }

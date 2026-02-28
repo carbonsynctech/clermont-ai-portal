@@ -12,8 +12,12 @@ import { integrateCritiques } from "./handlers/integrate-critiques";
 import { exportHtml } from "./handlers/export-html";
 import { askAi } from "./handlers/ask-ai";
 import { generateCustomPersona } from "./handlers/generate-custom-persona";
+import { generateCoverImages } from "./handlers/generate-cover-images";
 import type { StageRunPayload, AskAiPayload } from "@repo/core";
 import type { CustomPersonaPayload } from "./handlers/generate-custom-persona";
+import type { CoverImagesPayload } from "./handlers/generate-cover-images";
+import { db, stages } from "@repo/db";
+import { and, eq } from "drizzle-orm";
 
 export async function runJob(jobId: string): Promise<void> {
   const job = getJob(jobId);
@@ -34,6 +38,9 @@ export async function runJob(jobId: string): Promise<void> {
       const result = await generateCustomPersona(payload, onChunk);
       updateJob(jobId, { status: "completed", completedAt: new Date(), result });
       return;
+    } else if (job.type === "cover_images") {
+      const payload = job.payload as CoverImagesPayload;
+      await generateCoverImages(payload);
     } else if (job.type === "extract_material") {
       const payload = job.payload as { materialId: string };
       await extractAndChunk(payload.materialId);
@@ -58,7 +65,7 @@ export async function runJob(jobId: string): Promise<void> {
           await synthesize(projectId, userId);
           break;
         case 7:
-          await styleEdit(projectId, userId);
+          await styleEdit(projectId, userId, onChunk);
           break;
         case 8:
           await factCheck(projectId, userId);
@@ -85,5 +92,20 @@ export async function runJob(jobId: string): Promise<void> {
     const error = err instanceof Error ? err.message : String(err);
     console.error(`Job ${jobId} failed:`, error);
     updateJob(jobId, { status: "failed", error, completedAt: new Date() });
+
+    // Reset any DB stage that got stuck in "running" so the UI doesn't hang permanently.
+    const payload = job.payload as Partial<StageRunPayload>;
+    if (payload.projectId && payload.stepNumber) {
+      await db
+        .update(stages)
+        .set({ status: "failed", updatedAt: new Date() })
+        .where(
+          and(
+            eq(stages.projectId, payload.projectId),
+            eq(stages.stepNumber, payload.stepNumber),
+          ),
+        )
+        .catch(() => undefined); // best-effort — don't mask the original error
+    }
   }
 }

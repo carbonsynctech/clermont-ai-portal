@@ -40,7 +40,7 @@ export function Header({ title, actionsSlot }: HeaderProps) {
         previousSegment === "projects" && /^[a-z0-9-]{8,}$/i.test(segment);
 
       const label = isLikelyProjectId
-        ? "Project"
+        ? (title ?? "Project")
         : decodeURIComponent(segment)
             .replace(/-/g, " ")
             .replace(/\b\w/g, (char) => char.toUpperCase());
@@ -51,7 +51,7 @@ export function Header({ title, actionsSlot }: HeaderProps) {
         isLast: index === segments.length - 1,
       };
     });
-  }, [isDashboardRoute, pathname]);
+  }, [isDashboardRoute, pathname, title]);
 
   React.useEffect(() => {
     const onFolderBreadcrumb = (event: Event) => {

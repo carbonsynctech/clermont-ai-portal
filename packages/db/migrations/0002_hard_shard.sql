@@ -1,0 +1,1 @@
+ALTER TABLE "style_guides" ADD COLUMN "cover_images" jsonb;

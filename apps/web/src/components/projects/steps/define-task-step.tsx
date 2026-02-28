@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2, FileText, Target, Users, MessageSquare,
-  Sparkles, Layers, Pencil, Eye, ArrowRight,
+  Sparkles, Layers, Pencil, Eye,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -267,6 +267,7 @@ interface DefineTaskStepProps {
   briefData: ProjectBriefData | null;
   stage1Status: string;
   masterPrompt: string | null;
+  onRunningChange?: (running: boolean) => void;
 }
 
 const CORE_BRIEF_KEYS = new Set([
@@ -280,9 +281,14 @@ export function DefineTaskStep({
   briefData,
   stage1Status,
   masterPrompt,
+  onRunningChange,
 }: DefineTaskStepProps) {
   const router = useRouter();
   const step1Trigger = useStepTrigger(projectId, 1, stage1Status);
+
+  useEffect(() => {
+    onRunningChange?.(step1Trigger.isRunning);
+  }, [step1Trigger.isRunning, onRunningChange]);
   const [isSaving, setIsSaving] = useState(false);
   // Master prompt editing
   const [promptText, setPromptText] = useState(masterPrompt ?? "");
@@ -691,10 +697,14 @@ export function DefineTaskStep({
         <div className="flex items-center gap-3">
           <Button
             onClick={() => void handleSave({ refresh: true })}
-            disabled={!isFormValid || isSaving}
+            disabled={!isFormValid || isSaving || stage1Status === "completed"}
             variant={saved ? "outline" : "default"}
           >
-            {isSaving ? "Saving…" : saved ? "Saved ✓" : "Save Brief"}
+            {isSaving
+              ? "Saving…"
+              : stage1Status === "completed"
+                ? "Saved ✓"
+                : "Save & Continue to Step 2"}
           </Button>
 
           {stage1Status === "completed" && (
@@ -737,15 +747,7 @@ export function DefineTaskStep({
                   }
                 }}
               >
-                {isSavingPrompt ? "Saving…" : "Save Prompt"}
-              </Button>
-              <Button
-                size="sm"
-                className="gap-1.5"
-                onClick={() => router.push(`/projects/${projectId}?step=2`)}
-              >
-                Continue to Step 2
-                <ArrowRight className="size-3.5" />
+                {isSavingPrompt ? "Saving…" : "Update Step 1"}
               </Button>
             </>
           )}

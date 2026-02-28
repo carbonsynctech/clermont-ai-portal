@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { db } from "@repo/db";
 import { projects, stages, personas, sourceMaterials, versions, styleGuides } from "@repo/db";
 import { eq, and } from "drizzle-orm";
@@ -60,6 +60,24 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       ? step10Stage.metadata.reviewDraftContent
       : null;
 
+  // Fetch selected cover image signed URL for the styled document preview
+  let coverImageUrl: string | undefined;
+  const latestStyleGuide = styleGuideRows[0];
+  if (latestStyleGuide?.coverImages?.selectedStyle) {
+    const selectedImg = latestStyleGuide.coverImages.images.find(
+      (img) => img.style === latestStyleGuide.coverImages!.selectedStyle,
+    );
+    if (selectedImg) {
+      const adminSupabase = createAdminClient();
+      const { data } = await adminSupabase.storage
+        .from("source-materials")
+        .createSignedUrl(selectedImg.storagePath, 3600);
+      if (data?.signedUrl) {
+        coverImageUrl = data.signedUrl;
+      }
+    }
+  }
+
   return (
     <PipelineView
       project={project}
@@ -70,6 +88,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       latestStyleGuide={styleGuideRows[0] ?? null}
       initialStep={initialStep}
       step10DraftContent={step10DraftContent}
+      coverImageUrl={coverImageUrl}
     />
   );
 }

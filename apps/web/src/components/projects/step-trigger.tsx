@@ -237,6 +237,7 @@ interface StepTriggerProps {
   disabled?: boolean;
   disabledReason?: string;
   autoRun?: boolean;
+  onRunningChange?: (running: boolean) => void;
 }
 
 export function StepTrigger({
@@ -247,8 +248,13 @@ export function StepTrigger({
   disabled = false,
   disabledReason,
   autoRun = false,
+  onRunningChange,
 }: StepTriggerProps) {
   const trigger = useStepTrigger(projectId, stepNumber, currentStatus, autoRun);
+
+  useEffect(() => {
+    onRunningChange?.(trigger.isRunning);
+  }, [trigger.isRunning, onRunningChange]);
 
   return (
     <div className="space-y-3">

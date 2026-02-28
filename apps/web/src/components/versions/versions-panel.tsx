@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { VersionViewer } from "./version-viewer";
 import { VersionDiff } from "./version-diff";
+import { Layers } from "lucide-react";
 import type { Version } from "@repo/db";
 
 const VERSION_TYPE_LABELS: Record<string, string> = {
@@ -59,7 +60,10 @@ export function VersionsPanel({ versions }: VersionsPanelProps) {
     <>
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="font-medium text-base text-foreground">Output Versions ({versions.length})</h3>
+          <div className="flex items-center gap-2">
+            <Layers className="size-4 text-muted-foreground" />
+            <h3 className="font-medium text-base text-foreground">Output Versions ({versions.length})</h3>
+          </div>
           {versions.length >= 2 && (
             <Button
               variant="secondary"

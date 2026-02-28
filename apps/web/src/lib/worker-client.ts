@@ -76,6 +76,18 @@ export const workerClient = {
       body: JSON.stringify({ projectId, userId, userMessage }),
     }) as Promise<{ jobId: string; status: string }>,
 
+  fixStyleEdit: async (projectId: string, userId: string, userMessage: string) =>
+    workerFetch("/jobs/style-edit-fix", {
+      method: "POST",
+      body: JSON.stringify({ projectId, userId, userMessage }),
+    }) as Promise<{ jobId: string; status: string }>,
+
+  generateCoverImages: async (projectId: string, userId: string, styleGuideId: string) =>
+    workerFetch("/jobs/generate-cover-images", {
+      method: "POST",
+      body: JSON.stringify({ projectId, userId, styleGuideId }),
+    }) as Promise<{ jobId: string; status: string }>,
+
   // PDF export is proxied through /api/projects/[id]/export to keep WORKER_SECRET server-side
   getPdfDownloadPath: (projectId: string) => `/api/projects/${projectId}/export`,
 };
