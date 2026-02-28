@@ -11,7 +11,9 @@ import { devilsAdvocate } from "./handlers/devils-advocate";
 import { integrateCritiques } from "./handlers/integrate-critiques";
 import { exportHtml } from "./handlers/export-html";
 import { askAi } from "./handlers/ask-ai";
+import { generateCustomPersona } from "./handlers/generate-custom-persona";
 import type { StageRunPayload, AskAiPayload } from "@repo/core";
+import type { CustomPersonaPayload } from "./handlers/generate-custom-persona";
 
 export async function runJob(jobId: string): Promise<void> {
   const job = getJob(jobId);
@@ -27,7 +29,12 @@ export async function runJob(jobId: string): Promise<void> {
   };
 
   try {
-    if (job.type === "extract_material") {
+    if (job.type === "custom_persona") {
+      const payload = job.payload as CustomPersonaPayload;
+      const result = await generateCustomPersona(payload, onChunk);
+      updateJob(jobId, { status: "completed", completedAt: new Date(), result });
+      return;
+    } else if (job.type === "extract_material") {
       const payload = job.payload as { materialId: string };
       await extractAndChunk(payload.materialId);
     } else if (job.type === "ask_ai") {
