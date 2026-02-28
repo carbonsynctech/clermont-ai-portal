@@ -10,13 +10,14 @@ import { projects } from "./projects";
 
 export const personas = pgTable("personas", {
   id: uuid("id").defaultRandom().primaryKey(),
+  // nullable: global library personas have projectId = null
   projectId: uuid("project_id")
-    .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description").notNull(),
   systemPrompt: text("system_prompt").notNull(),
   sourceUrls: text("source_urls").array().default([]).notNull(),
+  tags: text("tags").array().default([]).notNull(),
   isSelected: boolean("is_selected").default(false).notNull(),
   selectionOrder: integer("selection_order"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
