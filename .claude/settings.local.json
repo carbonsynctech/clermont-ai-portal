@@ -2,7 +2,33 @@
   "permissions": {
     "allow": [
       "*",
-      "Bash(DATABASE_URL=\"postgresql://postgres.tcnjzfloegkupbwltdto:7gMEtTKquGjXdZgC@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres\" pnpm db:migrate:*)"
+      "Bash(DATABASE_URL=\"postgresql://postgres.tcnjzfloegkupbwltdto:7gMEtTKquGjXdZgC@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres\" pnpm db:migrate:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:supabase.com)",
+      "WebFetch(domain:hono.dev)",
+      "WebFetch(domain:js.langchain.com)",
+      "WebFetch(domain:strapi.io)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:www.freecodecamp.org)",
+      "WebFetch(domain:blog.logrocket.com)",
+      "Bash(node_modules/.bin/shadcn add:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(pnpm shadcn:*)",
+      "Bash(node:*)",
+      "Bash(pnpm add:*)",
+      "Bash(ls:*)",
+      "Bash(netstat -ano)",
+      "Bash(xargs -I{} taskkill //PID {} //F)",
+      "Bash(pnpm:*)",
+      "WebFetch(domain:ui.shadcn.com)",
+      "Bash(cmd.exe:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(find:*)",
+      "Bash(npx tsc:*)"
     ]
-  }
+  },
+  "defaultMode": "bypassPermissions"
 }

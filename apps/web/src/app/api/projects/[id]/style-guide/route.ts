@@ -74,5 +74,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 6)));
 
+  await db
+    .update(projects)
+    .set({ updatedAt: new Date() })
+    .where(eq(projects.id, projectId));
+
   return NextResponse.json({ styleGuideId: styleGuide.id });
 }

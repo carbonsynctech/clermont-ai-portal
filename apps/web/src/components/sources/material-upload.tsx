@@ -1,10 +1,20 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Upload, CheckCircle2 } from "lucide-react";
+import {
+  FileUpload,
+  FileUploadDropzone,
+  FileUploadItem,
+  FileUploadItemDelete,
+  FileUploadItemMetadata,
+  FileUploadItemPreview,
+  FileUploadList,
+  FileUploadTrigger,
+} from "@/components/ui/file-upload";
+import { Loader2, Upload, CheckCircle2, X } from "lucide-react";
 import type { SourceMaterial } from "@repo/db";
 
 const MATERIAL_TYPES = [
@@ -25,9 +35,8 @@ interface MaterialUploadProps {
 
 export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [materialType, setMaterialType] = useState<MaterialType | "">("");
   const [ndaAcknowledged, setNdaAcknowledged] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -35,9 +44,10 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [lastUploaded, setLastUploaded] = useState<string | null>(null);
 
-  const canUpload = selectedFile !== null && materialType !== "" && ndaAcknowledged;
+  const canUpload = selectedFiles.length > 0 && materialType !== "" && ndaAcknowledged;
 
   async function handleUpload() {
+    const selectedFile = selectedFiles[0];
     if (!selectedFile || !materialType) return;
 
     setIsUploading(true);
@@ -61,10 +71,9 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
       }
 
       setLastUploaded(selectedFile.name);
-      setSelectedFile(null);
+      setSelectedFiles([]);
       setMaterialType("");
       setNdaAcknowledged(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
       router.refresh();
     } catch {
       setUploadError("Network error. Please try again.");
@@ -128,13 +137,45 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
 
         <div className="space-y-2">
           <label className="text-xs text-muted-foreground">File (PDF, TXT, DOCX)</label>
-          <input
-            ref={fileInputRef}
-            type="file"
+          <FileUpload
+            className="w-full"
+            value={selectedFiles}
+            onValueChange={setSelectedFiles}
+            onFileReject={(_, message) => setUploadError(message)}
             accept=".pdf,.txt,.docx"
-            className="block w-full text-xs text-muted-foreground file:mr-3 file:py-1 file:px-2 file:rounded file:border file:border-border file:text-xs file:bg-muted file:text-foreground hover:file:bg-muted/80 cursor-pointer"
-            onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-          />
+            maxFiles={1}
+          >
+            <FileUploadDropzone>
+              <div className="flex flex-col items-center gap-1 text-center">
+                <div className="flex items-center justify-center rounded-full border p-2.5">
+                  <Upload className="size-5 text-muted-foreground" />
+                </div>
+                <p className="font-medium text-sm">Drag & drop file here</p>
+                <p className="text-muted-foreground text-xs">
+                  Or click to browse (max 1 file)
+                </p>
+              </div>
+              <FileUploadTrigger asChild>
+                <Button variant="outline" size="sm" className="mt-2 w-fit">
+                  Browse file
+                </Button>
+              </FileUploadTrigger>
+            </FileUploadDropzone>
+
+            <FileUploadList>
+              {selectedFiles.map((file) => (
+                <FileUploadItem key={file.name} value={file}>
+                  <FileUploadItemPreview />
+                  <FileUploadItemMetadata />
+                  <FileUploadItemDelete asChild>
+                    <Button variant="ghost" size="icon" className="size-7">
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </FileUploadItemDelete>
+                </FileUploadItem>
+              ))}
+            </FileUploadList>
+          </FileUpload>
         </div>
 
         <div className="space-y-1">

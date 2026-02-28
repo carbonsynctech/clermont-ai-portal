@@ -2,6 +2,7 @@ import { db } from "@repo/db";
 import { projects } from "@repo/db";
 import { eq } from "drizzle-orm";
 import { ProjectCard } from "./project-card";
+import { DashboardProjectStructure } from "./dashboard-project-structure";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus } from "lucide-react";
@@ -30,10 +31,18 @@ export async function ProjectList({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {rows.map((project) => (
-        <ProjectCard key={project.id} project={project} />
-      ))}
+    <div className="space-y-4">
+      <DashboardProjectStructure
+        projects={rows.map((project) => ({
+          id: project.id,
+          title: project.title,
+        }))}
+      />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((project) => (
+          <ProjectCard key={project.id} project={project} />
+        ))}
+      </div>
     </div>
   );
 }

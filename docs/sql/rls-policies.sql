@@ -99,7 +99,8 @@ CREATE POLICY "audit_logs_select_own" ON audit_logs
 
 -- ============================================================
 -- Auth trigger: sync Supabase auth.users -> public.users
--- ============================================================
+-- =========================
+===================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN

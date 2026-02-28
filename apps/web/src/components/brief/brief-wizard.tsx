@@ -98,7 +98,7 @@ export function BriefWizard() {
   }
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div>
       {/* Step indicator */}
       <div className="flex items-center gap-2 mb-6">
         {STEPS.map((s, i) => (

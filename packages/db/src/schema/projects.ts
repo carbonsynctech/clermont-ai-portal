@@ -18,14 +18,50 @@ export const projectStatusEnum = pgEnum("project_status", [
 ]);
 
 export interface ProjectBriefData {
-  companyName: string;
-  sector: string;
-  dealType: string;
-  dealSizeUsd?: number;
+  // Core (all doc types)
+  documentType?: string;
   keyQuestion: string;
   targetAudience: string;
+  tonePreset?: string;
   toneInstructions?: string;
-  additionalContext?: string;
+  additionalContext?: string; // kept for backwards compat
+
+  // Investment Memorandum (legacy top-level fields)
+  companyName?: string;
+  sector?: string;
+  dealType?: string;
+  dealSizeUsd?: number;
+
+  // Strategy Playbook
+  organizationName?: string;
+  industry?: string;
+  strategicFocus?: string;
+  timeHorizon?: string;
+
+  // Policy Document
+  policyDomain?: string;
+  jurisdiction?: string;
+
+  // Whitepaper
+  topicArea?: string;
+  targetIndustry?: string;
+
+  // Research Report
+  researchDomain?: string;
+
+  // Executive Summary
+  topicInitiative?: string;
+  decisionType?: string;
+
+  // Business Case
+  initiativeName?: string;
+  budgetRange?: string;
+  businessUnit?: string;
+
+  // Technical Specification
+  systemProductName?: string;
+  techStack?: string;
+  specType?: string;
 }
 
 export const projects = pgTable("projects", {

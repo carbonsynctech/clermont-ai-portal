@@ -43,7 +43,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   try {
     const body = (await req.json().catch(() => ({}))) as { payload?: unknown };
-    const result = await workerClient.runStage(stepNumber, projectId, body.payload);
+    const result = await workerClient.runStage(stepNumber, projectId, user.id, body.payload);
 
     // Store the worker job ID on the stage
     if (result.jobId) {

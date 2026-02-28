@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { emitProjectSaved } from "@/lib/project-save-events";
 
 interface InlineEditorProps {
   projectId: string;
@@ -17,33 +19,89 @@ function countWords(text: string): number {
 
 export function InlineEditor({ projectId, initialContent, versionLabel }: InlineEditorProps) {
   const router = useRouter();
-  const [content, setContent] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(`review-draft-${projectId}`) ?? initialContent;
-    }
-    return initialContent;
-  });
-  const [isSaving, setIsSaving] = useState(false);
-  const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [content, setContent] = useState<string>(initialContent);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isDraftSaving, setIsDraftSaving] = useState(false);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedContentRef = useRef(initialContent);
+  const failedContentRef = useRef<string | null>(null);
 
   const wordCount = countWords(content);
   const originalWordCount = countWords(initialContent);
   const wordDiff = wordCount - originalWordCount;
 
-  // Auto-save to localStorage every 5s
   useEffect(() => {
-    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-    autoSaveRef.current = setTimeout(() => {
-      localStorage.setItem(`review-draft-${projectId}`, content);
-    }, 5000);
+    setContent(initialContent);
+    lastSavedContentRef.current = initialContent;
+  }, [initialContent]);
+
+  async function saveDraft(nextContent: string) {
+    setIsDraftSaving(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/review/draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: nextContent }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        throw new Error(data.error ?? "Failed to save draft");
+      }
+
+      const data = (await res.json()) as { savedAt?: unknown };
+      lastSavedContentRef.current = nextContent;
+      failedContentRef.current = null;
+      setDraftSaveError(null);
+
+      if (typeof data.savedAt === "string") {
+        emitProjectSaved({ projectId, savedAt: data.savedAt });
+      }
+    } catch (err) {
+      failedContentRef.current = nextContent;
+      setDraftSaveError(err instanceof Error ? err.message : "Failed to save draft");
+    } finally {
+      setIsDraftSaving(false);
+    }
+  }
+
+  useEffect(() => {
+    if (isApproving || isDraftSaving) {
+      return;
+    }
+
+    if (content === lastSavedContentRef.current) {
+      return;
+    }
+
+    if (content === failedContentRef.current) {
+      return;
+    }
+
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+    }
+
+    saveDebounceRef.current = setTimeout(() => {
+      void saveDraft(content);
+    }, 800);
+
     return () => {
-      if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = null;
+      }
     };
-  }, [content, projectId]);
+  }, [content, isApproving, isDraftSaving]);
 
   async function handleApprove() {
-    setIsSaving(true);
+    setIsApproving(true);
     try {
+      if (content !== lastSavedContentRef.current) {
+        await saveDraft(content);
+      }
+
       const res = await fetch(`/api/projects/${projectId}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -53,19 +111,19 @@ export function InlineEditor({ projectId, initialContent, versionLabel }: Inline
         const data = (await res.json()) as { error?: string };
         throw new Error(data.error ?? "Failed to save review");
       }
-      localStorage.removeItem(`review-draft-${projectId}`);
       router.refresh();
     } catch (err) {
       console.error("Review save error:", err);
       alert(err instanceof Error ? err.message : "Failed to save review. Please try again.");
     } finally {
-      setIsSaving(false);
+      setIsApproving(false);
     }
   }
 
   function handleReset() {
     setContent(initialContent);
-    localStorage.removeItem(`review-draft-${projectId}`);
+    failedContentRef.current = null;
+    setDraftSaveError(null);
   }
 
   return (
@@ -88,25 +146,27 @@ export function InlineEditor({ projectId, initialContent, versionLabel }: Inline
         </div>
       </div>
 
-      <textarea
+      <Textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
-        className="w-full min-h-[500px] rounded-md border border-input bg-background p-3 font-mono text-sm resize-y focus:outline-none focus:ring-2 focus:ring-ring"
-        disabled={isSaving}
+        className="min-h-[500px] font-mono"
+        disabled={isApproving}
         spellCheck
       />
+
+      {draftSaveError && <p className="text-sm text-destructive">{draftSaveError}</p>}
 
       <div className="flex items-center gap-2 justify-end">
         <Button
           variant="ghost"
           size="sm"
           onClick={handleReset}
-          disabled={isSaving || content === initialContent}
+          disabled={isApproving || content === initialContent}
         >
           Reset to Original
         </Button>
-        <Button size="sm" onClick={handleApprove} disabled={isSaving || content.trim() === ""}>
-          {isSaving ? "Saving…" : "Save & Approve"}
+        <Button size="sm" onClick={handleApprove} disabled={isApproving || content.trim() === ""}>
+          {isApproving ? "Saving…" : "Save & Approve"}
         </Button>
       </div>
     </div>

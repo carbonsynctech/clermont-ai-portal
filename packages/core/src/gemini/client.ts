@@ -3,19 +3,24 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const DEFAULT_MODEL = "gemini-2.0-flash";
 
 class GeminiClient {
-  private client: GoogleGenerativeAI;
+  private client: GoogleGenerativeAI | null = null;
 
-  constructor() {
+  private getClient(): GoogleGenerativeAI {
+    if (this.client) {
+      return this.client;
+    }
+
     const apiKey = process.env["GOOGLE_GEMINI_API_KEY"];
     if (!apiKey) throw new Error("GOOGLE_GEMINI_API_KEY is not set");
     this.client = new GoogleGenerativeAI(apiKey);
+    return this.client;
   }
 
   async factCheck(
     content: string,
     claims: string[]
   ): Promise<{ verified: boolean; issues: string[]; correctedContent: string }> {
-    const model = this.client.getGenerativeModel({ model: DEFAULT_MODEL });
+    const model = this.getClient().getGenerativeModel({ model: DEFAULT_MODEL });
 
     const prompt = `You are a professional fact-checker for investment memos and financial content.
 

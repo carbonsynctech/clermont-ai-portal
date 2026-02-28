@@ -26,7 +26,7 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-8 w-8 rounded-full p-0">
+        <Button id="user-menu-trigger" variant="ghost" className="h-8 w-8 rounded-full p-0">
           <Avatar className="h-8 w-8">
             <AvatarFallback className="text-xs">U</AvatarFallback>
           </Avatar>

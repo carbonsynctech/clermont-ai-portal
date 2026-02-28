@@ -18,6 +18,13 @@ export async function runJob(jobId: string): Promise<void> {
 
   updateJob(jobId, { status: "running", startedAt: new Date() });
 
+  // Callback that appends each streamed token to the job's partialOutput field,
+  // so the web client can display it in real-time via polling.
+  const onChunk = (chunk: string) => {
+    const current = getJob(jobId)?.partialOutput ?? "";
+    updateJob(jobId, { partialOutput: current + chunk });
+  };
+
   try {
     if (job.type === "extract_material") {
       const payload = job.payload as { materialId: string };
@@ -28,7 +35,7 @@ export async function runJob(jobId: string): Promise<void> {
 
       switch (stepNumber) {
         case 1:
-          await generateMasterPrompt(projectId, userId);
+          await generateMasterPrompt(projectId, userId, onChunk);
           break;
         case 2:
           await suggestPersonas(projectId, userId);

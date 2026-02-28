@@ -46,8 +46,8 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
       {
         role: "user",
         content: buildHtmlExportUserMessage(finalVersion.content, {
-          companyName: brief.companyName,
-          dealType: brief.dealType,
+          companyName: brief.companyName ?? brief.organizationName ?? brief.systemProductName ?? "Document",
+          dealType: brief.dealType ?? brief.documentType ?? "",
           targetAudience: brief.targetAudience,
         }),
       },

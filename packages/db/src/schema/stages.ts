@@ -23,6 +23,8 @@ export interface StageMetadata {
   inputTokens?: number;
   outputTokens?: number;
   durationMs?: number;
+  reviewDraftContent?: string;
+  reviewDraftSavedAt?: string;
 }
 
 export const stages = pgTable("stages", {

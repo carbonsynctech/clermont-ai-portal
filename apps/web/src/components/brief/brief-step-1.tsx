@@ -2,6 +2,14 @@
 
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
 
 const SECTORS = [
   "Technology",
@@ -57,33 +65,45 @@ export function BriefStep1({ data, onChange }: BriefStep1Props) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="sector">Sector *</Label>
-        <select
-          id="sector"
+        <Label>Sector *</Label>
+        <Combobox
+          items={SECTORS}
           value={data.sector}
-          onChange={(e) => update("sector", e.target.value)}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          onValueChange={(val) => update("sector", val ?? "")}
         >
-          <option value="">Select sector…</option>
-          {SECTORS.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
+          <ComboboxInput placeholder="Select sector…" className="w-full" />
+          <ComboboxContent>
+            <ComboboxEmpty>No sectors found.</ComboboxEmpty>
+            <ComboboxList>
+              {(item) => (
+                <ComboboxItem key={item} value={item}>
+                  {item}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="dealType">Deal Type *</Label>
-        <select
-          id="dealType"
+        <Label>Deal Type *</Label>
+        <Combobox
+          items={DEAL_TYPES}
           value={data.dealType}
-          onChange={(e) => update("dealType", e.target.value)}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          onValueChange={(val) => update("dealType", val ?? "")}
         >
-          <option value="">Select deal type…</option>
-          {DEAL_TYPES.map((d) => (
-            <option key={d} value={d}>{d}</option>
-          ))}
-        </select>
+          <ComboboxInput placeholder="Select deal type…" className="w-full" />
+          <ComboboxContent>
+            <ComboboxEmpty>No deal types found.</ComboboxEmpty>
+            <ComboboxList>
+              {(item) => (
+                <ComboboxItem key={item} value={item}>
+                  {item}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
       </div>
 
       <div className="space-y-2">

@@ -1,6 +1,14 @@
 "use client";
 
 import { Label } from "@/components/ui/label";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
 
 const AUDIENCES = [
   "LP Committee",
@@ -42,18 +50,24 @@ export function BriefStep2({ data, onChange }: BriefStep2Props) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="targetAudience">Target Audience *</Label>
-        <select
-          id="targetAudience"
+        <Label>Target Audience *</Label>
+        <Combobox
+          items={AUDIENCES}
           value={data.targetAudience}
-          onChange={(e) => update("targetAudience", e.target.value)}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          onValueChange={(val) => update("targetAudience", val ?? "")}
         >
-          <option value="">Select audience…</option>
-          {AUDIENCES.map((a) => (
-            <option key={a} value={a}>{a}</option>
-          ))}
-        </select>
+          <ComboboxInput placeholder="Select audience…" className="w-full" />
+          <ComboboxContent>
+            <ComboboxEmpty>No audiences found.</ComboboxEmpty>
+            <ComboboxList>
+              {(item) => (
+                <ComboboxItem key={item} value={item}>
+                  {item}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
       </div>
     </div>
   );

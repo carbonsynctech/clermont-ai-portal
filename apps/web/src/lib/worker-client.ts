@@ -25,15 +25,22 @@ export interface WorkerJob {
   status: "pending" | "running" | "completed" | "failed";
   result?: unknown;
   error?: string;
+  /** Accumulated AI output streamed in real-time during generation */
+  partialOutput?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export const workerClient = {
-  runStage: async (stepNumber: number, projectId: string, payload?: unknown) =>
+  runStage: async (
+    stepNumber: number,
+    projectId: string,
+    userId: string,
+    payload?: unknown,
+  ) =>
     workerFetch(`/stages/${stepNumber}/run`, {
       method: "POST",
-      body: JSON.stringify({ projectId, stepNumber, payload }),
+      body: JSON.stringify({ projectId, stepNumber, userId, payload }),
     }) as Promise<{ jobId: string; status: string }>,
 
   getJobStatus: async (jobId: string) =>

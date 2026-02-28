@@ -1,14 +1,36 @@
 // Local type mirror of ProjectBriefData from @repo/db
 // Kept here to avoid circular package dependency
 export interface ProjectBriefData {
-  companyName: string;
-  sector: string;
-  dealType: string;
-  dealSizeUsd?: number;
+  // Core (all doc types)
+  documentType?: string;
   keyQuestion: string;
   targetAudience: string;
+  tonePreset?: string;
   toneInstructions?: string;
   additionalContext?: string;
+  // Investment Memorandum (legacy)
+  companyName?: string;
+  sector?: string;
+  dealType?: string;
+  dealSizeUsd?: number;
+  // Other doc-type specific (all optional)
+  organizationName?: string;
+  industry?: string;
+  strategicFocus?: string;
+  timeHorizon?: string;
+  policyDomain?: string;
+  jurisdiction?: string;
+  topicArea?: string;
+  targetIndustry?: string;
+  researchDomain?: string;
+  topicInitiative?: string;
+  decisionType?: string;
+  initiativeName?: string;
+  budgetRange?: string;
+  businessUnit?: string;
+  systemProductName?: string;
+  techStack?: string;
+  specType?: string;
 }
 
 export function buildMasterPromptSystemPrompt(): string {
@@ -30,26 +52,56 @@ Output only the master prompt itself — a detailed, actionable brief for writin
 
 export function buildMasterPromptUserMessage(brief: ProjectBriefData): string {
   const parts = [
-    `Create a master prompt for the following investment content brief:`,
+    `Create a master prompt for the following document brief:`,
     ``,
-    `**Company / Subject:** ${brief.companyName}`,
-    `**Sector:** ${brief.sector}`,
-    `**Deal Type:** ${brief.dealType}`,
   ];
 
-  if (brief.dealSizeUsd !== undefined) {
-    parts.push(`**Deal Size:** $${brief.dealSizeUsd.toLocaleString()}`);
-  }
+  if (brief.documentType) parts.push(`**Document Type:** ${brief.documentType}`);
+
+  // Subject / entity
+  const subject = brief.companyName ?? brief.organizationName ?? brief.systemProductName ?? null;
+  if (subject) parts.push(`**Subject:** ${subject}`);
+
+  // Investment Memorandum specific
+  if (brief.sector) parts.push(`**Sector:** ${brief.sector}`);
+  if (brief.dealType) parts.push(`**Deal Type:** ${brief.dealType}`);
+  if (brief.dealSizeUsd !== undefined) parts.push(`**Deal Size:** $${brief.dealSizeUsd.toLocaleString()}`);
+
+  // Strategy Playbook
+  if (brief.industry) parts.push(`**Industry:** ${brief.industry}`);
+  if (brief.strategicFocus) parts.push(`**Strategic Focus:** ${brief.strategicFocus}`);
+  if (brief.timeHorizon) parts.push(`**Time Horizon:** ${brief.timeHorizon}`);
+
+  // Policy Document
+  if (brief.policyDomain) parts.push(`**Policy Domain:** ${brief.policyDomain}`);
+  if (brief.jurisdiction) parts.push(`**Jurisdiction:** ${brief.jurisdiction}`);
+
+  // Whitepaper / Research
+  if (brief.topicArea) parts.push(`**Topic Area:** ${brief.topicArea}`);
+  if (brief.targetIndustry) parts.push(`**Target Industry:** ${brief.targetIndustry}`);
+  if (brief.researchDomain) parts.push(`**Research Domain:** ${brief.researchDomain}`);
+
+  // Executive Summary / Business Case
+  if (brief.topicInitiative) parts.push(`**Topic / Initiative:** ${brief.topicInitiative}`);
+  if (brief.decisionType) parts.push(`**Decision Type:** ${brief.decisionType}`);
+  if (brief.initiativeName) parts.push(`**Initiative Name:** ${brief.initiativeName}`);
+  if (brief.budgetRange) parts.push(`**Budget Range:** ${brief.budgetRange}`);
+  if (brief.businessUnit) parts.push(`**Business Unit:** ${brief.businessUnit}`);
+
+  // Technical Specification
+  if (brief.techStack) parts.push(`**Technology Stack:** ${brief.techStack}`);
+  if (brief.specType) parts.push(`**Specification Type:** ${brief.specType}`);
 
   parts.push(
     ``,
-    `**Key Question to Answer:** ${brief.keyQuestion}`,
+    `**Key Question / Objective:** ${brief.keyQuestion}`,
     `**Target Audience:** ${brief.targetAudience}`,
   );
 
-  if (brief.toneInstructions) {
-    parts.push(`**Tone Instructions:** ${brief.toneInstructions}`);
-  }
+  const tone = brief.tonePreset === "Other"
+    ? brief.toneInstructions
+    : (brief.tonePreset ?? brief.toneInstructions);
+  if (tone) parts.push(`**Tone:** ${tone}`);
 
   if (brief.additionalContext) {
     parts.push(``, `**Additional Context:**`, brief.additionalContext);

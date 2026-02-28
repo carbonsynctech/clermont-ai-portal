@@ -2,7 +2,11 @@ import { db, projects, stages, auditLogs } from "@repo/db";
 import { claude, buildMasterPromptSystemPrompt, buildMasterPromptUserMessage } from "@repo/core";
 import { eq, and } from "drizzle-orm";
 
-export async function generateMasterPrompt(projectId: string, userId: string): Promise<void> {
+export async function generateMasterPrompt(
+  projectId: string,
+  userId: string,
+  onChunk?: (chunk: string) => void,
+): Promise<void> {
   // 1. Fetch project and brief data
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
@@ -19,11 +23,14 @@ export async function generateMasterPrompt(projectId: string, userId: string): P
 
   const startedAt = Date.now();
 
-  // 3. Call Claude
-  const result = await claude.call({
+  // 3. Call Claude (streaming if a chunk callback is provided)
+  const callOptions = {
     system: buildMasterPromptSystemPrompt(),
-    messages: [{ role: "user", content: buildMasterPromptUserMessage(project.briefData) }],
-  });
+    messages: [{ role: "user" as const, content: buildMasterPromptUserMessage(project.briefData) }],
+  };
+  const result = onChunk
+    ? await claude.stream(callOptions, onChunk)
+    : await claude.call(callOptions);
 
   const durationMs = Date.now() - startedAt;
 

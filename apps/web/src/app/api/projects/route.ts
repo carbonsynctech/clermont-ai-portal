@@ -34,17 +34,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await req.json()) as { title?: unknown; briefData?: unknown };
+  const body = ((await req.json().catch(() => ({}))) as { title?: unknown; briefData?: unknown });
 
-  if (!body.title || typeof body.title !== "string" || body.title.trim() === "") {
-    return NextResponse.json({ error: "title is required" }, { status: 400 });
-  }
+  const title =
+    typeof body.title === "string" && body.title.trim() !== ""
+      ? body.title.trim()
+      : "Untitled Project";
 
   const [project] = await db
     .insert(projects)
     .values({
       ownerId: user.id,
-      title: body.title.trim(),
+      title,
       briefData:
         body.briefData != null ? (body.briefData as ProjectBriefData) : undefined,
       status: "draft",

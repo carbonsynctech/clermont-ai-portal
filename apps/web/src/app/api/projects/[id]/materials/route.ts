@@ -100,6 +100,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     payload: { materialId: material.id, filename: originalFilename, materialType },
   });
 
+  await db
+    .update(projects)
+    .set({ updatedAt: new Date() })
+    .where(eq(projects.id, projectId));
+
   // Dispatch extraction job (fire and forget)
   void workerClient.extractMaterial(material.id, projectId).catch((err: unknown) => {
     console.error("Failed to dispatch extract-material job:", err);

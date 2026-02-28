@@ -9,6 +9,8 @@ export interface Job<T = unknown> {
   status: JobStatus;
   result?: unknown;
   error?: string;
+  /** Accumulated streaming output from the AI, updated in real-time during generation */
+  partialOutput?: string;
   createdAt: Date;
   startedAt?: Date;
   completedAt?: Date;

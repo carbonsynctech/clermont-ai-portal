@@ -24,12 +24,17 @@ export interface ClaudeThinkingResult extends ClaudeCallResult {
 }
 
 class ClaudeClient {
-  private client: Anthropic;
+  private client: Anthropic | null = null;
 
-  constructor() {
+  private getClient(): Anthropic {
+    if (this.client) {
+      return this.client;
+    }
+
     const apiKey = process.env["ANTHROPIC_API_KEY"];
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
     this.client = new Anthropic({ apiKey });
+    return this.client;
   }
 
   async call(options: ClaudeCallOptions): Promise<ClaudeCallResult> {
@@ -41,7 +46,9 @@ class ClaudeClient {
       onComplete,
     } = options;
 
-    const response = (await this.client.messages.create({
+    const client = this.getClient();
+
+    const response = (await client.messages.create({
       model,
       max_tokens: maxTokens,
       system,
@@ -62,6 +69,44 @@ class ClaudeClient {
     return { content, inputTokens, outputTokens, model };
   }
 
+  async stream(
+    options: ClaudeCallOptions,
+    onChunk: (text: string) => void,
+  ): Promise<ClaudeCallResult> {
+    const {
+      system,
+      messages,
+      maxTokens = DEFAULT_MAX_TOKENS,
+      model = DEFAULT_MODEL,
+      onComplete,
+    } = options;
+
+    const client = this.getClient();
+
+    const stream = client.messages.stream({
+      model,
+      max_tokens: maxTokens,
+      system,
+      messages,
+    });
+
+    for await (const text of stream.textStream) {
+      onChunk(text);
+    }
+
+    const finalMessage = await stream.getFinalMessage();
+    const inputTokens = finalMessage.usage.input_tokens;
+    const outputTokens = finalMessage.usage.output_tokens;
+    const content = finalMessage.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map((block) => block.text)
+      .join("");
+
+    onComplete?.(inputTokens, outputTokens);
+
+    return { content, inputTokens, outputTokens, model };
+  }
+
   async callWithThinking(options: ClaudeCallOptions): Promise<ClaudeThinkingResult> {
     const {
       system,
@@ -71,7 +116,9 @@ class ClaudeClient {
       onComplete,
     } = options;
 
-    const response = (await this.client.messages.create({
+    const client = this.getClient();
+
+    const response = (await client.messages.create({
       model,
       max_tokens: maxTokens,
       system,
@@ -81,7 +128,7 @@ class ClaudeClient {
         type: "enabled",
         budget_tokens: THINKING_BUDGET_TOKENS,
       },
-    } as Parameters<typeof this.client.messages.create>[0])) as Anthropic.Message;
+    } as Parameters<typeof client.messages.create>[0])) as Anthropic.Message;
 
     const inputTokens = response.usage.input_tokens;
     const outputTokens = response.usage.output_tokens;

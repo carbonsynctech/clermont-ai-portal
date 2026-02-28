@@ -1,26 +1,16 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@repo/db";
 import { projects, stages, personas, sourceMaterials, versions, styleGuides } from "@repo/db";
 import { eq, and } from "drizzle-orm";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { PipelineProgress } from "@/components/projects/pipeline-progress";
-import { StepTrigger } from "@/components/projects/step-trigger";
-import { PersonaSelector } from "@/components/personas/persona-selector";
-import { MaterialUpload } from "@/components/sources/material-upload";
-import { StyleGuideUpload } from "@/components/sources/style-guide-upload";
-import { VersionsPanel } from "@/components/versions/versions-panel";
-import { InlineEditor } from "@/components/review/inline-editor";
-import { CritiqueSelector } from "@/components/review/critique-selector";
-import type { ProjectBriefData } from "@repo/db";
+import { PipelineView } from "@/components/projects/pipeline-view";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export default async function ProjectPage({ params }: PageProps) {
+export default async function ProjectPage({ params, searchParams }: PageProps) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -29,6 +19,7 @@ export default async function ProjectPage({ params }: PageProps) {
   if (!user) redirect("/login");
 
   const { id } = await params;
+  const sp = await searchParams;
 
   const project = await db.query.projects.findFirst({
     where: and(eq(projects.id, id), eq(projects.ownerId, user.id)),
@@ -36,7 +27,6 @@ export default async function ProjectPage({ params }: PageProps) {
 
   if (!project) notFound();
 
-  // Fetch all supporting data in parallel
   const [stageRows, personaRows, materialRows, versionRows, styleGuideRows] = await Promise.all([
     db.query.stages.findMany({
       where: eq(stages.projectId, id),
@@ -60,515 +50,26 @@ export default async function ProjectPage({ params }: PageProps) {
     }),
   ]);
 
-  const stageMap = Object.fromEntries(stageRows.map((s) => [s.stepNumber, s]));
-  const brief = project.briefData as ProjectBriefData | null;
-
-  const selectedPersonas = personaRows
-    .filter((p) => p.isSelected)
-    .sort((a, b) => (a.selectionOrder ?? 0) - (b.selectionOrder ?? 0));
-
-  const personaDrafts = versionRows.filter((v) => v.versionType === "persona_draft");
-  const latestStyleGuide = styleGuideRows[0] ?? null;
-
-  // Determine the latest content version for display
-  const contentVersionTypes = ["fact_checked", "styled", "synthesis"] as const;
-  const latestContentVersion = contentVersionTypes
-    .map((t) => versionRows.filter((v) => v.versionType === t).at(-1))
-    .find(Boolean);
-
-  const factCheckVersion = versionRows.filter((v) => v.versionType === "fact_checked").at(-1);
+  const stepParam = typeof sp["step"] === "string" ? Number(sp["step"]) : NaN;
+  const initialStep = Number.isFinite(stepParam) && stepParam >= 1 && stepParam <= 13
+    ? stepParam
+    : project.currentStage;
+  const step10Stage = stageRows.find((stage) => stage.stepNumber === 10);
+  const step10DraftContent =
+    typeof step10Stage?.metadata?.reviewDraftContent === "string"
+      ? step10Stage.metadata.reviewDraftContent
+      : null;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Completion banner */}
-      {project.status === "completed" && (
-        <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-900 px-4 py-3 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-green-800 dark:text-green-300">
-              Investment memo complete
-            </p>
-            <p className="text-xs text-green-700/80 dark:text-green-400/80 mt-0.5">
-              All 13 pipeline steps finished. Download your PDF below or review the audit log.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Link
-              href={`/api/projects/${id}/export`}
-              className="inline-flex items-center gap-1.5 rounded-md bg-green-700 dark:bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-800 dark:hover:bg-green-700 transition-colors"
-            >
-              Download PDF
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">{project.title}</h2>
-          <div className="flex items-center gap-2 mt-1">
-            <Badge variant="outline" className="text-xs capitalize">
-              {project.status}
-            </Badge>
-            <span className="text-muted-foreground text-xs">
-              Created {new Date(project.createdAt).toLocaleDateString()}
-            </span>
-          </div>
-        </div>
-        <Link
-          href={`/projects/${id}/audit`}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
-        >
-          View audit log →
-        </Link>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Pipeline progress */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Pipeline Progress</CardTitle>
-            <CardDescription className="text-xs">
-              Step {project.currentStage} of 13
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PipelineProgress stages={stageRows} currentStep={project.currentStage} />
-          </CardContent>
-        </Card>
-
-        {/* Right panel: brief + all step actions */}
-        <div className="flex flex-col gap-4">
-          {/* Brief summary */}
-          {brief && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Project Brief</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="space-y-1">
-                  {[
-                    ["Company", brief.companyName],
-                    ["Sector", brief.sector],
-                    ["Deal Type", brief.dealType],
-                    brief.dealSizeUsd
-                      ? ["Deal Size", `$${brief.dealSizeUsd.toLocaleString()}`]
-                      : null,
-                    ["Audience", brief.targetAudience],
-                  ]
-                    .filter((r): r is [string, string] => r !== null)
-                    .map(([label, value]) => (
-                      <div key={label} className="flex gap-2">
-                        <dt className="text-muted-foreground shrink-0 w-24 text-xs">{label}:</dt>
-                        <dd className="text-foreground text-xs truncate">{value}</dd>
-                      </div>
-                    ))}
-                </dl>
-                {brief.keyQuestion && (
-                  <div className="mt-3 pt-3 border-t">
-                    <p className="text-xs text-muted-foreground font-medium mb-1">Key Question</p>
-                    <p className="text-xs text-foreground leading-relaxed">{brief.keyQuestion}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 1: Master Prompt */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Step 1: Master Prompt</CardTitle>
-              <CardDescription className="text-xs">
-                {stageMap[1]?.status === "completed"
-                  ? "Master prompt generated."
-                  : "Generate the master prompt to begin the pipeline."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {project.masterPrompt && (
-                <div className="rounded-md bg-muted/50 p-3 text-xs text-foreground leading-relaxed max-h-40 overflow-y-auto whitespace-pre-wrap">
-                  {project.masterPrompt}
-                </div>
-              )}
-              {stageMap[1]?.status !== "completed" && (
-                <StepTrigger
-                  projectId={project.id}
-                  stepNumber={1}
-                  label="Generate Master Prompt"
-                  currentStatus={stageMap[1]?.status ?? "pending"}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Step 2: Expert Personas */}
-          {stageMap[1]?.status === "completed" && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Step 2: Expert Personas</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[2]?.status === "completed"
-                    ? `${selectedPersonas.length} personas confirmed.`
-                    : stageMap[2]?.status === "awaiting_human"
-                    ? "Select 5 expert personas to proceed."
-                    : "AI will suggest expert personas for your memo."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {stageMap[2]?.status === "completed" && selectedPersonas.length > 0 && (
-                  <div className="space-y-1">
-                    {selectedPersonas.map((p, i) => (
-                      <div key={p.id} className="flex items-center gap-2 text-xs">
-                        <Badge variant="outline" className="text-[10px] h-4 px-1 shrink-0">
-                          {i + 1}
-                        </Badge>
-                        <span className="text-foreground">{p.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {stageMap[2]?.status === "awaiting_human" && (
-                  <PersonaSelector projectId={project.id} personas={personaRows} />
-                )}
-                {(stageMap[2]?.status === "pending" || !stageMap[2]) && (
-                  <StepTrigger
-                    projectId={project.id}
-                    stepNumber={2}
-                    label="Suggest Expert Personas"
-                    currentStatus={stageMap[2]?.status ?? "pending"}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 3: Source Materials */}
-          {stageMap[2]?.status === "completed" && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Step 3: Source Materials</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[3]?.status === "completed"
-                    ? `${materialRows.length} file(s) uploaded.`
-                    : "Upload source documents (PDF, TXT). NDA acknowledgment required."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {stageMap[3]?.status === "completed" ? (
-                  <div className="space-y-1">
-                    {materialRows.map((m) => (
-                      <div key={m.id} className="flex items-center justify-between text-xs">
-                        <span className="truncate text-foreground">{m.originalFilename}</span>
-                        <span className="text-muted-foreground shrink-0 ml-2">
-                          {m.chunkCount} chunks
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <MaterialUpload projectId={project.id} materials={materialRows} />
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 4: Persona Drafts */}
-          {stageMap[3]?.status === "completed" && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Step 4: Persona Drafts</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[4]?.status === "completed"
-                    ? `${personaDrafts.length} persona drafts generated.`
-                    : "Run 5 parallel AI drafts — one per selected persona."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {stageMap[4]?.status === "completed" && personaDrafts.length > 0 && (
-                  <div className="space-y-1">
-                    {personaDrafts.map((v) => (
-                      <div key={v.id} className="flex items-center justify-between text-xs">
-                        <span className="truncate text-foreground">{v.internalLabel}</span>
-                        <span className="text-muted-foreground shrink-0 ml-2">
-                          {v.wordCount?.toLocaleString() ?? "–"} words
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {stageMap[4]?.status !== "completed" && (
-                  <StepTrigger
-                    projectId={project.id}
-                    stepNumber={4}
-                    label="Generate Persona Drafts (×5 parallel)"
-                    currentStatus={stageMap[4]?.status ?? "pending"}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 5: Synthesis */}
-          {stageMap[4]?.status === "completed" && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Step 5: Synthesise V1</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[5]?.status === "completed"
-                    ? `Synthesis complete — ${versionRows.find((v) => v.versionType === "synthesis")?.wordCount?.toLocaleString() ?? "?"} words.`
-                    : "Merge all persona drafts into a unified memo using extended thinking."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {stageMap[5]?.status !== "completed" && (
-                  <StepTrigger
-                    projectId={project.id}
-                    stepNumber={5}
-                    label="Synthesise Drafts"
-                    currentStatus={stageMap[5]?.status ?? "pending"}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Steps 6+7: Style Guide Upload + Edit */}
-          {stageMap[5]?.status === "completed" && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Steps 6–7: Style Guide + Edit</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[7]?.status === "completed"
-                    ? `Styled V2 complete — ${versionRows.find((v) => v.versionType === "styled")?.wordCount?.toLocaleString() ?? "?"} words.`
-                    : latestStyleGuide
-                    ? "Style guide uploaded. Run the combined style edit."
-                    : "Upload your organisation's style guide, then run the combined style edit."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {stageMap[7]?.status !== "completed" && (
-                  <>
-                    <StyleGuideUpload
-                      projectId={project.id}
-                      existingStyleGuide={latestStyleGuide}
-                    />
-                    {latestStyleGuide && (
-                      <StepTrigger
-                        projectId={project.id}
-                        stepNumber={7}
-                        label="Apply Style Guide & Edit"
-                        currentStatus={stageMap[7]?.status ?? "pending"}
-                      />
-                    )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 8: Fact-Check */}
-          {stageMap[7]?.status === "completed" && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Step 8: Fact-Check (Gemini)</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[8]?.status === "completed"
-                    ? `Fact-check complete. ${latestContentVersion?.wordCount?.toLocaleString() ?? "?"} words.`
-                    : "Gemini cross-checks all factual claims in the styled draft."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {stageMap[8]?.status !== "completed" && (
-                  <StepTrigger
-                    projectId={project.id}
-                    stepNumber={8}
-                    label="Fact-Check with Gemini"
-                    currentStatus={stageMap[8]?.status ?? "pending"}
-                  />
-                )}
-                {stageMap[8]?.status === "completed" && factCheckVersion && (
-                  <p className="text-xs text-muted-foreground">{factCheckVersion.internalLabel}</p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 9: Final Style Pass */}
-          {stageMap[8]?.status === "completed" && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Step 9: Final Style Pass</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[9]?.status === "completed"
-                    ? `Final Styled V4 — ${versionRows.find((v) => v.versionType === "final_styled")?.wordCount?.toLocaleString() ?? "?"} words.`
-                    : "Apply the condensed style rules for a polished final version."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {stageMap[9]?.status !== "completed" && (
-                  <StepTrigger
-                    projectId={project.id}
-                    stepNumber={9}
-                    label="Apply Final Style Pass"
-                    currentStatus={stageMap[9]?.status ?? "pending"}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 10: Human Review */}
-          {stageMap[9]?.status === "completed" && (
-            <Card className="col-span-full">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Step 10: Human Review</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[10]?.status === "completed"
-                    ? `Human review complete — ${versionRows.find((v) => v.versionType === "human_reviewed")?.wordCount?.toLocaleString() ?? "?"} words approved.`
-                    : "Read and edit the final styled memo inline before approving."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {stageMap[10]?.status === "awaiting_human" && (
-                  <InlineEditor
-                    projectId={project.id}
-                    initialContent={versionRows.find((v) => v.versionType === "final_styled")?.content ?? ""}
-                    versionLabel="Final Styled V4"
-                  />
-                )}
-                {stageMap[10]?.status === "completed" && (
-                  <p className="text-xs text-muted-foreground">
-                    Human Review V5 — approved and locked.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 11: Devil's Advocate */}
-          {stageMap[10]?.status === "completed" && (
-            <Card className="col-span-full">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Step 11: Devil&#39;s Advocate</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[11]?.status === "completed"
-                    ? "Critiques selected — ready to integrate."
-                    : stageMap[11]?.status === "awaiting_human"
-                    ? "Review the critique report and select which points to address."
-                    : "Generate adversarial critiques to stress-test the memo."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {(stageMap[11]?.status === "pending" || !stageMap[11]) && (
-                  <StepTrigger
-                    projectId={project.id}
-                    stepNumber={11}
-                    label="Generate Devil's Advocate Critiques"
-                    currentStatus={stageMap[11]?.status ?? "pending"}
-                  />
-                )}
-                {stageMap[11]?.status === "running" && (
-                  <StepTrigger
-                    projectId={project.id}
-                    stepNumber={11}
-                    label="Generate Devil's Advocate Critiques"
-                    currentStatus="running"
-                  />
-                )}
-                {stageMap[11]?.status === "awaiting_human" && (
-                  <CritiqueSelector
-                    projectId={project.id}
-                    redReport={versionRows.find((v) => v.versionType === "red_report")?.content ?? ""}
-                  />
-                )}
-                {stageMap[11]?.status === "completed" && (
-                  <p className="text-xs text-muted-foreground">
-                    Critiques confirmed — proceeding to integration.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 12: Integrate Critiques */}
-          {stageMap[11]?.status === "completed" && (
-            <Card className="col-span-full">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Step 12: Integrate Critiques</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[12]?.status === "completed"
-                    ? `Final V6 — ${versionRows.find((v) => v.versionType === "final")?.wordCount?.toLocaleString() ?? "?"} words.`
-                    : "Integrate selected critiques using extended thinking to produce the final memo."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {stageMap[12]?.status !== "completed" && (
-                  <StepTrigger
-                    projectId={project.id}
-                    stepNumber={12}
-                    label="Integrate Critiques with Extended Thinking"
-                    currentStatus={stageMap[12]?.status ?? "pending"}
-                  />
-                )}
-                {stageMap[12]?.status === "completed" && (
-                  <p className="text-xs text-muted-foreground">
-                    Final V6 — critique integration complete.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 13: Export */}
-          {stageMap[12]?.status === "completed" && (
-            <Card className="col-span-full">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Step 13: Export</CardTitle>
-                <CardDescription className="text-xs">
-                  {stageMap[13]?.status === "completed"
-                    ? "HTML export generated — download the PDF below."
-                    : "Generate a professional HTML export and download as PDF."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {stageMap[13]?.status !== "completed" && (
-                  <StepTrigger
-                    projectId={project.id}
-                    stepNumber={13}
-                    label="Generate HTML Export"
-                    currentStatus={stageMap[13]?.status ?? "pending"}
-                  />
-                )}
-                {stageMap[13]?.status === "completed" && (
-                  <div className="flex items-center gap-3">
-                    <Link
-                      href={`/api/projects/${project.id}/export`}
-                      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                    >
-                      Download PDF
-                    </Link>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      {/* Versions panel – shown once at least one version exists */}
-      {versionRows.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Output Versions</CardTitle>
-            <CardDescription className="text-xs">
-              All AI-generated versions for this project. Click View to read, Compare to diff.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <VersionsPanel versions={versionRows} />
-          </CardContent>
-        </Card>
-      )}
-    </div>
+    <PipelineView
+      project={project}
+      stages={stageRows}
+      personas={personaRows}
+      materials={materialRows}
+      versions={versionRows}
+      latestStyleGuide={styleGuideRows[0] ?? null}
+      initialStep={initialStep}
+      step10DraftContent={step10DraftContent}
+    />
   );
 }

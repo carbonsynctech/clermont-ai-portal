@@ -5,11 +5,30 @@ Read this fully before making any changes.
 ## Project Purpose
 AI-powered investment memo creation portal automating a 13-step SOP using Claude (primary) and Gemini (fact-checking only). Monorepo: Turborepo + pnpm.
 
+## Reference Documents
+- `docs/proposal.pdf` – original project proposal from the client (Wesley); product scope and business context
+- `docs/sync-notes.pdf` – sync meeting notes; key decisions and constraints that **override** the proposal where they conflict
+- `docs/samples/` – sample PDFs used as test inputs (PromptForge Wisdom Report, Video Game Industry report)
+- `docs/sql/rls-policies.sql` – Supabase RLS policies (run once manually in Supabase SQL Editor)
+- `docs/plans/2026-02-28-phase-1-foundation.md` – Phase 1 implementation plan (historical reference)
+
 ## Apps & Packages
 - `apps/web/` – Next.js 16 App Router frontend → Vercel
 - `apps/worker/` – Hono HTTP server, long-running AI jobs → Railway
 - `packages/db/` – Drizzle ORM schema + Supabase PostgreSQL
 - `packages/core/` – Claude/Gemini wrappers, prompt templates, pipeline types
+
+## Implementation Status
+All 3 phases are complete. The full 13-step pipeline is implemented end-to-end.
+
+### Phase 1 – Foundation (complete)
+Monorepo scaffold, 9-table DB schema, Supabase auth, app shell, brief wizard (Steps 1–2), Step 1 master prompt AI job.
+
+### Phase 2 – Core Pipeline (complete)
+File upload + chunking (Step 3), 5 parallel persona drafts (Step 4), synthesis (Step 5), combined style guide + editor (Steps 6+7), Gemini fact-check (Step 8), version diff views.
+
+### Phase 3 – Polish + Export (complete)
+Final style pass (Step 9), human review UI with inline editor (Step 10), devil's advocate (Step 11), critique integration (Step 12), HTML→PDF export via Puppeteer (Step 13), audit log viewer.
 
 ## Critical Architecture Rules
 
@@ -38,10 +57,14 @@ Routes dispatch (fire-and-forget) and return `jobId`. Client polls `/api/jobs/:j
 ### 5. Audit Every Action
 Every AI call, human decision, and stage transition MUST write an `audit_logs` row. No exceptions.
 
+### 6. Stage Rows Are Pre-created
+All 13 stage rows are created when a project is created. Always use `db.update(stages)` — never insert a new stage row.
+
 ## Database Rules
 - All DB access through `packages/db/src/client.ts`
 - Worker uses service role key (bypasses RLS). Web uses anon key (RLS enforced).
 - Never `UPDATE` a sealed version. Never `DELETE` any version row.
+- 9 tables: `audit_logs`, `personas`, `projects`, `source_chunks`, `source_materials`, `stages`, `style_guides`, `users`, `versions`
 
 ## TypeScript Rules
 - `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`
@@ -54,6 +77,32 @@ Every AI call, human decision, and stage transition MUST write an `audit_logs` r
 - `packages/db` and `packages/core` and `apps/worker` use `moduleResolution: "bundler"` — drizzle-kit requires this
 - `apps/web` uses Next.js default resolution (no `.js` extensions needed)
 - Do NOT add `"type": "module"` to `packages/db/package.json` — drizzle-kit bundles as CJS
+
+## Key File Locations
+
+### Worker job handlers (`apps/worker/src/jobs/handlers/`)
+`generate-master-prompt.ts`, `suggest-personas.ts`, `extract-and-chunk.ts`, `generate-persona-drafts.ts`, `synthesize.ts`, `style-edit.ts`, `fact-check.ts`, `final-style-pass.ts`, `devils-advocate.ts`, `integrate-critiques.ts`, `export-html.ts`
+
+### Worker routes (`apps/worker/src/routes/`)
+`stages.ts`, `jobs.ts`, `export.ts`, `health.ts`
+
+### Web API routes (`apps/web/src/app/api/projects/[id]/`)
+`materials/`, `personas/`, `stages/`, `style-guide/`, `versions/`, `review/`, `critiques/`, `export/`
+
+### Web app pages (`apps/web/src/app/(app)/`)
+`dashboard/`, `projects/` (list + new), `projects/[id]/` (pipeline view), `projects/[id]/audit/` (audit log viewer)
+
+### Web components
+- `components/brief/` – 3-step BriefWizard
+- `components/layout/` – AppSidebar, Header, UserMenu
+- `components/personas/` – PersonaCard, PersonaSelector
+- `components/projects/` – ProjectCard, ProjectList, PipelineProgress, StepTrigger
+- `components/review/` – InlineEditor, CritiqueSelector
+- `components/sources/` – MaterialUpload, StyleGuideUpload
+- `components/versions/` – VersionDiff, VersionsPanel, VersionViewer
+
+### Core prompts (`packages/core/src/prompts/`)
+`brief.ts`, `personas.ts`, `drafts.ts`, `synthesis.ts`, `style.ts`, `critique.ts`, `final-style.ts`, `export.ts`
 
 ## 13-Step SOP Reference
 | Step | Name | Agent | Checkpoint |
@@ -92,3 +141,7 @@ See `.claude/mcp.json`. Active: Supabase (DB inspection + migrations), GitHub (P
 5. Never skip writing audit_logs
 6. Use `pnpm shadcn init` (local devDependency), NOT `pnpm dlx shadcn` — Node 22 compat issue
 7. DATABASE_URL must use session pooler: `aws-1-ap-northeast-1.pooler.supabase.com:5432`
+8. `selectedCritiques` (Step 11) are stored in `audit_logs.payload`; Step 12 fetches via `auditLogs.findFirst` where `action = "critique_selected"`
+9. PDF download: Next.js `/api/projects/[id]/export` proxies to worker to keep WORKER_SECRET server-side
+10. For shadcn components that fail with `pnpm shadcn add`, install from `@radix-ui` directly (e.g. checkbox)
+11. **`DATABASE_URL` must be in `apps/web/.env.local`** — Next.js only reads its own app directory, never the root `.env.local`. Both the web API routes and server components use `@repo/db` (server-side only). If you see "DATABASE_URL is not set", add it to `apps/web/.env.local`.

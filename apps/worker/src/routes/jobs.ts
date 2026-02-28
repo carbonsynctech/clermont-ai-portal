@@ -21,6 +21,7 @@ jobsRoute.get("/:id", (c) => {
     type: job.type,
     status: job.status,
     error: job.error,
+    partialOutput: job.partialOutput,
     createdAt: job.createdAt,
     startedAt: job.startedAt,
     completedAt: job.completedAt,
