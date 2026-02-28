@@ -52,6 +52,24 @@ export const workerClient = {
       body: JSON.stringify({ materialId, projectId }),
     }) as Promise<{ jobId: string; status: string }>,
 
+  runAskAi: async (prompt: string, userId: string, projectId?: string) =>
+    workerFetch("/jobs/ask-ai", {
+      method: "POST",
+      body: JSON.stringify({ prompt, userId, projectId }),
+    }) as Promise<{ jobId: string; status: string }>,
+
+  generatePersona: async (opts: {
+    name: string;
+    linkedinUrl?: string;
+    context?: string;
+    projectId: string;
+    userId: string;
+  }) =>
+    workerFetch("/personas/generate", {
+      method: "POST",
+      body: JSON.stringify(opts),
+    }) as Promise<{ jobId: string; status: string }>,
+
   // PDF export is proxied through /api/projects/[id]/export to keep WORKER_SECRET server-side
   getPdfDownloadPath: (projectId: string) => `/api/projects/${projectId}/export`,
 };
