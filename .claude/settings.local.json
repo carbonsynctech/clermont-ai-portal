@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "*",
+      "Bash(DATABASE_URL=\"postgresql://postgres.tcnjzfloegkupbwltdto:7gMEtTKquGjXdZgC@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres\" pnpm db:migrate:*)"
+    ]
+  }
+}
