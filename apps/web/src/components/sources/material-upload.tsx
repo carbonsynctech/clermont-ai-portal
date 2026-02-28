@@ -108,18 +108,18 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
       {/* Uploaded materials list */}
       {materials.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Uploaded materials</p>
+          <p className="text-sm font-medium text-muted-foreground">Uploaded materials</p>
           {materials.map((m) => (
             <div
               key={m.id}
-              className="flex items-center justify-between rounded-md border px-3 py-2 text-xs"
+              className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
             >
               <div className="flex items-center gap-2 min-w-0">
                 <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
                 <span className="truncate">{m.originalFilename}</span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="outline" className="text-[10px] h-4 px-1 capitalize">
+                <Badge variant="outline" className="text-sm h-5 px-1.5 capitalize">
                   {m.materialType.replace("_", " ")}
                 </Badge>
                 {m.chunkCount > 0 && (
@@ -132,11 +132,11 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
       )}
 
       {/* Upload form */}
-      <div className="space-y-3 rounded-md border p-3">
-        <p className="text-xs font-medium">Add source material</p>
+      <div className="space-y-3">
+        <p className="text-sm font-medium">Add source material</p>
 
         <div className="space-y-2">
-          <label className="text-xs text-muted-foreground">File (PDF, TXT, DOCX)</label>
+          <label className="text-sm text-muted-foreground">File (PDF, TXT, DOCX)</label>
           <FileUpload
             className="w-full"
             value={selectedFiles}
@@ -151,7 +151,7 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
                   <Upload className="size-5 text-muted-foreground" />
                 </div>
                 <p className="font-medium text-sm">Drag & drop file here</p>
-                <p className="text-muted-foreground text-xs">
+                <p className="text-muted-foreground text-sm">
                   Or click to browse (max 1 file)
                 </p>
               </div>
@@ -179,9 +179,9 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Material type</label>
+          <label className="text-sm text-muted-foreground">Material type</label>
           <select
-            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground"
+            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
             value={materialType}
             onChange={(e) => setMaterialType(e.target.value as MaterialType | "")}
           >
@@ -201,14 +201,14 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
             checked={ndaAcknowledged}
             onChange={(e) => setNdaAcknowledged(e.target.checked)}
           />
-          <span className="text-xs text-muted-foreground leading-snug">
+          <span className="text-sm text-muted-foreground leading-snug">
             I confirm this material is covered by appropriate NDA and I am authorised to upload it.
           </span>
         </label>
 
-        {uploadError && <p className="text-xs text-destructive">{uploadError}</p>}
+        {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
         {lastUploaded && (
-          <p className="text-xs text-green-600">Uploaded: {lastUploaded}</p>
+          <p className="text-sm text-green-600">Uploaded: {lastUploaded}</p>
         )}
 
         <Button

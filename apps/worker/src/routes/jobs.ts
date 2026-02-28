@@ -33,6 +33,12 @@ const extractMaterialSchema = z.object({
   projectId: z.string().uuid(),
 });
 
+const askAiSchema = z.object({
+  prompt: z.string().trim().min(1).max(20000),
+  userId: z.string().uuid(),
+  projectId: z.string().uuid().optional(),
+});
+
 jobsRoute.post("/extract-material", async (c) => {
   const body = await c.req.json();
   const parsed = extractMaterialSchema.safeParse(body);
@@ -43,6 +49,23 @@ jobsRoute.post("/extract-material", async (c) => {
 
   const { materialId } = parsed.data;
   const job = enqueueJob("extract_material", { materialId });
+
+  void runJob(job.id).catch((err: unknown) => {
+    console.error(`Background job ${job.id} error:`, err);
+  });
+
+  return c.json({ jobId: job.id, status: job.status });
+});
+
+jobsRoute.post("/ask-ai", async (c) => {
+  const body = await c.req.json();
+  const parsed = askAiSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json({ error: "Invalid request", details: parsed.error.flatten() }, 400);
+  }
+
+  const job = enqueueJob("ask_ai", parsed.data);
 
   void runJob(job.id).catch((err: unknown) => {
     console.error(`Background job ${job.id} error:`, err);

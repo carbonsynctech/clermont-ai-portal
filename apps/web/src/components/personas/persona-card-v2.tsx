@@ -30,20 +30,20 @@ export function PersonaCardV2({
     >
       <div className="space-y-0.5">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-semibold leading-snug">{persona.name}</p>
+          <p className="text-base font-semibold leading-snug">{persona.name}</p>
           {isSelected && (
-            <Badge className="shrink-0 h-5 px-1.5 text-[10px] gap-0.5">
+            <Badge className="shrink-0 h-5 px-1.5 text-sm gap-0.5">
               <Check className="h-2.5 w-2.5" />
               Selected
             </Badge>
           )}
         </div>
         {persona.tags.length > 0 && (
-          <p className="text-xs text-muted-foreground">{persona.tags.join(" · ")}</p>
+          <p className="text-sm text-muted-foreground">{persona.tags.join(" · ")}</p>
         )}
       </div>
 
-      <p className="text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">
+      <p className="text-sm text-muted-foreground/70 line-clamp-2 leading-relaxed">
         {persona.description}
       </p>
 
@@ -51,7 +51,7 @@ export function PersonaCardV2({
         <Button
           size="sm"
           variant={isSelected ? "default" : "outline"}
-          className="h-7 text-xs flex-1"
+          className="h-8 text-sm flex-1"
           disabled={disableSelect && !isSelected}
           onClick={onSelect}
         >
@@ -60,7 +60,7 @@ export function PersonaCardV2({
         <Button
           size="sm"
           variant="ghost"
-          className="h-7 text-xs flex-1"
+          className="h-8 text-sm flex-1"
           onClick={onView}
         >
           View

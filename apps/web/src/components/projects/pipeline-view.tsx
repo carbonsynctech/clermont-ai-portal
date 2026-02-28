@@ -161,6 +161,7 @@ export function PipelineView({
                 currentStatus={status}
                 disabled={!canRunStep4}
                 disabledReason="Complete Step 3 to run this step."
+                autoRun={canRunStep4}
               />
             )}
           </div>
@@ -184,31 +185,62 @@ export function PipelineView({
                 currentStatus={status}
                 disabled={!canRunStep5}
                 disabledReason="Complete Step 4 to run this step."
+                autoRun={canRunStep5}
               />
             )}
           </div>
         );
 
       case 6:
+        return (
+          <div className="rounded-xl border bg-card p-6">
+            {status === "completed" && latestStyleGuide ? (
+              <div className="space-y-2">
+                <h3 className="font-medium text-base mb-3">Uploaded Style Guide</h3>
+                <div className="flex items-center justify-between text-base">
+                  <span className="truncate text-foreground">{latestStyleGuide.originalFilename}</span>
+                  <span className="text-muted-foreground shrink-0 ml-2">
+                    {latestStyleGuide.isProcessed ? "Processed" : "Ready"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <StyleGuideUpload projectId={project.id} existingStyleGuide={latestStyleGuide} />
+            )}
+          </div>
+        );
+
       case 7:
-        const canRunStep67 = stageMap[5]?.status === "completed";
+        const canRunStep7 = stageMap[5]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
-            {stageMap[7]?.status === "completed" ? (
+            {status === "completed" ? (
               <p className="text-base text-muted-foreground">
                 Styled V2 —{" "}
                 {versions.find((v) => v.versionType === "styled")?.wordCount?.toLocaleString() ?? "?"} words.
               </p>
             ) : (
               <>
-                <StyleGuideUpload projectId={project.id} existingStyleGuide={latestStyleGuide} />
+                {latestStyleGuide ? (
+                  <div className="space-y-2">
+                    <h3 className="font-medium text-base mb-1">Style Guide</h3>
+                    <div className="flex items-center justify-between text-base">
+                      <span className="truncate text-foreground">{latestStyleGuide.originalFilename}</span>
+                      <span className="text-muted-foreground shrink-0 ml-2">Ready</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-base text-muted-foreground">
+                    Upload a style guide in Step 6 before running this step.
+                  </p>
+                )}
                 {latestStyleGuide && (
                   <StepTrigger
                     projectId={project.id}
                     stepNumber={7}
                     label="Apply Style Guide & Edit"
-                    currentStatus={stageMap[7]?.status ?? "pending"}
-                    disabled={!canRunStep67}
+                    currentStatus={status}
+                    disabled={!canRunStep7}
                     disabledReason="Complete Step 5 to run this step."
                   />
                 )}
@@ -232,6 +264,7 @@ export function PipelineView({
                 currentStatus={status}
                 disabled={!canRunStep8}
                 disabledReason="Complete Step 7 to run this step."
+                autoRun={canRunStep8}
               />
             )}
           </div>
@@ -255,6 +288,7 @@ export function PipelineView({
                 currentStatus={status}
                 disabled={!canRunStep9}
                 disabledReason="Complete Step 8 to run this step."
+                autoRun={canRunStep9}
               />
             )}
           </div>
@@ -291,6 +325,7 @@ export function PipelineView({
                 currentStatus={status}
                 disabled={!canRunStep11}
                 disabledReason="Complete Step 10 to run this step."
+                autoRun={canRunStep11}
               />
             )}
             {status === "awaiting_human" && (
@@ -319,6 +354,7 @@ export function PipelineView({
                 currentStatus={status}
                 disabled={!canRunStep12}
                 disabledReason="Complete Step 11 to run this step."
+                autoRun={canRunStep12}
               />
             )}
             {status === "completed" && (
@@ -405,7 +441,7 @@ export function PipelineView({
             <Alert className="mb-4 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-50">
               <AlertTriangleIcon />
               <AlertTitle>{prerequisiteMessage}</AlertTitle>
-              <AlertDescription>
+              <AlertDescription className="text-muted-foreground">
                 Preview mode is enabled for navigation/testing.
               </AlertDescription>
             </Alert>
@@ -415,7 +451,7 @@ export function PipelineView({
             {renderStepContent()}
             {isLockedStep && (
               <div
-                className="absolute inset-0 rounded-xl bg-gray-500/12"
+                className="absolute inset-0 rounded-xl bg-white/40"
                 aria-hidden="true"
               />
             )}

@@ -2,17 +2,29 @@
 
 import * as React from "react";
 import {
-  AudioWaveform,
-  Calendar,
-  Command,
   Home,
   MessageCircleQuestion,
   Search,
-  Settings2,
   Sparkles,
-  Blocks,
   Trash2,
 } from "lucide-react";
+
+function FleurDeLis(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" {...props}>
+      {/* top petal */}
+      <path d="M12 1c-.6 1.8-2.5 4-2.5 6.5 0 1.6 1 2.7 2.5 3 1.5-.3 2.5-1.4 2.5-3C14.5 5 12.6 2.8 12 1z" />
+      {/* left petal */}
+      <path d="M9.5 10.5C7 10.5 4.5 12 4.5 14.5c0 1.8 1.3 3 3 3 1.2 0 2.2-.6 3-1.3-.3-.8-.5-1.7-.5-2.7 0-.7.2-2 1-3.5-.5-.3-1-.5-1.5-.5z" />
+      {/* right petal */}
+      <path d="M14.5 10.5c-.5 0-1 .2-1.5.5.8 1.5 1 2.8 1 3.5 0 1-.2 1.9-.5 2.7.8.7 1.8 1.3 3 1.3 1.7 0 3-1.2 3-3 0-2.5-2.5-4-5-4z" />
+      {/* collar band */}
+      <path d="M9.5 18.5h5l-.5 1h-4z" />
+      {/* base drop */}
+      <path d="M10 19.5l-.5 3h5l-.5-3z" />
+    </svg>
+  );
+}
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -21,7 +33,10 @@ import { NewProjectButton } from "@/components/projects/new-project-button";
 import { NavSecondary } from "@/components/nav-secondary";
 import { NavUser } from "@/components/nav-user";
 import { NavWorkspaces } from "@/components/nav-workspaces";
+import { AskAiDialog } from "@/components/layout/ask-ai-dialog";
+import { ProjectSearchCommand } from "@/components/layout/project-search-command";
 import { TeamSwitcher } from "@/components/team-switcher";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import {
   PROJECT_FAVORITES_UPDATED_EVENT,
   readFavoriteProjectIds,
@@ -41,14 +56,9 @@ import {
 const data = {
   teams: [
     {
-      name: "Content Portal",
-      logo: Command,
+      name: "AI Content Portal",
+      logo: FleurDeLis,
       plan: "Enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: AudioWaveform,
-      plan: "Startup",
     },
   ],
   navMain: [
@@ -70,28 +80,13 @@ const data = {
   ],
   navSecondary: [
     {
-      title: "Calendar",
-      url: "#",
-      icon: Calendar,
-    },
-    {
-      title: "Settings",
-      url: "/settings",
-      icon: Settings2,
-    },
-    {
-      title: "Templates",
-      url: "#",
-      icon: Blocks,
-    },
-    {
       title: "Trash",
-      url: "#",
+      url: "/trash",
       icon: Trash2,
     },
     {
       title: "Help",
-      url: "#",
+      url: "/help",
       icon: MessageCircleQuestion,
     },
   ],
@@ -114,6 +109,27 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
   const pathname = usePathname();
   const [projects, setProjects] = React.useState<SidebarProject[]>([]);
   const [favoriteProjectIds, setFavoriteProjectIds] = React.useState<string[]>([]);
+  const [searchCommandOpen, setSearchCommandOpen] = React.useState(false);
+  const [askAiDialogOpen, setAskAiDialogOpen] = React.useState(false);
+  const [isMacPlatform, setIsMacPlatform] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsMacPlatform(/Mac|iPhone|iPad|iPod/i.test(navigator.platform));
+  }, []);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k";
+      if (!isShortcut) return;
+      event.preventDefault();
+      setSearchCommandOpen(true);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   React.useEffect(() => {
     setFavoriteProjectIds(readFavoriteProjectIds());
@@ -196,17 +212,58 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
         <TeamSwitcher teams={data.teams} />
         <SidebarMenu>
           <NewProjectButton />
-          {data.navMain.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild>
-                <Link href={item.url}>
+          {data.navMain.map((item) =>
+            item.title === "Search" ? (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton
+                  type="button"
+                  onClick={() => setSearchCommandOpen(true)}
+                  className="justify-between [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </div>
+                  <KbdGroup className="group-data-[collapsible=icon]:hidden">
+                    {isMacPlatform ? (
+                      <>
+                        <Kbd>⌘</Kbd>
+                        <Kbd>K</Kbd>
+                      </>
+                    ) : (
+                      <>
+                        <Kbd>Ctrl</Kbd>
+                        <Kbd>K</Kbd>
+                      </>
+                    )}
+                  </KbdGroup>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ) : item.title === "Ask AI" ? (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton type="button" onClick={() => setAskAiDialogOpen(true)}>
                   <item.icon />
                   <span>{item.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ) : (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton asChild>
+                  <Link href={item.url}>
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          )}
         </SidebarMenu>
+        <ProjectSearchCommand
+          open={searchCommandOpen}
+          onOpenChange={setSearchCommandOpen}
+          projects={projects}
+        />
+        <AskAiDialog open={askAiDialogOpen} onOpenChange={setAskAiDialogOpen} />
       </SidebarHeader>
       <SidebarContent>
         <NavFavorites

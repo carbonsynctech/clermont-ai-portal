@@ -4,9 +4,9 @@ import { db } from "@repo/db";
 import { projects, stages } from "@repo/db";
 import type { ProjectBriefData } from "@repo/db";
 import { SOP_STEP_NAMES } from "@repo/core";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -16,8 +16,19 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const statusParam = req.nextUrl.searchParams.get("status");
+  const status =
+    statusParam === "trashed" || statusParam === "all" ? statusParam : "active";
+
+  const whereClause =
+    status === "trashed"
+      ? and(eq(projects.ownerId, user.id), isNotNull(projects.deletedAt))
+      : status === "all"
+      ? eq(projects.ownerId, user.id)
+      : and(eq(projects.ownerId, user.id), isNull(projects.deletedAt));
+
   const rows = await db.query.projects.findMany({
-    where: eq(projects.ownerId, user.id),
+    where: whereClause,
     orderBy: (p, { desc }) => [desc(p.createdAt)],
   });
 

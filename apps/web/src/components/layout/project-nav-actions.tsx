@@ -149,7 +149,7 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
       </div>
       <Button
         size="sm"
-        className="h-7 bg-blue-600 hover:bg-blue-700 text-white gap-1.5 ml-2"
+        className="h-7 bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 ml-2"
         onClick={handleSaveClick}
         disabled={isSaving}
       >

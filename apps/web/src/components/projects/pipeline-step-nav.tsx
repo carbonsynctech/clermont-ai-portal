@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle, Clock, Loader2, XCircle } from "lucide-react";
+import { Check, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Stage } from "@repo/db";
 
@@ -41,22 +41,15 @@ function StepIcon({
 }) {
   if (status === "completed") {
     return (
-      <div className="size-6 rounded-full flex items-center justify-center shrink-0 border-2 border-green-500/30 bg-green-500/10">
-        <CheckCircle className="size-3.5 text-green-500" />
+      <div className="size-6 rounded-full flex items-center justify-center shrink-0 border-2 border-primary/35 bg-primary/10">
+        <Check className="size-3.5 text-primary" />
       </div>
     );
   }
-  if (status === "running") {
+  if (status === "running" || status === "awaiting_human" || isActive) {
     return (
-      <div className="size-6 rounded-full flex items-center justify-center shrink-0 border-2 border-primary/30 bg-primary/10">
-        <Loader2 className="size-3.5 text-primary animate-spin" />
-      </div>
-    );
-  }
-  if (status === "awaiting_human") {
-    return (
-      <div className="size-6 rounded-full flex items-center justify-center shrink-0 border-2 border-amber-500/30 bg-amber-500/10">
-        <Clock className="size-3.5 text-amber-500" />
+      <div className="size-6 rounded-full flex items-center justify-center shrink-0 border-2 border-primary bg-primary text-xs font-semibold text-primary-foreground">
+        {step}
       </div>
     );
   }

@@ -62,7 +62,7 @@ export function PersonaLibraryPanel({
     <div className="rounded-xl border bg-card p-6 space-y-4">
       <div className="flex items-center gap-2">
         <Library className="size-4 text-muted-foreground" />
-        <h3 className="font-medium text-sm">Persona Library</h3>
+        <h3 className="font-medium text-base">Persona Library</h3>
       </div>
 
       <div className="relative">
@@ -81,7 +81,7 @@ export function PersonaLibraryPanel({
             <TabsTrigger
               key={tag}
               value={tag}
-              className="rounded-lg border text-xs h-7 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary"
+              className="rounded-lg border text-sm h-8 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary"
             >
               {tag}
             </TabsTrigger>

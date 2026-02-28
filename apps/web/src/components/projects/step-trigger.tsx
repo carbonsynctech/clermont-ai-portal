@@ -1,65 +1,71 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Loader2, XCircle } from "lucide-react";
 import { useJobStatus } from "@/hooks/use-job-status";
 
-interface StepTriggerProps {
-  projectId: string;
-  stepNumber: number;
-  label: string;
-  currentStatus: string;
-  disabled?: boolean;
-  disabledReason?: string;
+// ─── Shared state hook ────────────────────────────────────────────────────────
+
+export interface StepTriggerState {
+  isRunning: boolean;
+  isDispatching: boolean;
+  phase: "dispatching" | "waiting" | "streaming" | "done" | null;
+  showError: string | null;
+  elapsedSeconds: number;
+  partialOutput: string;
+  outputRef: React.RefObject<HTMLPreElement | null>;
+  handleRun: () => Promise<void>;
+  handleReset: () => void;
 }
 
-function formatElapsed(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
-
-export function StepTrigger({
-  projectId,
-  stepNumber,
-  label,
-  currentStatus,
-  disabled = false,
-  disabledReason,
-}: StepTriggerProps) {
+export function useStepTrigger(
+  projectId: string,
+  stepNumber: number,
+  currentStatus: string,
+  autoRun = false,
+): StepTriggerState {
   const router = useRouter();
   const [jobId, setJobId] = useState<string | null>(null);
   const [isDispatching, setIsDispatching] = useState(false);
   const [hasDispatched, setHasDispatched] = useState(false);
+  const [hasAbandoned, setHasAbandoned] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const { status, isPolling, error: pollError, elapsedSeconds, partialOutput } =
     useJobStatus(jobId);
-  const outputRef = useRef<HTMLPreElement>(null);
+  const outputRef = useRef<HTMLPreElement | null>(null);
+  const autoRunFiredRef = useRef(false);
 
   const isFailed = status === "failed";
   const isDone = status === "completed" || isFailed;
-  const isRunning =
-    currentStatus === "running" ||
-    isDispatching ||
-    isPolling ||
-    (hasDispatched && !isDone);
+  const serverRunning = currentStatus === "running" && !hasAbandoned;
+  const isRunning = serverRunning || isDispatching || isPolling || (hasDispatched && !isDone);
   const showError = dispatchError ?? (isFailed ? (pollError ?? "Job failed. Please try again.") : null);
 
-  // Refresh server component once the job succeeds
+  const phase: StepTriggerState["phase"] = (() => {
+    if (isDispatching) return "dispatching";
+    if (hasDispatched || isPolling) {
+      if (!isPolling && !partialOutput) return "dispatching";
+      if (isPolling && !partialOutput) return "waiting";
+      if (isPolling && partialOutput) return "streaming";
+      if (!isPolling && partialOutput) return "done";
+    }
+    return null;
+  })();
+
   useEffect(() => {
     if (status === "completed") {
       setHasDispatched(false);
+      setHasAbandoned(false);
       router.refresh();
     }
   }, [status, router]);
 
-  // Release the "stuck running" state when the job fails
   useEffect(() => {
     if (isFailed) setHasDispatched(false);
   }, [isFailed]);
 
-  // Auto-scroll the output window as tokens stream in
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
@@ -69,12 +75,14 @@ export function StepTrigger({
   function handleReset() {
     setJobId(null);
     setHasDispatched(false);
+    setHasAbandoned(true);
     setDispatchError(null);
   }
 
-  async function handleRun() {
+  const handleRun = useCallback(async () => {
     setIsDispatching(true);
     setHasDispatched(true);
+    setHasAbandoned(false);
     setDispatchError(null);
 
     try {
@@ -97,85 +105,153 @@ export function StepTrigger({
       const data = (await res.json()) as { jobId?: string };
       if (data.jobId) setJobId(data.jobId);
     } catch {
-      setDispatchError("Network error — is the worker running?");
+      setDispatchError("Network error — is the worker running on port 3001?");
       setHasDispatched(false);
     } finally {
       setIsDispatching(false);
     }
-  }
+  }, [projectId, stepNumber]);
+
+  useEffect(() => {
+    if (!autoRun || autoRunFiredRef.current) return;
+    if (currentStatus === "completed" || currentStatus === "running") return;
+    autoRunFiredRef.current = true;
+    void handleRun();
+  }, [autoRun, currentStatus, handleRun]);
+
+  return { isRunning, isDispatching, phase, showError, elapsedSeconds, partialOutput, outputRef, handleRun, handleReset };
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+// ─── Button-only (use inside flex rows) ──────────────────────────────────────
+
+interface StepTriggerButtonProps {
+  trigger: StepTriggerState;
+  label: string;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
+export function StepTriggerButton({ trigger, label, disabled = false, disabledReason }: StepTriggerButtonProps) {
+  const { isRunning, isDispatching, handleRun, handleReset } = trigger;
 
   return (
-    <div className="space-y-3">
-      {/* Action row */}
-      <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2">
+      <Button
+        size="sm"
+        onClick={() => void handleRun()}
+        disabled={disabled || isRunning}
+      >
+        {isRunning ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Running…
+          </>
+        ) : (
+          label
+        )}
+      </Button>
+
+      {isRunning && !isDispatching && (
         <Button
           size="sm"
-          onClick={() => void handleRun()}
-          disabled={disabled || isRunning}
-          className="flex-1"
+          variant="outline"
+          onClick={handleReset}
+          className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive"
         >
-          {isRunning ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Running…{" "}
-              {isPolling && elapsedSeconds > 0 && (
-                <span className="ml-1 opacity-70">{formatElapsed(elapsedSeconds)}</span>
-              )}
-            </>
-          ) : (
-            label
-          )}
+          <XCircle className="h-4 w-4" />
+          Abandon run
         </Button>
+      )}
 
-        {/* Abandon button — only shown while a job is in flight */}
-        {isRunning && !isDispatching && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleReset}
-            className="gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive"
-          >
-            <XCircle className="h-4 w-4" />
-            Abandon run
-          </Button>
-        )}
-      </div>
+      {disabled && disabledReason && (
+        <p className="text-xs text-muted-foreground">{disabledReason}</p>
+      )}
+    </div>
+  );
+}
 
-      {/* Error */}
+// ─── Panel-only (use full-width below the button row) ────────────────────────
+
+export function StepTriggerOutput({ trigger }: { trigger: StepTriggerState }) {
+  const { phase, showError, elapsedSeconds, partialOutput, outputRef } = trigger;
+
+  if (!phase && !showError) return null;
+
+  return (
+    <div className="space-y-2">
       {showError && (
         <p className="text-xs text-destructive bg-destructive/10 rounded px-2 py-1.5 leading-relaxed">
           {showError}
         </p>
       )}
 
-      {/* Disabled hint */}
-      {disabled && disabledReason && (
-        <p className="text-xs text-muted-foreground">{disabledReason}</p>
-      )}
-
-      {/* Live streaming output */}
-      {(isPolling || partialOutput) && (
-        <div className="rounded-lg border bg-muted/40 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/60 text-xs text-muted-foreground">
-            {isPolling && <Loader2 className="h-3 w-3 animate-spin" />}
+      {phase && (
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b bg-muted/40 text-xs text-muted-foreground">
+            {(phase === "dispatching" || phase === "waiting" || phase === "streaming") && (
+              <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+            )}
             <span>
-              {isPolling ? "AI is generating…" : "Generation complete"}
+              {phase === "dispatching" && "Sending job to worker…"}
+              {phase === "waiting" && "AI is starting up…"}
+              {phase === "streaming" && "AI is generating…"}
+              {phase === "done" && "Generation complete"}
             </span>
-            {isPolling && elapsedSeconds > 0 && (
-              <span className="ml-auto">{formatElapsed(elapsedSeconds)}</span>
+            {(phase === "streaming" || phase === "waiting") && elapsedSeconds > 0 && (
+              <span className="ml-auto tabular-nums">{formatElapsed(elapsedSeconds)}</span>
             )}
           </div>
           <pre
             ref={outputRef}
-            className="p-3 text-xs font-mono leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto text-foreground/80"
+            className="p-4 text-xs font-mono leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto text-foreground/80"
           >
-            {partialOutput || "Waiting for first token…"}
-            {isPolling && (
+            {partialOutput || (
+              <span className="text-muted-foreground italic">
+                {phase === "dispatching" ? "Connecting…" : "Waiting for first token…"}
+              </span>
+            )}
+            {(phase === "streaming" || phase === "waiting") && (
               <span className="inline-block w-1.5 h-3.5 bg-primary/70 ml-0.5 animate-pulse align-text-bottom" />
             )}
           </pre>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Combined (default — for steps that want everything self-contained) ───────
+
+interface StepTriggerProps {
+  projectId: string;
+  stepNumber: number;
+  label: string;
+  currentStatus: string;
+  disabled?: boolean;
+  disabledReason?: string;
+  autoRun?: boolean;
+}
+
+export function StepTrigger({
+  projectId,
+  stepNumber,
+  label,
+  currentStatus,
+  disabled = false,
+  disabledReason,
+  autoRun = false,
+}: StepTriggerProps) {
+  const trigger = useStepTrigger(projectId, stepNumber, currentStatus, autoRun);
+
+  return (
+    <div className="space-y-3">
+      <StepTriggerButton trigger={trigger} label={label} disabled={disabled} disabledReason={disabledReason} />
+      <StepTriggerOutput trigger={trigger} />
     </div>
   );
 }

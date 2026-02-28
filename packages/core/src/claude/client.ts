@@ -83,24 +83,40 @@ class ClaudeClient {
 
     const client = this.getClient();
 
-    const stream = client.messages.stream({
+    // Use raw stream: true — SDK 0.36.x has Stream<Item> without high-level helpers
+    type RawEvent = {
+      type: string;
+      delta?: { type: string; text?: string };
+      message?: { usage?: { input_tokens: number } };
+      usage?: { output_tokens: number };
+    };
+
+    const rawStream = (await client.messages.create({
       model,
       max_tokens: maxTokens,
       system,
       messages,
-    });
+      stream: true,
+    })) as AsyncIterable<RawEvent>;
 
-    for await (const text of stream.textStream) {
-      onChunk(text);
+    let content = "";
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    for await (const event of rawStream) {
+      if (
+        event.type === "content_block_delta" &&
+        event.delta?.type === "text_delta" &&
+        event.delta.text
+      ) {
+        onChunk(event.delta.text);
+        content += event.delta.text;
+      } else if (event.type === "message_start" && event.message?.usage) {
+        inputTokens = event.message.usage.input_tokens;
+      } else if (event.type === "message_delta" && event.usage) {
+        outputTokens = event.usage.output_tokens;
+      }
     }
-
-    const finalMessage = await stream.getFinalMessage();
-    const inputTokens = finalMessage.usage.input_tokens;
-    const outputTokens = finalMessage.usage.output_tokens;
-    const content = finalMessage.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("");
 
     onComplete?.(inputTokens, outputTokens);
 

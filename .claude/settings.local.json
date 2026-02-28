@@ -27,7 +27,16 @@
       "Bash(cmd.exe:*)",
       "Bash(powershell.exe:*)",
       "Bash(find:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(python:*)",
+      "Bash(source:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres.tcnjzfloegkupbwltdto:7gMEtTKquGjXdZgC@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres\" pnpm drizzle-kit:*)",
+      "Bash(git commit:*)",
+      "Bash(git add:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git push:*)"
     ]
   },
   "defaultMode": "bypassPermissions"

@@ -11,6 +11,9 @@ import {
 export const auditActionEnum = pgEnum("audit_action", [
   // Human actions
   "project_created",
+  "project_trashed",
+  "project_restored",
+  "project_purged",
   "brief_submitted",
   "persona_selected",
   "source_uploaded",

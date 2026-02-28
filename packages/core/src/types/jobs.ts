@@ -29,3 +29,9 @@ export interface GenerateMasterPromptPayload extends StageRunPayload {
 export interface SuggestPersonasPayload extends StageRunPayload {
   stepNumber: 2;
 }
+
+export interface AskAiPayload {
+  prompt: string;
+  userId: string;
+  projectId?: string;
+}

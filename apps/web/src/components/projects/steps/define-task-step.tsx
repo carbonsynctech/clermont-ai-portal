@@ -4,8 +4,10 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2, FileText, Target, Users, MessageSquare,
-  Sparkles, Building2, Layers,
+  Sparkles, Building2, Layers, Pencil, Eye, ArrowRight,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,7 +19,11 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@/components/ui/field";
-import { StepTrigger } from "@/components/projects/step-trigger";
+import {
+  useStepTrigger,
+  StepTriggerButton,
+  StepTriggerOutput,
+} from "@/components/projects/step-trigger";
 import { cn } from "@/lib/utils";
 import {
   emitProjectSaved,
@@ -267,7 +273,18 @@ export function DefineTaskStep({
   masterPrompt,
 }: DefineTaskStepProps) {
   const router = useRouter();
+  const step1Trigger = useStepTrigger(projectId, 1, stage1Status);
   const [isSaving, setIsSaving] = useState(false);
+  // Master prompt editing
+  const [promptText, setPromptText] = useState(masterPrompt ?? "");
+  const [isEditingPrompt, setIsEditingPrompt] = useState(false);
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [promptSaveError, setPromptSaveError] = useState<string | null>(null);
+
+  // Sync if the server refreshes with a new master prompt (e.g. after generation)
+  useEffect(() => {
+    if (masterPrompt) setPromptText(masterPrompt);
+  }, [masterPrompt]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(briefData !== null);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -566,29 +583,7 @@ export function DefineTaskStep({
     return nodes;
   }
 
-  // ─── Completed state ────────────────────────────────────────────────────────
-  if (stage1Status === "completed") {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-2 text-green-600">
-          <CheckCircle2 className="size-5" />
-          <span className="font-medium">Brief saved & master prompt generated.</span>
-        </div>
-        {masterPrompt && (
-          <SectionCard icon={Sparkles} title="Master Prompt">
-            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
-              {masterPrompt}
-            </p>
-          </SectionCard>
-        )}
-        <Button variant="outline" size="sm" onClick={() => setSaved(false)}>
-          Edit Brief
-        </Button>
-      </div>
-    );
-  }
-
-  // ─── Edit form ──────────────────────────────────────────────────────────────
+  // ─── Form ───────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
 
@@ -696,14 +691,113 @@ export function DefineTaskStep({
           {isSaving ? "Saving…" : saved ? "Saved ✓" : "Save Brief"}
         </Button>
         {saved && stage1Status !== "completed" && (
-          <StepTrigger
-            projectId={projectId}
-            stepNumber={1}
+          <StepTriggerButton
+            trigger={step1Trigger}
             label="Generate Master Prompt"
-            currentStatus={stage1Status}
           />
         )}
+        {stage1Status === "completed" && (
+          <>
+            <div className="flex items-center gap-2 text-green-600">
+              <CheckCircle2 className="size-4" />
+              <span className="text-sm font-medium">Brief saved & master prompt generated.</span>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isSavingPrompt}
+                onClick={async () => {
+                  setIsSavingPrompt(true);
+                  setPromptSaveError(null);
+                  try {
+                    const res = await fetch(`/api/projects/${projectId}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ masterPrompt: promptText }),
+                    });
+                    if (!res.ok) throw new Error("Failed to save");
+                    setIsEditingPrompt(false);
+                  } catch {
+                    setPromptSaveError("Failed to save prompt. Please try again.");
+                  } finally {
+                    setIsSavingPrompt(false);
+                  }
+                }}
+              >
+                {isSavingPrompt ? "Saving…" : "Save Prompt"}
+              </Button>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => router.push(`/projects/${projectId}?step=2`)}
+              >
+                Continue to Step 2
+                <ArrowRight className="size-3.5" />
+              </Button>
+            </div>
+          </>
+        )}
       </div>
+
+      {saved && stage1Status !== "completed" && (
+        <StepTriggerOutput trigger={step1Trigger} />
+      )}
+
+      {stage1Status === "completed" && (
+        <div className="rounded-xl border bg-card p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="size-4 text-muted-foreground" />
+              <h3 className="font-medium text-sm text-foreground">Master Prompt</h3>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-muted-foreground"
+              onClick={() => setIsEditingPrompt((v) => !v)}
+            >
+              {isEditingPrompt
+                ? <><Eye className="size-3.5" /> Preview</>
+                : <><Pencil className="size-3.5" /> Edit</>}
+            </Button>
+          </div>
+
+          {isEditingPrompt ? (
+            <Textarea
+              value={promptText}
+              onChange={(e) => setPromptText(e.target.value)}
+              className="font-mono text-sm min-h-[300px] resize-y"
+            />
+          ) : (
+            <div className="prose prose-sm dark:prose-invert max-w-none text-foreground
+              [&_h1]:scroll-m-20 [&_h1]:text-2xl [&_h1]:font-extrabold [&_h1]:tracking-tight [&_h1]:lg:text-3xl
+              [&_h2]:scroll-m-20 [&_h2]:border-b [&_h2]:pb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:first:mt-0
+              [&_h3]:scroll-m-20 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:tracking-tight
+              [&_h4]:scroll-m-20 [&_h4]:text-base [&_h4]:font-semibold [&_h4]:tracking-tight
+              [&_p]:leading-7 [&_p:not(:first-child)]:mt-4
+              [&_ul]:my-4 [&_ul]:ml-6 [&_ul]:list-disc [&_ul>li]:mt-1
+              [&_ol]:my-4 [&_ol]:ml-6 [&_ol]:list-decimal [&_ol>li]:mt-1
+              [&_blockquote]:mt-4 [&_blockquote]:border-l-2 [&_blockquote]:pl-6 [&_blockquote]:italic
+              [&_code]:relative [&_code]:rounded [&_code]:bg-muted [&_code]:px-[0.3rem] [&_code]:py-[0.2rem] [&_code]:font-mono [&_code]:text-xs
+              [&_pre]:mt-4 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:bg-muted [&_pre]:p-4
+              [&_pre_code]:bg-transparent [&_pre_code]:p-0
+              [&_strong]:font-semibold
+              [&_table]:w-full [&_table]:my-4 [&_tr]:m-0 [&_tr]:border-t [&_tr]:p-0 [&_tr:nth-child(even)]:bg-muted
+              [&_th]:border [&_th]:px-4 [&_th]:py-2 [&_th]:text-left [&_th]:font-bold
+              [&_td]:border [&_td]:px-4 [&_td]:py-2 [&_td]:text-left
+              [&_hr]:my-4 [&_hr]:border [&_hr]:border-muted-foreground/20">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {promptText || "*No content yet.*"}
+              </ReactMarkdown>
+            </div>
+          )}
+
+          {promptSaveError && (
+            <p className="text-xs text-destructive">{promptSaveError}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,14 +1,10 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
 import { ProjectList } from "@/components/projects/project-list";
-import { DashboardNewFolderButton } from "@/components/projects/dashboard-new-folder-button";
 import { DashboardExplorerControls } from "@/components/projects/dashboard-explorer-controls";
-import { Plus } from "lucide-react";
 
-export default async function DashboardPage() {
+export default async function TrashPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -20,24 +16,17 @@ export default async function DashboardPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Dashboard</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Trash</h2>
           <p className="text-muted-foreground text-sm mt-1">
-            Manage your content projects.
+            Deleted projects are kept for 30 days before permanent deletion.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DashboardExplorerControls />
-          <DashboardNewFolderButton />
-          <Button asChild size="sm" className="h-9 px-3 text-sm">
-            <Link href="/projects/new">
-              <Plus className="h-4 w-4 mr-1" />
-              New Project
-            </Link>
-          </Button>
         </div>
       </div>
-      <Suspense fallback={<div className="text-muted-foreground text-sm">Loading projects…</div>}>
-        <ProjectList userId={user.id} />
+      <Suspense fallback={<div className="text-muted-foreground text-sm">Loading trashed projects…</div>}>
+        <ProjectList userId={user.id} status="trashed" mode="trash" />
       </Suspense>
     </div>
   );

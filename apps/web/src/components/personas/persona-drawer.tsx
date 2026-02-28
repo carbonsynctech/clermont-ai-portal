@@ -39,7 +39,7 @@ export function PersonaDrawer({
                   {persona.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {persona.tags.map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs h-5 px-1.5">
+                        <Badge key={tag} variant="outline" className="text-sm h-5 px-1.5">
                           {tag}
                         </Badge>
                       ))}
@@ -72,7 +72,7 @@ export function PersonaDrawer({
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
+                    className="inline-flex items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
                   >
                     <Link className="h-3 w-3" />
                     {url.replace(/^https?:\/\//, "").slice(0, 50)}
