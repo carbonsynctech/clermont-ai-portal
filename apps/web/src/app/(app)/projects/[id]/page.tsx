@@ -460,6 +460,35 @@ export default async function ProjectPage({ params }: PageProps) {
               </CardContent>
             </Card>
           )}
+
+          {/* Step 12: Integrate Critiques */}
+          {stageMap[11]?.status === "completed" && (
+            <Card className="col-span-full">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Step 12: Integrate Critiques</CardTitle>
+                <CardDescription className="text-xs">
+                  {stageMap[12]?.status === "completed"
+                    ? `Final V6 — ${versionRows.find((v) => v.versionType === "final")?.wordCount?.toLocaleString() ?? "?"} words.`
+                    : "Integrate selected critiques using extended thinking to produce the final memo."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {stageMap[12]?.status !== "completed" && (
+                  <StepTrigger
+                    projectId={project.id}
+                    stepNumber={12}
+                    label="Integrate Critiques with Extended Thinking"
+                    currentStatus={stageMap[12]?.status ?? "pending"}
+                  />
+                )}
+                {stageMap[12]?.status === "completed" && (
+                  <p className="text-xs text-muted-foreground">
+                    Final V6 — critique integration complete.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 

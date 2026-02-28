@@ -8,6 +8,7 @@ import { factCheck } from "./handlers/fact-check";
 import { extractAndChunk } from "./handlers/extract-and-chunk";
 import { finalStylePass } from "./handlers/final-style-pass";
 import { devilsAdvocate } from "./handlers/devils-advocate";
+import { integrateCritiques } from "./handlers/integrate-critiques";
 import type { StageRunPayload } from "@repo/core";
 
 export async function runJob(jobId: string): Promise<void> {
@@ -48,6 +49,9 @@ export async function runJob(jobId: string): Promise<void> {
           break;
         case 11:
           await devilsAdvocate(projectId, userId);
+          break;
+        case 12:
+          await integrateCritiques(projectId, userId);
           break;
         default:
           throw new Error(`Step ${stepNumber} handler not implemented yet`);
