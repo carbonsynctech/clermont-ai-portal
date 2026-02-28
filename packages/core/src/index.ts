@@ -23,3 +23,18 @@ export {
   buildPersonaSuggestionSystemPrompt,
   buildPersonaSuggestionUserMessage,
 } from "./prompts/personas";
+export {
+  buildPersonaDraftSystemPrompt,
+  buildPersonaDraftUserMessage,
+} from "./prompts/drafts";
+export {
+  buildSynthesisSystemPrompt,
+  buildSynthesisUserMessage,
+} from "./prompts/synthesis";
+export {
+  buildStyleEditSystemPrompt,
+  buildStyleEditUserMessage,
+  parseStyleEditResponse,
+} from "./prompts/style";
+export { chunkText } from "./utils/chunker";
+export type { TextChunk } from "./utils/chunker";

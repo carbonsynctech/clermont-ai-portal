@@ -38,4 +38,10 @@ export const workerClient = {
 
   getJobStatus: async (jobId: string) =>
     workerFetch(`/jobs/${jobId}`) as Promise<WorkerJob>,
+
+  extractMaterial: async (materialId: string, projectId: string) =>
+    workerFetch("/jobs/extract-material", {
+      method: "POST",
+      body: JSON.stringify({ materialId, projectId }),
+    }) as Promise<{ jobId: string; status: string }>,
 };
