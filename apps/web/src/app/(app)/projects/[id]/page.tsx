@@ -80,6 +80,28 @@ export default async function ProjectPage({ params }: PageProps) {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Completion banner */}
+      {project.status === "completed" && (
+        <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-900 px-4 py-3 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-green-800 dark:text-green-300">
+              Investment memo complete
+            </p>
+            <p className="text-xs text-green-700/80 dark:text-green-400/80 mt-0.5">
+              All 13 pipeline steps finished. Download your PDF below or review the audit log.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href={`/api/projects/${id}/export`}
+              className="inline-flex items-center gap-1.5 rounded-md bg-green-700 dark:bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-800 dark:hover:bg-green-700 transition-colors"
+            >
+              Download PDF
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
