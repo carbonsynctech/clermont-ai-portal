@@ -6,7 +6,7 @@ import {
   boolean,
   integer,
 } from "drizzle-orm/pg-core";
-import { projects } from "./projects.js";
+import { projects } from "./projects";
 
 export const personas = pgTable("personas", {
   id: uuid("id").defaultRandom().primaryKey(),

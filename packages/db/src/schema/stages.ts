@@ -7,7 +7,7 @@ import {
   jsonb,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { projects } from "./projects.js";
+import { projects } from "./projects";
 
 export const stageStatusEnum = pgEnum("stage_status", [
   "pending",

@@ -5,7 +5,7 @@ import {
   timestamp,
   integer,
 } from "drizzle-orm/pg-core";
-import { sourceMaterials } from "./source-materials.js";
+import { sourceMaterials } from "./source-materials";
 
 export const sourceChunks = pgTable("source_chunks", {
   id: uuid("id").defaultRandom().primaryKey(),

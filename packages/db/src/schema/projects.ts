@@ -7,7 +7,7 @@ import {
   jsonb,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { users } from "./users.js";
+import { users } from "./users";
 
 export const projectStatusEnum = pgEnum("project_status", [
   "draft",
