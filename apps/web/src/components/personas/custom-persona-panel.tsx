@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,25 +41,23 @@ export function CustomPersonaPanel({
   const { status, job, isPolling, elapsedSeconds, partialOutput } = useJobStatus(jobId);
 
   // When job completes, fetch the new persona
-  const [prevStatus, setPrevStatus] = useState(status);
-  if (status !== prevStatus) {
-    setPrevStatus(status);
-    if (status === "completed" && job?.result) {
-      const result = job.result as { personaId?: string };
-      if (result.personaId) {
-        const personaId = result.personaId;
-        void fetch(`/api/personas/${personaId}`)
-          .then((r) => r.json())
-          .then((p: Persona) => {
-            setGeneratedPersonas((prev) => [p, ...prev]);
-            setJobId(null);
-            setName("");
-            setLinkedinUrl("");
-            setContext("");
-          });
-      }
-    }
-  }
+  useEffect(() => {
+    if (status !== "completed" || !job?.result) return;
+    const result = job.result as { personaId?: string };
+    if (!result.personaId) return;
+    const personaId = result.personaId;
+    fetch(`/api/personas/${personaId}`)
+      .then(async (r) => {
+        if (!r.ok) return;
+        const p = (await r.json()) as Persona;
+        setGeneratedPersonas((prev) => [p, ...prev]);
+        setJobId(null);
+        setName("");
+        setLinkedinUrl("");
+        setContext("");
+      })
+      .catch(() => { /* ignore fetch errors — user can try again */ });
+  }, [status, job?.result]);
 
   const isRunning = isDispatching || isPolling;
 
@@ -118,7 +116,7 @@ export function CustomPersonaPanel({
     <div className="rounded-xl border bg-card p-6 space-y-4">
       <div className="flex items-center gap-2">
         <UserPlus className="size-4 text-muted-foreground" />
-        <h3 className="font-medium text-sm">Customize a Persona</h3>
+        <h3 className="font-medium text-base">Customize a Persona</h3>
       </div>
 
       <div className="space-y-3">
@@ -130,7 +128,7 @@ export function CustomPersonaPanel({
 
         <button
           type="button"
-          className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+          className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
           onClick={() => setShowLinkedin((v) => !v)}
         >
           {showLinkedin ? "Hide LinkedIn URL" : "+ Add LinkedIn URL"}
