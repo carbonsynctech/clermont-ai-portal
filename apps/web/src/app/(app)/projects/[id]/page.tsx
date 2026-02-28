@@ -93,6 +93,12 @@ export default async function ProjectPage({ params }: PageProps) {
             </span>
           </div>
         </div>
+        <Link
+          href={`/projects/${id}/audit`}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+        >
+          View audit log →
+        </Link>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
