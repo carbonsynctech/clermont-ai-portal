@@ -38,3 +38,18 @@ export {
 } from "./prompts/style";
 export { chunkText } from "./utils/chunker";
 export type { TextChunk } from "./utils/chunker";
+export {
+  buildFinalStyleSystemPrompt,
+  buildFinalStyleUserMessage,
+} from "./prompts/final-style";
+export {
+  buildDevilsAdvocateSystemPrompt,
+  buildDevilsAdvocateUserMessage,
+  parseCritiques,
+  buildCritiqueIntegrationSystemPrompt,
+  buildCritiqueIntegrationUserMessage,
+} from "./prompts/critique";
+export {
+  buildHtmlExportSystemPrompt,
+  buildHtmlExportUserMessage,
+} from "./prompts/export";
