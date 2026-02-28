@@ -11,6 +11,11 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
+    "@radix-ui/react-collapsible": "^1.1.11",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-tabs": "^1.1.13",
     "@repo/core": "workspace:*",
     "@repo/db": "workspace:*",
     "@supabase/ssr": "^0.8.0",

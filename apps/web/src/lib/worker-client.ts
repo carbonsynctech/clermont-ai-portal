@@ -70,6 +70,12 @@ export const workerClient = {
       body: JSON.stringify(opts),
     }) as Promise<{ jobId: string; status: string }>,
 
+  fixSynthesis: async (projectId: string, userId: string, userMessage: string) =>
+    workerFetch("/jobs/synthesis-fix", {
+      method: "POST",
+      body: JSON.stringify({ projectId, userId, userMessage }),
+    }) as Promise<{ jobId: string; status: string }>,
+
   // PDF export is proxied through /api/projects/[id]/export to keep WORKER_SECRET server-side
   getPdfDownloadPath: (projectId: string) => `/api/projects/${projectId}/export`,
 };

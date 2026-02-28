@@ -30,7 +30,20 @@ export async function generatePersonaDrafts(projectId: string, userId: string): 
 
   const startedAt = Date.now();
 
-  // 3. Fetch selected personas ordered by selectionOrder
+  // 3. Idempotency guard – skip if persona_draft versions already exist
+  const existingDrafts = await db.query.versions.findMany({
+    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "persona_draft")),
+  });
+
+  if (existingDrafts.length > 0) {
+    await db
+      .update(stages)
+      .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 4)));
+    return;
+  }
+
+  // 4. Fetch selected personas ordered by selectionOrder
   const selectedPersonas = await db.query.personas.findMany({
     where: and(eq(personas.projectId, projectId), eq(personas.isSelected, true)),
     orderBy: (p, { asc }) => [asc(p.selectionOrder)],
@@ -40,7 +53,7 @@ export async function generatePersonaDrafts(projectId: string, userId: string): 
     throw new Error(`Project ${projectId} has no selected personas`);
   }
 
-  // 4. Fetch all source chunks for this project (via source_materials)
+  // 5. Fetch all source chunks for this project (via source_materials)
   const materials = await db.query.sourceMaterials.findMany({
     where: eq(sourceMaterials.projectId, projectId),
   });

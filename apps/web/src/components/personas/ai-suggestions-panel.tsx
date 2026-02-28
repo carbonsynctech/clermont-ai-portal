@@ -15,6 +15,7 @@ interface AISuggestionsPanelProps {
   stage1Done: boolean;
   stage2Status: string;
   projectPersonas: Persona[];
+  customPersonas?: Persona[];
   selectedIds: string[];
   onSelect: (persona: Persona) => void;
   selectedCount: number;
@@ -26,6 +27,7 @@ export function AISuggestionsPanel({
   stage1Done,
   stage2Status,
   projectPersonas,
+  customPersonas = [],
   selectedIds,
   onSelect,
   selectedCount,
@@ -118,9 +120,9 @@ export function AISuggestionsPanel({
 
       <StepTriggerOutput trigger={trigger} />
 
-      {projectPersonas.length > 0 && (
+      {(customPersonas.length > 0 || projectPersonas.length > 0) && (
         <div className="grid grid-cols-3 gap-3">
-          {projectPersonas.map((persona) => (
+          {[...customPersonas, ...projectPersonas].map((persona) => (
             <PersonaCardV2
               key={persona.id}
               persona={persona}
@@ -135,8 +137,6 @@ export function AISuggestionsPanel({
 
       <PersonaDrawer
         persona={drawerPersona}
-        isSelected={drawerPersona ? selectedIds.includes(drawerPersona.id) : false}
-        onSelect={() => { if (drawerPersona) onSelect(drawerPersona); }}
         onClose={() => setDrawerPersona(null)}
       />
     </div>

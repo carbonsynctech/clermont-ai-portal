@@ -57,40 +57,39 @@ export function VersionsPanel({ versions }: VersionsPanelProps) {
 
   return (
     <>
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium">Versions ({versions.length})</p>
+          <h3 className="font-medium text-base text-foreground">Output Versions ({versions.length})</h3>
           {versions.length >= 2 && (
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
-              className="h-6 px-2 text-xs"
               onClick={() => {
                 setCompareMode((v) => !v);
                 setCompareA(null);
               }}
             >
-              {compareMode ? "Cancel compare" : "Compare"}
+              {compareMode ? "Cancel" : "Compare"}
             </Button>
           )}
         </div>
 
         {compareMode && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {compareA ? "Now select the second version to compare." : "Select the first version to compare."}
           </p>
         )}
 
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {versions.map((v) => (
             <div
               key={v.id}
-              className={`flex items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors ${
+              className={`flex items-center justify-between rounded-md border px-3 py-2.5 text-sm transition-colors ${
                 compareA === v.id ? "border-primary bg-primary/5" : "border-border"
               }`}
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Badge variant="secondary" className="text-[10px] h-4 px-1 shrink-0 capitalize">
+                <Badge variant="secondary" className="text-xs h-5 px-1.5 shrink-0 capitalize">
                   {VERSION_TYPE_LABELS[v.versionType] ?? v.versionType}
                 </Badge>
                 <span className="truncate text-foreground">{v.internalLabel}</span>
@@ -103,7 +102,7 @@ export function VersionsPanel({ versions }: VersionsPanelProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-xs"
+                    className="h-7 px-2 text-sm"
                     onClick={() => handleCompareSelect(v.id)}
                   >
                     {compareA === v.id ? "✓ Selected" : "Select"}
@@ -112,7 +111,7 @@ export function VersionsPanel({ versions }: VersionsPanelProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-xs"
+                    className="h-7 px-2 text-sm"
                     onClick={() => setViewingId(v.id)}
                   >
                     View
@@ -126,9 +125,9 @@ export function VersionsPanel({ versions }: VersionsPanelProps) {
 
       {/* View modal */}
       <Dialog open={viewingId !== null} onOpenChange={(open: boolean) => { if (!open) setViewingId(null); }}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle className="text-sm">{viewingVersion?.internalLabel}</DialogTitle>
+            <DialogTitle className="text-base">{viewingVersion?.internalLabel}</DialogTitle>
           </DialogHeader>
           {viewingVersion && <VersionViewer version={viewingVersion} />}
         </DialogContent>
@@ -138,7 +137,7 @@ export function VersionsPanel({ versions }: VersionsPanelProps) {
       <Dialog open={diffIds !== null} onOpenChange={(open: boolean) => { if (!open) setDiffIds(null); }}>
         <DialogContent className="max-w-6xl">
           <DialogHeader>
-            <DialogTitle className="text-sm">Version Comparison</DialogTitle>
+            <DialogTitle className="text-base">Version Comparison</DialogTitle>
           </DialogHeader>
           {diffVersions[0] && diffVersions[1] && (
             <VersionDiff versionA={diffVersions[0]} versionB={diffVersions[1]} />

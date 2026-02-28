@@ -4,6 +4,7 @@ import {
   buildCustomPersonaSystemPrompt,
   buildCustomPersonaUserMessage,
 } from "@repo/core";
+import { scrapeLinkedIn, searchForPerson } from "../../lib/linkedin";
 
 export interface CustomPersonaPayload {
   name: string;
@@ -26,8 +27,27 @@ export async function generateCustomPersona(
 ): Promise<{ personaId: string }> {
   const { name, linkedinUrl, context, projectId, userId } = payload;
 
-  const personaUserMessageOpts: { name: string; linkedinUrl?: string; context?: string } = { name };
+  // 1. Try scraping the LinkedIn profile directly
+  // 2. If that fails (no creds, blocked, timeout), fall back to a web search
+  let profileContent: string | undefined;
+  if (linkedinUrl) {
+    const scraped = await scrapeLinkedIn(linkedinUrl);
+    if (scraped) {
+      profileContent = `LinkedIn profile data:\n${scraped}`;
+    } else {
+      const searched = await searchForPerson(name, linkedinUrl);
+      if (searched) profileContent = searched; // already labelled "Web search results:\n..."
+    }
+  }
+
+  const personaUserMessageOpts: {
+    name: string;
+    linkedinUrl?: string;
+    profileContent?: string;
+    context?: string;
+  } = { name };
   if (linkedinUrl !== undefined) personaUserMessageOpts.linkedinUrl = linkedinUrl;
+  if (profileContent !== undefined) personaUserMessageOpts.profileContent = profileContent;
   if (context !== undefined) personaUserMessageOpts.context = context;
 
   const callOptions = {

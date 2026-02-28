@@ -24,15 +24,19 @@ Remember: return only a JSON array of 10 persona objects, each with name, descri
 export function buildCustomPersonaSystemPrompt(): string {
   return `You are an expert at creating detailed expert persona profiles for use in AI-assisted document generation.
 
-Given a person's name and/or LinkedIn URL and optional context, generate a rich expert persona profile.
+Given a person's name and optional LinkedIn profile content and context, generate a rich expert persona profile.
 
 The persona name MUST follow the format: "Full Name (Role, Organisation)" — e.g. "Ray Dalio (Macro Investor, Bridgewater Associates)" or "Satya Nadella (CEO, Microsoft)".
 
-If only a name is given without a URL, use your knowledge of that public figure. If a URL is given, use any context clues from the URL path to inform the persona.
+CRITICAL ANTI-HALLUCINATION RULE:
+- If LinkedIn profile content is provided, use it as the PRIMARY source of truth for the person's role, organisation, and background. Do not contradict it.
+- If LinkedIn profile content is NOT provided, only use biographical details (role, organisation, career history) that you can verify from your training data for well-known public figures.
+- If the person is NOT a widely known public figure and no profile content is provided, DO NOT invent a role or organisation. Instead, use "Role Unknown" as a placeholder in the name field and note in the description that profile data could not be retrieved — base the systemPrompt only on the name and any additional context given.
+- Never fabricate specific job titles, organisations, or career history.
 
 Respond with a single JSON object with:
-- "name": string — "Full Name (Role, Organisation)" format
-- "description": string — 2-3 sentences on their background, philosophy, and perspective
+- "name": string — "Full Name (Role, Organisation)" format; use "Role Unknown" if you cannot verify the person's role
+- "description": string — 2-3 sentences on their background, philosophy, and perspective; if unverified, note that profile data was unavailable
 - "systemPrompt": string — 200-300 words instructing this persona how to write; capture their communication style, analytical lens, and priorities
 - "tags": string[] — one or more from: Technology, Finance, Healthcare, Strategy, Legal, Operations, Other
 
@@ -42,10 +46,21 @@ Output ONLY the JSON object, no other text.`;
 export function buildCustomPersonaUserMessage(opts: {
   name: string;
   linkedinUrl?: string;
+  profileContent?: string;
   context?: string;
 }): string {
   const parts: string[] = [];
   if (opts.linkedinUrl) parts.push(`LinkedIn URL: ${opts.linkedinUrl}`);
+  if (opts.profileContent) {
+    parts.push(opts.profileContent); // already labelled by caller, e.g. "LinkedIn profile data:\n..." or "Web search results:\n..."
+  } else if (opts.linkedinUrl) {
+    parts.push(
+      `IMPORTANT: No profile data could be retrieved for this person (LinkedIn blocked and web search returned nothing). ` +
+      `Do NOT guess or invent this person's role, organisation, or career history. ` +
+      `Only use biographical details you can verify from your training data. ` +
+      `If this person is not a well-known public figure, use "Role Unknown" as their role placeholder.`
+    );
+  }
   parts.push(`Name / description: ${opts.name}`);
   if (opts.context) parts.push(`Additional context: ${opts.context}`);
   return parts.join("\n");

@@ -31,7 +31,9 @@ export function AppShell({
       <AppSidebar user={user} variant="floating" />
       <SidebarInset>
         <Header title={headerTitle} actionsSlot={headerActions} />
-        <main className={cn("flex flex-1 flex-col gap-4 p-4", mainClassName)}>{children}</main>
+        <main className={cn("flex flex-1 flex-col gap-4 p-4", mainClassName)}>
+          <div className="mx-auto w-full max-w-[1460px]">{children}</div>
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

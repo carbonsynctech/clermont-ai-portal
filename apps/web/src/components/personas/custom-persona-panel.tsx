@@ -18,6 +18,7 @@ interface CustomPersonaPanelProps {
   onSelect: (persona: Persona) => void;
   selectedCount: number;
   maxCount: number;
+  onPersonaGenerated: (persona: Persona) => void;
 }
 
 export function CustomPersonaPanel({
@@ -26,11 +27,11 @@ export function CustomPersonaPanel({
   onSelect,
   selectedCount,
   maxCount,
+  onPersonaGenerated,
 }: CustomPersonaPanelProps) {
   const [name, setName] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [context, setContext] = useState("");
-  const [showLinkedin, setShowLinkedin] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export function CustomPersonaPanel({
 
   const { status, job, isPolling, elapsedSeconds, partialOutput } = useJobStatus(jobId);
 
-  // When job completes, fetch the new persona
+  // When job completes, fetch the new persona, show card, and notify parent
   useEffect(() => {
     if (status !== "completed" || !job?.result) return;
     const result = job.result as { personaId?: string };
@@ -51,13 +52,14 @@ export function CustomPersonaPanel({
         if (!r.ok) return;
         const p = (await r.json()) as Persona;
         setGeneratedPersonas((prev) => [p, ...prev]);
+        onPersonaGenerated(p);
         setJobId(null);
         setName("");
         setLinkedinUrl("");
         setContext("");
       })
       .catch(() => { /* ignore fetch errors — user can try again */ });
-  }, [status, job?.result]);
+  }, [status, job?.result, onPersonaGenerated]);
 
   const isRunning = isDispatching || isPolling;
 
@@ -120,27 +122,28 @@ export function CustomPersonaPanel({
       </div>
 
       <div className="space-y-3">
-        <Input
-          placeholder="Person name (e.g. Ray Dalio) or LinkedIn URL"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-
-        <button
-          type="button"
-          className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
-          onClick={() => setShowLinkedin((v) => !v)}
-        >
-          {showLinkedin ? "Hide LinkedIn URL" : "+ Add LinkedIn URL"}
-        </button>
-
-        {showLinkedin && (
+        <div className="grid grid-cols-2 gap-3">
           <Input
-            placeholder="LinkedIn profile URL (optional)"
-            value={linkedinUrl}
-            onChange={(e) => setLinkedinUrl(e.target.value)}
+            placeholder="Person name (e.g. Ray Dalio)"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
           />
-        )}
+          <div className="relative">
+            <Input
+              placeholder="LinkedIn profile URL (optional)"
+              value={linkedinUrl}
+              onChange={(e) => setLinkedinUrl(e.target.value)}
+              className="pr-8"
+            />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 size-4 fill-muted-foreground/40 pointer-events-none"
+            >
+              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+            </svg>
+          </div>
+        </div>
 
         <Textarea
           placeholder="Additional context (optional) — e.g. 'Focus on ESG lens'"
@@ -159,10 +162,12 @@ export function CustomPersonaPanel({
         </Button>
       </div>
 
+      {/* Streaming output — collapses automatically when job clears */}
       <StepTriggerOutput trigger={trigger} />
 
+      {/* Generated persona cards */}
       {generatedPersonas.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 pt-2">
+        <div className="grid grid-cols-2 gap-3">
           {generatedPersonas.map((p) => (
             <PersonaCardV2
               key={p.id}
@@ -178,8 +183,6 @@ export function CustomPersonaPanel({
 
       <PersonaDrawer
         persona={drawerPersona}
-        isSelected={drawerPersona ? selectedIds.includes(drawerPersona.id) : false}
-        onSelect={() => { if (drawerPersona) onSelect(drawerPersona); }}
         onClose={() => setDrawerPersona(null)}
       />
     </div>

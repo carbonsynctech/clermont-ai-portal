@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check, XCircle } from "lucide-react";
+import { Check, Loader2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Stage } from "@repo/db";
 
@@ -46,7 +46,14 @@ function StepIcon({
       </div>
     );
   }
-  if (status === "running" || status === "awaiting_human" || isActive) {
+  if (status === "running") {
+    return (
+      <div className="size-6 rounded-full flex items-center justify-center shrink-0 border-2 border-primary bg-primary/10">
+        <Loader2 className="size-3.5 text-primary animate-spin" />
+      </div>
+    );
+  }
+  if (status === "awaiting_human" || isActive) {
     return (
       <div className="size-6 rounded-full flex items-center justify-center shrink-0 border-2 border-primary bg-primary text-xs font-semibold text-primary-foreground">
         {step}
@@ -92,7 +99,7 @@ export function PipelineStepNav({
   const stageMap = new Map(stages.map((s) => [s.stepNumber, s]));
 
   return (
-    <div className="rounded-xl border bg-card p-4 h-fit sticky top-4">
+    <div className="rounded-xl border bg-card p-4 h-fit sticky top-16">
       <h2 className="text-sm font-semibold mb-4 px-1">Pipeline Steps</h2>
       <div className="space-y-4">
         {GROUPS.map((group) => (

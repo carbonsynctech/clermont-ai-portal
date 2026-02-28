@@ -118,8 +118,6 @@ export function PersonaLibraryPanel({
 
       <PersonaDrawer
         persona={drawerPersona}
-        isSelected={drawerPersona ? selectedIds.includes(drawerPersona.id) : false}
-        onSelect={() => { if (drawerPersona) onSelect(drawerPersona); }}
         onClose={() => setDrawerPersona(null)}
       />
     </div>

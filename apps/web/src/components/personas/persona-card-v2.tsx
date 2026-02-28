@@ -23,18 +23,22 @@ export function PersonaCardV2({
 }: PersonaCardV2Props) {
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={() => { if (!disableSelect || isSelected) onSelect(); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!disableSelect || isSelected) onSelect(); } }}
       className={cn(
-        "rounded-xl border bg-card p-4 space-y-3 transition-colors",
-        isSelected && "border-primary bg-primary/5"
+        "rounded-xl border bg-card p-4 space-y-3 transition-colors cursor-pointer select-none",
+        isSelected ? "border-primary bg-primary/5" : "hover:border-muted-foreground/30 hover:bg-muted/30",
+        disableSelect && !isSelected && "cursor-not-allowed opacity-60"
       )}
     >
       <div className="space-y-0.5">
         <div className="flex items-start justify-between gap-2">
           <p className="text-base font-semibold leading-snug">{persona.name}</p>
           {isSelected && (
-            <Badge className="shrink-0 h-5 px-1.5 text-sm gap-0.5">
-              <Check className="h-2.5 w-2.5" />
-              Selected
+            <Badge className="shrink-0 h-5 w-5 p-0 flex items-center justify-center">
+              <Check className="h-3 w-3" />
             </Badge>
           )}
         </div>
@@ -53,15 +57,15 @@ export function PersonaCardV2({
           variant={isSelected ? "default" : "outline"}
           className="h-8 text-sm flex-1"
           disabled={disableSelect && !isSelected}
-          onClick={onSelect}
+          onClick={(e) => { e.stopPropagation(); onSelect(); }}
         >
           {isSelected ? "Deselect" : "Select"}
         </Button>
         <Button
           size="sm"
-          variant="ghost"
+          variant="secondary"
           className="h-8 text-sm flex-1"
-          onClick={onView}
+          onClick={(e) => { e.stopPropagation(); onView(); }}
         >
           View
         </Button>

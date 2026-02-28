@@ -2,7 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Link, Check } from "lucide-react";
+import { Link } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -10,55 +10,36 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Persona } from "@repo/db";
 
 interface PersonaDrawerProps {
   persona: Persona | null;
-  isSelected: boolean;
-  onSelect: () => void;
   onClose: () => void;
 }
 
 export function PersonaDrawer({
   persona,
-  isSelected,
-  onSelect,
   onClose,
 }: PersonaDrawerProps) {
   return (
     <Sheet open={!!persona} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+      <SheetContent side="right" showCloseButton={false} className="w-full sm:max-w-xl overflow-y-auto">
         {persona && (
           <>
             <SheetHeader className="mb-4">
-              <div className="flex items-start justify-between gap-3 pr-4">
-                <div className="space-y-1">
-                  <SheetTitle className="text-base leading-snug">{persona.name}</SheetTitle>
-                  {persona.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {persona.tags.map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-sm h-5 px-1.5">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
+              <div className="space-y-1">
+                <SheetTitle className="text-base leading-snug">{persona.name}</SheetTitle>
+                {persona.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {persona.tags.map((tag) => (
+                      <Badge key={tag} variant="outline" className="text-sm h-5 px-1.5">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
                 </div>
-                <Button
-                  size="sm"
-                  variant={isSelected ? "default" : "outline"}
-                  className="shrink-0"
-                  onClick={onSelect}
-                >
-                  {isSelected ? (
-                    <><Check className="h-3.5 w-3.5 mr-1.5" />Selected</>
-                  ) : (
-                    "Select"
-                  )}
-                </Button>
-              </div>
               <SheetDescription className="text-sm text-foreground/80 leading-relaxed text-left">
                 {persona.description}
               </SheetDescription>
@@ -81,7 +62,7 @@ export function PersonaDrawer({
               </div>
             )}
 
-            <div>
+            <div className="px-4 pb-4">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
                 System Prompt
               </p>

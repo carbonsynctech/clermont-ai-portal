@@ -37,40 +37,40 @@ export function VersionViewer({ version }: VersionViewerProps) {
       {/* Meta */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="secondary" className="text-xs capitalize">
+          <Badge variant="secondary" className="text-sm capitalize">
             {VERSION_TYPE_LABELS[version.versionType] ?? version.versionType}
           </Badge>
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="outline" className="text-sm">
             Step {version.producedByStep}
           </Badge>
           {version.wordCount != null && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-sm text-muted-foreground">
               {version.wordCount.toLocaleString()} words
             </span>
           )}
         </div>
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => void handleCopy()}>
+        <Button variant="ghost" size="sm" className="h-8 px-3 text-sm gap-1.5" onClick={() => void handleCopy()}>
           {copied ? (
             <>
-              <Check className="h-3.5 w-3.5 mr-1 text-green-500" />
+              <Check className="h-4 w-4 text-green-500" />
               Copied
             </>
           ) : (
             <>
-              <Copy className="h-3.5 w-3.5 mr-1" />
+              <Copy className="h-4 w-4" />
               Copy
             </>
           )}
         </Button>
       </div>
 
-      <div className="text-xs text-muted-foreground">
+      <div className="text-sm text-muted-foreground">
         {version.internalLabel} · {new Date(version.createdAt).toLocaleString()}
       </div>
 
       {/* Content */}
       <ScrollArea className="h-[60vh] rounded-md border">
-        <pre className="p-4 text-xs text-foreground leading-relaxed whitespace-pre-wrap font-sans">
+        <pre className="p-4 text-sm text-foreground leading-relaxed whitespace-pre-wrap font-sans">
           {version.content}
         </pre>
       </ScrollArea>

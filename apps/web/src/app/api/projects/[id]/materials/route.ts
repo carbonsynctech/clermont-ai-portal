@@ -51,11 +51,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "file is required" }, { status: 400 });
   }
 
-  if (typeof materialTypeRaw !== "string" || !VALID_MATERIAL_TYPES.includes(materialTypeRaw as MaterialType)) {
-    return NextResponse.json({ error: "Invalid materialType" }, { status: 400 });
-  }
-
-  const materialType = materialTypeRaw as MaterialType;
+  const materialType =
+    typeof materialTypeRaw === "string" && VALID_MATERIAL_TYPES.includes(materialTypeRaw as MaterialType)
+      ? (materialTypeRaw as MaterialType)
+      : "other";
   const originalFilename = file.name;
   const mimeType = file.type || "application/octet-stream";
   const fileBuffer = Buffer.from(await file.arrayBuffer());

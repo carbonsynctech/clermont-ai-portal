@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { PipelineStepNav } from "./pipeline-step-nav";
 import { DefineTaskStep } from "./steps/define-task-step";
 import { StepTrigger } from "./step-trigger";
 import { SelectPersonasStep } from "./steps/select-personas-step";
+import { SynthesisStep } from "./steps/synthesis-step";
 import { MaterialUpload } from "@/components/sources/material-upload";
 import { StyleGuideUpload } from "@/components/sources/style-guide-upload";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 import { InlineEditor } from "@/components/review/inline-editor";
 import { CritiqueSelector } from "@/components/review/critique-selector";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangleIcon } from "lucide-react";
 import type {
@@ -70,12 +70,23 @@ export function PipelineView({
 }: PipelineViewProps) {
   const [activeStep, setActiveStep] = useState(initialStep);
 
+  useEffect(() => {
+    document.documentElement.classList.add("hide-page-scrollbar");
+    document.body.classList.add("hide-page-scrollbar");
+
+    return () => {
+      document.documentElement.classList.remove("hide-page-scrollbar");
+      document.body.classList.remove("hide-page-scrollbar");
+    };
+  }, []);
+
+  useEffect(() => {
+    setActiveStep(initialStep);
+  }, [initialStep]);
+
   const stageMap = Object.fromEntries(stages.map((s) => [s.stepNumber, s]));
   const brief = project.briefData as ProjectBriefData | null;
 
-  const selectedPersonas = personas
-    .filter((p) => p.isSelected)
-    .sort((a, b) => (a.selectionOrder ?? 0) - (b.selectionOrder ?? 0));
   const personaDrafts = versions.filter((v) => v.versionType === "persona_draft");
   const factCheckVersion = versions.filter((v) => v.versionType === "fact_checked").at(-1);
 
@@ -117,43 +128,28 @@ export function PipelineView({
       }
 
       case 3:
-        const canRunStep3 = stageMap[2]?.status === "completed";
-        return (
-          <div className="rounded-xl border bg-card p-6">
-            {status === "completed" ? (
-              <div className="space-y-2">
-                <h3 className="font-medium text-base mb-3">Uploaded Files</h3>
-                {materials.map((m) => (
-                  <div key={m.id} className="flex items-center justify-between text-base">
-                    <span className="truncate text-foreground">{m.originalFilename}</span>
-                    <span className="text-muted-foreground shrink-0 ml-2">{m.chunkCount} chunks</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <MaterialUpload projectId={project.id} materials={materials} />
-            )}
-          </div>
-        );
+        return <MaterialUpload projectId={project.id} materials={materials} />;
 
-      case 4:
+      case 4: {
         const canRunStep4 = stageMap[3]?.status === "completed";
-        return (
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            {status === "completed" && personaDrafts.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="font-medium text-base mb-1">Generated Drafts</h3>
-                {personaDrafts.map((v) => (
-                  <div key={v.id} className="flex items-center justify-between text-base">
-                    <span className="truncate text-foreground">{v.internalLabel}</span>
-                    <span className="text-muted-foreground shrink-0 ml-2">
-                      {v.wordCount?.toLocaleString() ?? "–"} words
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {status !== "completed" && (
+        return status === "completed" ? (
+          <div className="rounded-xl border bg-card p-6 space-y-2">
+            <p className="font-medium text-base text-green-700 dark:text-green-400">
+              {personaDrafts.length} persona draft{personaDrafts.length !== 1 ? "s" : ""} generated.
+            </p>
+            <p className="text-base text-muted-foreground">
+              All drafts are available in Output Versions below. Proceed to Step 5 to synthesise.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-xl border bg-card p-6 space-y-4">
+              <h3 className="font-medium text-base text-foreground">Persona Drafts</h3>
+              <p className="text-base text-muted-foreground">
+                Each of the 5 selected personas will independently analyse the source material and
+                produce a full draft document from their unique perspective. All 5 drafts run in
+                parallel, then get synthesised in Step 5.
+              </p>
               <StepTrigger
                 projectId={project.id}
                 stepNumber={4}
@@ -163,32 +159,19 @@ export function PipelineView({
                 disabledReason="Complete Step 3 to run this step."
                 autoRun={canRunStep4}
               />
-            )}
+            </div>
           </div>
         );
+      }
 
       case 5:
-        const canRunStep5 = stageMap[4]?.status === "completed";
         return (
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            {status === "completed" && (
-              <p className="text-base text-muted-foreground">
-                Synthesis complete —{" "}
-                {versions.find((v) => v.versionType === "synthesis")?.wordCount?.toLocaleString() ?? "?"} words.
-              </p>
-            )}
-            {status !== "completed" && (
-              <StepTrigger
-                projectId={project.id}
-                stepNumber={5}
-                label="Synthesise Drafts"
-                currentStatus={status}
-                disabled={!canRunStep5}
-                disabledReason="Complete Step 4 to run this step."
-                autoRun={canRunStep5}
-              />
-            )}
-          </div>
+          <SynthesisStep
+            projectId={project.id}
+            stage4Status={stageMap[4]?.status ?? "pending"}
+            stage5Status={status}
+            synthesisVersion={versions.find((v) => v.versionType === "synthesis")}
+          />
         );
 
       case 6:
@@ -295,7 +278,6 @@ export function PipelineView({
         );
 
       case 10:
-        const canRunStep10 = stageMap[9]?.status === "completed";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
             {status !== "completed" && (
@@ -419,13 +401,15 @@ export function PipelineView({
 
       <div className="grid gap-6 md:grid-cols-[260px_1fr]">
         {/* Left: step nav */}
-        <PipelineStepNav
-          projectId={project.id}
-          stages={stages}
-          activeStep={activeStep}
-          currentStep={project.currentStage}
-          onStepClick={handleStepClick}
-        />
+        <div className="md:row-span-2">
+          <PipelineStepNav
+            projectId={project.id}
+            stages={stages}
+            activeStep={activeStep}
+            currentStep={project.currentStage}
+            onStepClick={handleStepClick}
+          />
+        </div>
 
         {/* Right: active step content */}
         <div>
@@ -457,18 +441,14 @@ export function PipelineView({
             )}
           </div>
         </div>
-      </div>
 
-      {/* Versions panel */}
-      {versions.length > 0 && (
-        <div className="rounded-xl border bg-card p-6">
-          <h2 className="text-base font-semibold mb-4">Output Versions</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            All AI-generated versions for this project. Click View to read, Compare to diff.
-          </p>
-          <VersionsPanel versions={versions} />
-        </div>
-      )}
+        {/* Versions panel */}
+        {activeStep === 4 && versions.length > 0 && (
+          <div className="rounded-xl border bg-card p-6">
+            <VersionsPanel versions={versions} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2, FileText, Target, Users, MessageSquare,
-  Sparkles, Building2, Layers, Pencil, Eye, ArrowRight,
+  Sparkles, Layers, Pencil, Eye, ArrowRight,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -58,7 +58,7 @@ const DEAL_TYPES = [
 
 const STRATEGIC_FOCUSES = [
   "Market Expansion", "Cost Optimisation", "Digital Transformation",
-  "Turnaround", "Portfolio Review", "Competitive Defence", "Other",
+  "Turnaround", "Portfolio Review", "Competitive Defence", "Risk Mitigation", "Other",
 ];
 
 const TIME_HORIZONS = ["6 Months", "1 Year", "3 Years", "5+ Years"];
@@ -70,7 +70,7 @@ const POLICY_DOMAINS = [
 
 const RESEARCH_DOMAINS = [
   "Market Research", "Competitive Analysis", "Technology Assessment",
-  "Customer Insights", "Industry Analysis", "Academic / Thought Leadership", "Other",
+  "Customer Insights", "Industry Analysis", "Academic / Thought Leadership", "Regulatory / Policy Analysis", "Other",
 ];
 
 const DECISION_TYPES = [
@@ -82,7 +82,16 @@ const BUDGET_RANGES = ["< $100K", "$100K – $500K", "$500K – $1M", "$1M – $
 
 const SPEC_TYPES = [
   "API Specification", "System Architecture", "Data Model",
-  "Infrastructure", "Integration Design", "Security Spec", "Other",
+  "Infrastructure", "Integration Design", "Security Spec", "Requirements Specification", "Other",
+];
+
+const JURISDICTIONS = [
+  "United States",
+  "European Union",
+  "United Kingdom",
+  "APAC",
+  "Global",
+  "Other",
 ];
 
 const TONE_PRESETS = [
@@ -132,9 +141,9 @@ type FieldDef = TextField | RadioField;
 
 const DOC_TYPE_FIELDS: Record<string, FieldDef[]> = {
   "Investment Memorandum": [
-    { type: "number", key: "dealSizeUsd",  label: "Deal Size (USD)",                placeholder: "e.g. 50000000" },
     { type: "radio",  key: "sector",       label: "Sector",         required: true, options: SECTORS,    columns: 5 },
     { type: "radio",  key: "dealType",     label: "Deal Type",      required: true, options: DEAL_TYPES, columns: 5 },
+    { type: "number", key: "dealSizeUsd",  label: "Deal Size (USD)",                placeholder: "e.g. 50000000" },
   ],
   "Strategy Playbook": [
     { type: "text",  key: "organizationName", label: "Organization Name", required: true, placeholder: "e.g. Acme Corp" },
@@ -145,7 +154,7 @@ const DOC_TYPE_FIELDS: Record<string, FieldDef[]> = {
   "Policy Document": [
     { type: "text",  key: "organizationName", label: "Organization Name", required: true, placeholder: "e.g. Acme Corp" },
     { type: "radio", key: "policyDomain",     label: "Policy Domain",    required: true, options: POLICY_DOMAINS, columns: 4 },
-    { type: "text",  key: "jurisdiction",     label: "Jurisdiction",                     placeholder: "e.g. United States, EU, Global" },
+    { type: "radio", key: "jurisdiction",     label: "Jurisdiction",                     options: JURISDICTIONS, columns: 3 },
   ],
   "Whitepaper": [
     { type: "text",  key: "organizationName", label: "Organization Name", required: true, placeholder: "e.g. Acme Corp" },
@@ -196,7 +205,7 @@ function SectionCard({
     <div className="rounded-xl border bg-card p-6 space-y-4">
       <div className="flex items-center gap-2">
         <Icon className="size-4 text-muted-foreground" />
-        <h3 className="font-medium text-sm text-foreground">
+        <h3 className="font-medium text-base text-foreground">
           {title}
           {required && <span className="text-destructive ml-1">*</span>}
           {optional && (
@@ -481,9 +490,8 @@ export function DefineTaskStep({
       if (field.type === "radio") {
         nodes.push(
           <div key={field.key} className="rounded-xl border bg-card p-6 space-y-4">
-            <div className="flex items-center gap-2">
-              <Target className="size-4 text-muted-foreground" />
-              <h3 className="font-medium text-sm text-foreground">
+            <div>
+              <h3 className="font-medium text-base text-foreground">
                 {field.label}
                 {field.required && <span className="text-destructive ml-1">*</span>}
                 {!field.required && (
@@ -515,9 +523,8 @@ export function DefineTaskStep({
           nodes.push(
             <div key={`${field.key}+${next.key}`} className="grid grid-cols-2 gap-5">
               <div className="rounded-xl border bg-card p-6 space-y-4">
-                <div className="flex items-center gap-2">
-                  <Building2 className="size-4 text-muted-foreground" />
-                  <h3 className="font-medium text-sm text-foreground">
+                <div>
+                  <h3 className="font-medium text-base text-foreground">
                     {field.label}
                     {field.required && <span className="text-destructive ml-1">*</span>}
                     {!field.required && (
@@ -533,9 +540,8 @@ export function DefineTaskStep({
                 />
               </div>
               <div className="rounded-xl border bg-card p-6 space-y-4">
-                <div className="flex items-center gap-2">
-                  <Building2 className="size-4 text-muted-foreground" />
-                  <h3 className="font-medium text-sm text-foreground">
+                <div>
+                  <h3 className="font-medium text-base text-foreground">
                     {next.label}
                     {next.required && <span className="text-destructive ml-1">*</span>}
                     {!next.required && (
@@ -557,9 +563,8 @@ export function DefineTaskStep({
           // Standalone text field
           nodes.push(
             <div key={field.key} className="rounded-xl border bg-card p-6 space-y-4">
-              <div className="flex items-center gap-2">
-                <Building2 className="size-4 text-muted-foreground" />
-                <h3 className="font-medium text-sm text-foreground">
+              <div>
+                <h3 className="font-medium text-base text-foreground">
                   {field.label}
                   {field.required && <span className="text-destructive ml-1">*</span>}
                   {!field.required && (
@@ -615,7 +620,7 @@ export function DefineTaskStep({
         <div className="rounded-xl border bg-card p-6 space-y-4">
           <div className="flex items-center gap-2">
             <Users className="size-4 text-muted-foreground" />
-            <h3 className="font-medium text-sm text-foreground">
+            <h3 className="font-medium text-base text-foreground">
               Target Audience <span className="text-destructive">*</span>
             </h3>
           </div>
@@ -682,27 +687,34 @@ export function DefineTaskStep({
 
       {saveError && <p className="text-sm text-destructive">{saveError}</p>}
 
-      <div className="flex items-center gap-3">
-        <Button
-          onClick={() => void handleSave({ refresh: true })}
-          disabled={!isFormValid || isSaving}
-          variant={saved ? "outline" : "default"}
-        >
-          {isSaving ? "Saving…" : saved ? "Saved ✓" : "Save Brief"}
-        </Button>
-        {saved && stage1Status !== "completed" && (
-          <StepTriggerButton
-            trigger={step1Trigger}
-            label="Generate Master Prompt"
-          />
-        )}
-        {stage1Status === "completed" && (
-          <>
+      <div className="sticky bottom-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 backdrop-blur px-5 py-3.5 shadow-lg">
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => void handleSave({ refresh: true })}
+            disabled={!isFormValid || isSaving}
+            variant={saved ? "outline" : "default"}
+          >
+            {isSaving ? "Saving…" : saved ? "Saved ✓" : "Save Brief"}
+          </Button>
+
+          {stage1Status === "completed" && (
             <div className="flex items-center gap-2 text-green-600">
               <CheckCircle2 className="size-4" />
               <span className="text-sm font-medium">Brief saved & master prompt generated.</span>
             </div>
-            <div className="ml-auto flex items-center gap-2">
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {saved && stage1Status !== "completed" && (
+            <StepTriggerButton
+              trigger={step1Trigger}
+              label="Generate Master Prompt"
+            />
+          )}
+
+          {stage1Status === "completed" && (
+            <>
               <Button
                 size="sm"
                 variant="outline"
@@ -735,9 +747,9 @@ export function DefineTaskStep({
                 Continue to Step 2
                 <ArrowRight className="size-3.5" />
               </Button>
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       {saved && stage1Status !== "completed" && (
@@ -749,7 +761,7 @@ export function DefineTaskStep({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="size-4 text-muted-foreground" />
-              <h3 className="font-medium text-sm text-foreground">Master Prompt</h3>
+              <h3 className="font-medium text-base text-foreground">Master Prompt</h3>
             </div>
             <Button
               variant="ghost"

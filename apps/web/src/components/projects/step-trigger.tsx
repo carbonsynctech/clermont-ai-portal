@@ -51,6 +51,8 @@ export function useStepTrigger(
       if (isPolling && partialOutput) return "streaming";
       if (!isPolling && partialOutput) return "done";
     }
+    // Server reports running but local state was lost (e.g. navigated away and back)
+    if (serverRunning) return "waiting";
     return null;
   })();
 
