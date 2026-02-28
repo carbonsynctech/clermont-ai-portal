@@ -361,6 +361,30 @@ export default async function ProjectPage({ params }: PageProps) {
               </CardContent>
             </Card>
           )}
+
+          {/* Step 9: Final Style Pass */}
+          {stageMap[8]?.status === "completed" && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Step 9: Final Style Pass</CardTitle>
+                <CardDescription className="text-xs">
+                  {stageMap[9]?.status === "completed"
+                    ? `Final Styled V4 — ${versionRows.find((v) => v.versionType === "final_styled")?.wordCount?.toLocaleString() ?? "?"} words.`
+                    : "Apply the condensed style rules for a polished final version."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {stageMap[9]?.status !== "completed" && (
+                  <StepTrigger
+                    projectId={project.id}
+                    stepNumber={9}
+                    label="Apply Final Style Pass"
+                    currentStatus={stageMap[9]?.status ?? "pending"}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
