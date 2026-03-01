@@ -24,6 +24,24 @@ export function LoginForm({
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const emailRedirectTo = (() => {
+    const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
+
+    if (configuredSiteUrl) {
+      try {
+        return new URL("/auth/callback", configuredSiteUrl).toString()
+      } catch {
+        // fall through to runtime origin
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/auth/callback`
+    }
+
+    return undefined
+  })()
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
@@ -33,7 +51,7 @@ export function LoginForm({
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo,
       },
     })
 

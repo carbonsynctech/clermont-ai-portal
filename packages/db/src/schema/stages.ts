@@ -44,6 +44,17 @@ export interface StageMetadata {
   reviewDraftSavedAt?: string;
   reviewNotes?: string;
   selectedCritiquesCount?: number;
+  devilsAdvocateDraft?: {
+    critiques: Array<{
+      id: number;
+      title: string;
+      detail: string;
+      isCustom?: boolean;
+    }>;
+    selectedIds: number[];
+    selectedCritiques: string[];
+    savedAt: string;
+  };
 }
 
 export const stages = pgTable("stages", {

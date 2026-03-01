@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { FolderOpen, Grid2X2, List, Plus } from "lucide-react";
+import { FolderOpen, Grid2X2, List } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Empty,
@@ -14,6 +13,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { DashboardNewProjectButton } from "@/components/projects/dashboard-new-project-button";
 import {
   DASHBOARD_SEARCH_PROJECTS_EVENT,
   DASHBOARD_VIEW_MODE_EVENT,
@@ -124,12 +124,7 @@ export function DashboardExplorer({ projects, mode }: DashboardExplorerProps) {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button asChild size="sm">
-              <Link href="/projects/new">
-                <Plus className="h-4 w-4" />
-                New Project
-              </Link>
-            </Button>
+            <DashboardNewProjectButton size="sm" />
           </EmptyContent>
         </Empty>
       </div>

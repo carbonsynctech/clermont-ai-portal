@@ -1,12 +1,10 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
 import { ProjectList } from "@/components/projects/project-list";
 import { DashboardNewFolderButton } from "@/components/projects/dashboard-new-folder-button";
 import { DashboardExplorerControls } from "@/components/projects/dashboard-explorer-controls";
-import { Plus } from "lucide-react";
+import { DashboardNewProjectButton } from "@/components/projects/dashboard-new-project-button";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -28,12 +26,7 @@ export default async function DashboardPage() {
         <div className="flex flex-wrap items-center gap-2">
           <DashboardExplorerControls />
           <DashboardNewFolderButton />
-          <Button asChild size="sm" className="h-9 px-3 text-sm">
-            <Link href="/projects/new">
-              <Plus className="h-4 w-4 mr-1" />
-              New Project
-            </Link>
-          </Button>
+          <DashboardNewProjectButton className="h-9 px-3 text-sm" size="sm" />
         </div>
       </div>
       <Suspense fallback={<div className="text-muted-foreground text-sm">Loading projects…</div>}>

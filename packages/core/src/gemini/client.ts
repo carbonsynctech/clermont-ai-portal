@@ -147,6 +147,15 @@ class GeminiClient {
 
     const prompt = `You are a professional fact-checker for investment memos and financial content.
 
+  You MUST preserve the original markdown structure in correctedContent.
+  Rules for correctedContent:
+  - Keep headings, subheadings, list markers, numbering, tables, blockquotes, links, emphasis, and line breaks.
+  - Keep section order unchanged.
+  - Only modify text that is factually incorrect.
+  - Do not rewrite style, tone, or formatting.
+  - Do not convert markdown to plain text.
+  - If no factual corrections are needed, return the original markdown content unchanged.
+
 Review the following content and verify these specific claims:
 ${claims.map((c, i) => `${i + 1}. ${c}`).join("\n")}
 

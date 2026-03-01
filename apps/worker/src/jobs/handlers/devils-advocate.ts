@@ -3,12 +3,9 @@ import {
   claude,
   buildDevilsAdvocateSystemPrompt,
   buildDevilsAdvocateUserMessage,
+  parseCritiques,
 } from "@repo/core";
 import { eq, and } from "drizzle-orm";
-
-function countWords(text: string): number {
-  return text.trim().split(/\s+/).length;
-}
 
 export async function devilsAdvocate(projectId: string, userId: string): Promise<void> {
   // 1. Fetch project
@@ -57,23 +54,15 @@ export async function devilsAdvocate(projectId: string, userId: string): Promise
 
   const durationMs = Date.now() - startedAt;
 
-  // 5. Insert red_report version
-  const [newVersion] = await db
-    .insert(versions)
-    .values({
-      projectId,
-      producedByStep: 11,
-      versionType: "red_report",
-      internalLabel: "Devil's Advocate Report",
-      content: result.content,
-      wordCount: countWords(result.content),
-      isClientVisible: false,
-    })
-    .returning();
+  const parsedCritiques = parseCritiques(result.content).map((critique) => ({
+    id: critique.id,
+    title: critique.title,
+    detail: critique.detail,
+    isCustom: false,
+  }));
+  const savedAt = new Date().toISOString();
 
-  if (!newVersion) throw new Error("Failed to insert red_report version");
-
-  // 6. Insert audit log
+  // 5. Insert audit log
   await db.insert(auditLogs).values({
     projectId,
     userId,
@@ -82,10 +71,11 @@ export async function devilsAdvocate(projectId: string, userId: string): Promise
     modelId: result.model,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
-    payload: { durationMs },
+    payload: { durationMs, generatedCritiquesCount: parsedCritiques.length },
+    responseSnapshot: result.content,
   });
 
-  // 7. Update stage 11 to awaiting_human (critique selection checkpoint)
+  // 6. Update stage 11 to awaiting_human (critique selection checkpoint)
   await db
     .update(stages)
     .set({
@@ -96,11 +86,18 @@ export async function devilsAdvocate(projectId: string, userId: string): Promise
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
         durationMs,
+        selectedCritiquesCount: 0,
+        devilsAdvocateDraft: {
+          critiques: parsedCritiques,
+          selectedIds: [],
+          selectedCritiques: [],
+          savedAt,
+        },
       },
     })
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
 
-  // 8. Stay at currentStage = 11 (user must select critiques before advancing)
+  // 7. Stay at currentStage = 11 (user must select critiques before advancing)
   await db
     .update(projects)
     .set({ currentStage: 11, updatedAt: new Date() })

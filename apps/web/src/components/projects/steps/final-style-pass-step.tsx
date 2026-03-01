@@ -27,6 +27,7 @@ interface FinalStylePassStepProps {
   companyName?: string;
   dealType?: string;
   coverImageUrl?: string;
+  factCheckedVersion?: Version;
   finalStyledVersion?: Version;
   stage8Status: string;
   stage9Status: string;
@@ -41,11 +42,13 @@ export function FinalStylePassStep({
   companyName,
   dealType,
   coverImageUrl,
+  factCheckedVersion,
   finalStyledVersion,
   stage8Status,
   stage9Status,
   onRunningChange,
 }: FinalStylePassStepProps) {
+  void finalStyledVersion;
   const canRun = stage8Status === "completed";
   const trigger = useStepTrigger(projectId, 9, stage9Status, canRun);
 
@@ -54,17 +57,17 @@ export function FinalStylePassStep({
   }, [onRunningChange, trigger.isRunning]);
 
   // ── sessionStorage keys ───────────────────────────────────────────────────
-  const versionId = finalStyledVersion?.id ?? "";
+  const versionId = factCheckedVersion?.id ?? "";
   const chatKey = `final-style-chat-${projectId}`;
   const contentKey = `final-style-content-${projectId}`;
   const versionKey = `final-style-version-${projectId}`;
-  const sourceContent = finalStyledVersion?.content ?? "";
+  const sourceContent = factCheckedVersion?.content ?? "";
 
   const prevVersionIdRef = useRef(versionId);
 
   // ── displayContent: live-patchable by AI fixes ────────────────────────────
   const [displayContent, setDisplayContent] = useState<string>(() => {
-    if (!finalStyledVersion) return "";
+    if (!factCheckedVersion) return "";
     try {
       const savedVer = sessionStorage.getItem(versionKey);
       const savedContent = sessionStorage.getItem(contentKey);
@@ -76,16 +79,16 @@ export function FinalStylePassStep({
   });
 
   useEffect(() => {
-    if (!finalStyledVersion) return;
+    if (!factCheckedVersion) return;
     try {
       sessionStorage.setItem(contentKey, displayContent);
       sessionStorage.setItem(versionKey, versionId);
     } catch { /* ignore */ }
-  }, [displayContent, contentKey, versionKey, versionId, finalStyledVersion]);
+  }, [displayContent, contentKey, versionKey, versionId, factCheckedVersion]);
 
   // ── Chat messages ─────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMsg[]>(() => {
-    if (!finalStyledVersion) return [];
+    if (!factCheckedVersion) return [];
     try {
       const savedVer = sessionStorage.getItem(versionKey);
       const raw = sessionStorage.getItem(chatKey);
@@ -205,7 +208,7 @@ export function FinalStylePassStep({
   }
 
   // ── No version yet: show trigger only ────────────────────────────────────
-  if (!finalStyledVersion) {
+  if (!factCheckedVersion) {
     return (
       <div className="rounded-xl border bg-card p-6 space-y-3">
         <StepTriggerButton
@@ -244,7 +247,7 @@ export function FinalStylePassStep({
             <h3 className="font-medium text-base">Final Style Pass V4</h3>
           </div>
           <Badge variant="outline">
-            {finalStyledVersion.wordCount?.toLocaleString() ?? "?"} words
+              {factCheckedVersion.wordCount?.toLocaleString() ?? "?"} words
           </Badge>
           <StepTriggerButton
             trigger={trigger}

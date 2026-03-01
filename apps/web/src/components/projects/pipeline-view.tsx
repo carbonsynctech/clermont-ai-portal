@@ -12,12 +12,13 @@ import { ExportStep } from "./steps/export-step";
 import { StyleEditStep } from "./steps/style-edit-step";
 import { FinalStylePassStep } from "./steps/final-style-pass-step";
 import { IntegrateCritiquesStep } from "./steps/integrate-critiques-step";
+import { MarkdownVersionPanel } from "./markdown-version-panel";
 import { MaterialUpload } from "@/components/sources/material-upload";
 import { StyleGuideUpload } from "@/components/sources/style-guide-upload";
 import { StyleGuidePreview, type ColorPaletteEntry } from "@/components/sources/style-guide-preview";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 import { InlineEditor, type InlineEditorHandle } from "@/components/review/inline-editor";
-import { CritiqueSelector } from "@/components/review/critique-selector";
+import { CritiqueSelector, type CritiqueItem } from "@/components/review/critique-selector";
 import { FactCheckReviewStep } from "@/components/review/fact-check-review";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -70,6 +71,54 @@ const STEP_COMPLETION_MESSAGES: Record<number, string> = {
   13: "Export is ready.",
 };
 
+interface Step11DraftPayload {
+  critiques: CritiqueItem[];
+  selectedIds: number[];
+  selectedCritiques: string[];
+}
+
+function isCritiqueItemArray(value: unknown): value is CritiqueItem[] {
+  if (!Array.isArray(value)) return false;
+  return value.every((entry) => {
+    if (!entry || typeof entry !== "object") return false;
+    const record = entry as Record<string, unknown>;
+    return (
+      typeof record.id === "number"
+      && Number.isFinite(record.id)
+      && typeof record.title === "string"
+      && typeof record.detail === "string"
+      && (record.isCustom === undefined || typeof record.isCustom === "boolean")
+    );
+  });
+}
+
+function isNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
+}
+
+function getStep11DraftFromMetadata(value: unknown): Step11DraftPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const draft = record.devilsAdvocateDraft;
+  if (!draft || typeof draft !== "object") return null;
+
+  const draftRecord = draft as Record<string, unknown>;
+  if (!isCritiqueItemArray(draftRecord.critiques)) return null;
+  if (!isNumberArray(draftRecord.selectedIds)) return null;
+
+  const selectedCritiquesRaw = draftRecord.selectedCritiques;
+  const selectedCritiques =
+    Array.isArray(selectedCritiquesRaw) && selectedCritiquesRaw.every((entry) => typeof entry === "string")
+      ? selectedCritiquesRaw
+      : [];
+
+  return {
+    critiques: draftRecord.critiques,
+    selectedIds: draftRecord.selectedIds,
+    selectedCritiques,
+  };
+}
+
 interface PipelineViewProps {
   project: Project;
   stages: Stage[];
@@ -104,9 +153,11 @@ export function PipelineView({
   const [step11Running, setStep11Running] = useState(false);
   const [step11Submitting, setStep11Submitting] = useState(false);
   const [step11SelectedCritiques, setStep11SelectedCritiques] = useState<string[]>([]);
+  const [step11Draft, setStep11Draft] = useState<Step11DraftPayload | null>(null);
   const [step12Running, setStep12Running] = useState(false);
   const [step12Skipping, setStep12Skipping] = useState(false);
   const [step7FormatRunId, setStep7FormatRunId] = useState(0);
+  const step11DraftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Shared document styling state — set in step 6, consumed in step 7
   const [documentColors, setDocumentColors] = useState<DocumentColors>(DEFAULT_COLORS);
@@ -167,7 +218,35 @@ export function PipelineView({
     [versions],
   );
 
+  const sourceSynthesisVersion = getLatestVersion("synthesis");
   const factCheckVersion = versions.filter((v) => v.versionType === "fact_checked").at(-1);
+
+  const persistStep11Draft = useCallback(
+    (draft: Step11DraftPayload) => {
+      if (step11DraftSaveTimeoutRef.current) {
+        clearTimeout(step11DraftSaveTimeoutRef.current);
+      }
+
+      step11DraftSaveTimeoutRef.current = setTimeout(() => {
+        void fetch(`/api/projects/${project.id}/critiques/draft`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(draft),
+        }).catch(() => {
+          // Silent failure: the final save still occurs on Step 11 continue.
+        });
+      }, 600);
+    },
+    [project.id],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (step11DraftSaveTimeoutRef.current) {
+        clearTimeout(step11DraftSaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   function handleStepClick(step: number) {
     setActiveStep(step);
@@ -190,7 +269,11 @@ export function PipelineView({
       const res = await fetch(`/api/projects/${project.id}/critiques/select`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectedCritiques: step11SelectedCritiques }),
+        body: JSON.stringify({
+          selectedCritiques: step11SelectedCritiques,
+          critiques: step11Draft?.critiques ?? [],
+          selectedIds: step11Draft?.selectedIds ?? [],
+        }),
       });
 
       if (!res.ok) {
@@ -361,28 +444,36 @@ export function PipelineView({
 
       case 8: {
         const canRunStep8 = stageMap[7]?.status === "completed";
-        if (factCheckVersion) {
+        if (factCheckVersion && (status === "awaiting_human" || status === "completed")) {
           return (
             <FactCheckReviewStep
               projectId={project.id}
               factCheckFindings={factCheckFindings ?? []}
-              sourceVersion={getLatestVersion("synthesis")}
+              sourceVersion={sourceSynthesisVersion}
               factCheckedVersion={factCheckVersion}
             />
           );
         }
         return (
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            <StepTrigger
-              projectId={project.id}
-              stepNumber={8}
-              label="Fact-Check with Gemini"
-              currentStatus={status}
-              disabled={!canRunStep8}
-              disabledReason="Complete Step 7 to run this step."
-              autoRun={canRunStep8}
-              onRunningChange={setStep8Running}
+          <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+            <MarkdownVersionPanel
+              title="Content to Fact-Check (Step 5 Synthesis)"
+              content={sourceSynthesisVersion?.content ?? ""}
+              wordCount={sourceSynthesisVersion?.wordCount ?? undefined}
             />
+
+            <div className="rounded-xl border bg-card p-6 space-y-4 lg:sticky lg:top-4 h-fit">
+              <StepTrigger
+                projectId={project.id}
+                stepNumber={8}
+                label="Fact-Check with Gemini"
+                currentStatus={status}
+                disabled={!canRunStep8}
+                disabledReason="Complete Step 7 to run this step."
+                autoRun={canRunStep8}
+                onRunningChange={setStep8Running}
+              />
+            </div>
           </div>
         );
       }
@@ -395,6 +486,7 @@ export function PipelineView({
             companyName={brief?.companyName}
             dealType={brief?.dealType}
             coverImageUrl={coverImageUrl}
+            factCheckedVersion={getLatestVersion("fact_checked")}
             finalStyledVersion={getLatestVersion("final_styled")}
             stage8Status={stageMap[8]?.status ?? "pending"}
             stage9Status={status}
@@ -428,7 +520,9 @@ export function PipelineView({
 
       case 11: {
         const canRunStep11 = stageMap[10]?.status === "completed";
-        const redReportContent = getLatestVersion("red_report")?.content ?? "";
+        const persistedDraft = getStep11DraftFromMetadata(stageMap[11]?.metadata);
+        const redReportContent = persistedDraft ? "" : (getLatestVersion("red_report")?.content ?? "");
+        const shouldShowSelector = status === "awaiting_human" || status === "completed" || Boolean(persistedDraft);
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
             <StepTrigger
@@ -442,17 +536,28 @@ export function PipelineView({
               onRunningChange={setStep11Running}
               hideButton
             />
-            {redReportContent && (
-              <CritiqueSelector
-                projectId={project.id}
-                redReport={redReportContent}
-                step10Markdown={
-                  getLatestVersion("human_reviewed")?.content
-                  ?? getLatestVersion("final_styled")?.content
-                  ?? ""
-                }
-                onSelectedCritiquesChange={setStep11SelectedCritiques}
-              />
+            {shouldShowSelector && (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Select critiques to integrate into Step 12. You can continue with none selected, and Step 12 will be skipped automatically.
+                </p>
+                <CritiqueSelector
+                  projectId={project.id}
+                  redReport={redReportContent}
+                  step10Markdown={
+                    getLatestVersion("human_reviewed")?.content
+                    ?? getLatestVersion("final_styled")?.content
+                    ?? ""
+                  }
+                  onSelectedCritiquesChange={setStep11SelectedCritiques}
+                  initialCritiques={persistedDraft?.critiques}
+                  initialSelectedIds={persistedDraft?.selectedIds}
+                  onDraftChange={(draft) => {
+                    setStep11Draft(draft);
+                    persistStep11Draft(draft);
+                  }}
+                />
+              </>
             )}
           </div>
         );
@@ -462,10 +567,6 @@ export function PipelineView({
         return (
           <IntegrateCritiquesStep
             projectId={project.id}
-            projectTitle={project.title}
-            companyName={brief?.companyName}
-            dealType={brief?.dealType}
-            coverImageUrl={coverImageUrl}
             finalVersion={getLatestVersion("final")}
             stage11Status={stageMap[11]?.status ?? "pending"}
             stage12Status={status}

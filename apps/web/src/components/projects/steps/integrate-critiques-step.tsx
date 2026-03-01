@@ -4,15 +4,11 @@ import { useEffect } from "react";
 import { Brain } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { StepTriggerButton, StepTriggerOutput, useStepTrigger } from "@/components/projects/step-trigger";
-import { StyledDocumentPreview } from "./styled-document-preview";
+import { MarkdownVersionPanel } from "../markdown-version-panel";
 import type { Version } from "@repo/db";
 
 interface IntegrateCritiquesStepProps {
   projectId: string;
-  projectTitle: string;
-  companyName?: string;
-  dealType?: string;
-  coverImageUrl?: string;
   finalVersion?: Version;
   stage11Status: string;
   stage12Status: string;
@@ -21,10 +17,6 @@ interface IntegrateCritiquesStepProps {
 
 export function IntegrateCritiquesStep({
   projectId,
-  projectTitle,
-  companyName,
-  dealType,
-  coverImageUrl,
   finalVersion,
   stage11Status,
   stage12Status,
@@ -53,15 +45,11 @@ export function IntegrateCritiquesStep({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-      <div className="rounded-xl border bg-card p-4">
-        <StyledDocumentPreview
-          content={finalVersion.content}
-          projectTitle={projectTitle}
-          companyName={companyName}
-          dealType={dealType}
-          coverImageUrl={coverImageUrl}
-        />
-      </div>
+      <MarkdownVersionPanel
+        title="Integrated Critiques — Final V6"
+        content={finalVersion.content}
+        wordCount={finalVersion.wordCount ?? undefined}
+      />
 
       <div className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 h-fit space-y-3">
         <div className="flex items-center gap-2">

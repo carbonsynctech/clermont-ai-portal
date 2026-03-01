@@ -19,10 +19,17 @@ interface CritiqueSelectorProps {
   projectId: string;
   redReport: string;
   step10Markdown: string;
+  initialCritiques?: CritiqueItem[];
+  initialSelectedIds?: number[];
   onSelectedCritiquesChange?: (selectedCritiques: string[]) => void;
+  onDraftChange?: (draft: {
+    critiques: CritiqueItem[];
+    selectedIds: number[];
+    selectedCritiques: string[];
+  }) => void;
 }
 
-interface CritiqueItem {
+export interface CritiqueItem {
   id: number;
   title: string;
   detail: string;
@@ -45,11 +52,27 @@ export function CritiqueSelector({
   projectId,
   redReport,
   step10Markdown,
+  initialCritiques,
+  initialSelectedIds,
   onSelectedCritiquesChange,
+  onDraftChange,
 }: CritiqueSelectorProps) {
   const parsedCritiques = parseCritiques(redReport);
-  const [critiques, setCritiques] = useState<CritiqueItem[]>(parsedCritiques);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [critiques, setCritiques] = useState<CritiqueItem[]>(() => {
+    if (!initialCritiques || initialCritiques.length === 0) {
+      return parsedCritiques;
+    }
+
+    return initialCritiques;
+  });
+  const [selectedIds, setSelectedIds] = useState<number[]>(() => {
+    if (!initialSelectedIds || initialSelectedIds.length === 0) {
+      return [];
+    }
+
+    const validIds = new Set((initialCritiques ?? parsedCritiques).map((item) => item.id));
+    return initialSelectedIds.filter((id) => validIds.has(id));
+  });
   const [expandedIds, setExpandedIds] = useState<number[]>([]);
   const [customPanelOpen, setCustomPanelOpen] = useState(false);
   const [customTitle, setCustomTitle] = useState("");
@@ -265,14 +288,17 @@ export function CritiqueSelector({
   }
 
   useEffect(() => {
-    if (!onSelectedCritiquesChange) return;
-
     const selectedCritiques = critiques
       .filter((critique) => selectedIds.includes(critique.id))
       .map((critique) => `${stripNumericPrefix(critique.title)}\n${critique.detail}`);
 
-    onSelectedCritiquesChange(selectedCritiques);
-  }, [critiques, onSelectedCritiquesChange, selectedIds]);
+    onSelectedCritiquesChange?.(selectedCritiques);
+    onDraftChange?.({
+      critiques,
+      selectedIds,
+      selectedCritiques,
+    });
+  }, [critiques, onDraftChange, onSelectedCritiquesChange, selectedIds]);
 
   return (
     <div className="space-y-4">
@@ -289,7 +315,9 @@ export function CritiqueSelector({
       </div>
 
       {critiques.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No structured critiques found in the report.</p>
+        <p className="text-sm text-muted-foreground">
+          No structured critiques were generated. You can add custom critiques, or continue with none selected to skip Step 12.
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {critiques.map((critique) => {

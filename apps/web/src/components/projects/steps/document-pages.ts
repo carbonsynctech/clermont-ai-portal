@@ -729,8 +729,8 @@ function buildContentPages(
   const contentBlocks = allBlocks.filter((block) => block.replace(/<[^>]*>/g, "").trim().length > 0);
   if (contentBlocks.length === 0) return pages;
 
-  const firstPageLines = 104;
-  const subsequentPageLines = 104;
+  const firstPageLines = 84;
+  const subsequentPageLines = 96;
 
   const pageChunkBlocks: string[][] = [];
   let currentBlocks: string[] = [];
