@@ -1,14 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
 import { FileOutput, Code2, FileDown, FileText, FileCode } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  StepTriggerButton,
-  StepTriggerOutput,
-  useStepTrigger,
-} from "@/components/projects/step-trigger";
 import { StyledDocumentPreview } from "./styled-document-preview";
 import type { Version } from "@repo/db";
 
@@ -19,10 +13,7 @@ interface ExportStepProps {
   dealType?: string;
   coverImageUrl?: string;
   finalVersion?: Version;
-  exportedHtmlVersion?: Version;
   stage12Status: string;
-  stage13Status: string;
-  onRunningChange?: (running: boolean) => void;
 }
 
 export function ExportStep({
@@ -32,32 +23,14 @@ export function ExportStep({
   dealType,
   coverImageUrl,
   finalVersion,
-  exportedHtmlVersion,
   stage12Status,
-  stage13Status,
-  onRunningChange,
 }: ExportStepProps) {
-  const canRun = stage12Status === "completed";
-  const trigger = useStepTrigger(projectId, 13, stage13Status, canRun);
+  const canExport = stage12Status === "completed";
 
-  useEffect(() => {
-    onRunningChange?.(trigger.isRunning);
-  }, [onRunningChange, trigger.isRunning]);
-
-  if (!exportedHtmlVersion || !finalVersion) {
+  if (!finalVersion) {
     return (
       <div className="rounded-xl border bg-card p-6 space-y-3">
-        <StepTriggerButton
-          trigger={trigger}
-          label={
-            stage13Status === "completed"
-              ? "Regenerate HTML Export"
-              : "Generate HTML Export"
-          }
-          disabled={!canRun}
-          disabledReason="Complete Step 12 to run this step."
-        />
-        <StepTriggerOutput trigger={trigger} />
+        <p className="text-sm text-muted-foreground">No final document found to export.</p>
       </div>
     );
   }
@@ -82,50 +55,50 @@ export function ExportStep({
         <Badge variant="outline">
           {finalVersion.wordCount?.toLocaleString() ?? "?"} words
         </Badge>
-        <StepTriggerButton
-          trigger={trigger}
-          label="Regenerate HTML Export"
-          disabled={!canRun}
-          disabledReason="Complete Step 12 to run this step."
-        />
-        <StepTriggerOutput trigger={trigger} />
+
+        {!canExport && (
+          <p className="text-xs text-muted-foreground">Complete Step 12 to enable export.</p>
+        )}
 
         <div className="pt-1">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
             Export
           </p>
           <div className="space-y-2">
-            <Button variant="outline" className="w-full justify-start gap-2" asChild>
+            <Button variant="outline" className="w-full justify-start gap-2" asChild disabled={!canExport}>
               <a
                 href={`/api/projects/${projectId}/export?format=html`}
                 download
+                aria-disabled={!canExport}
               >
                 <Code2 className="size-4" />
-                Download HTML
+                Generate HTML
               </a>
             </Button>
-            <Button variant="outline" className="w-full justify-start gap-2" asChild>
-              <a href={`/api/projects/${projectId}/export`} download>
+            <Button variant="outline" className="w-full justify-start gap-2" asChild disabled={!canExport}>
+              <a href={`/api/projects/${projectId}/export`} download aria-disabled={!canExport}>
                 <FileDown className="size-4" />
-                Download PDF
+                Generate PDF
               </a>
             </Button>
-            <Button variant="outline" className="w-full justify-start gap-2" asChild>
+            <Button variant="outline" className="w-full justify-start gap-2" asChild disabled={!canExport}>
               <a
                 href={`/api/projects/${projectId}/export?format=docx`}
                 download
+                aria-disabled={!canExport}
               >
                 <FileText className="size-4" />
-                Download DOCX
+                Generate DOCX
               </a>
             </Button>
-            <Button variant="outline" className="w-full justify-start gap-2" asChild>
+            <Button variant="outline" className="w-full justify-start gap-2" asChild disabled={!canExport}>
               <a
                 href={`/api/projects/${projectId}/export?format=md`}
                 download
+                aria-disabled={!canExport}
               >
                 <FileCode className="size-4" />
-                Download Markdown
+                Generate Markdown
               </a>
             </Button>
           </div>

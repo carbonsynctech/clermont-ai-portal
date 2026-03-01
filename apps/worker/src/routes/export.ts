@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import puppeteer from "puppeteer";
+import { buildExportHtmlDocument } from "@repo/core";
 import { db, versions } from "@repo/db";
 import { eq, and } from "drizzle-orm";
 import { workerAuth } from "../middleware/auth";
@@ -8,25 +9,29 @@ const exportRoute = new Hono();
 
 exportRoute.use("*", workerAuth);
 
-exportRoute.get("/pdf", async (c) => {
-  const projectId = c.req.query("projectId");
+exportRoute.post("/pdf", async (c) => {
+  const body = await c.req.json().catch(() => ({})) as { projectId?: string; html?: string };
+  const projectId = body.projectId;
 
   if (!projectId) {
     return c.json({ error: "projectId is required" }, 400);
   }
 
-  // Fetch the exported_html version for this project
-  const htmlVersion = await db.query.versions.findFirst({
+  const finalVersion = await db.query.versions.findFirst({
     where: and(
       eq(versions.projectId, projectId),
-      eq(versions.versionType, "exported_html")
+      eq(versions.versionType, "final")
     ),
     orderBy: (v, { desc }) => [desc(v.createdAt)],
   });
 
-  if (!htmlVersion) {
-    return c.json({ error: "No HTML export found for this project" }, 404);
+  if (!finalVersion) {
+    return c.json({ error: "No final version found for this project" }, 404);
   }
+
+  const html = body.html?.trim()
+    ? body.html
+    : buildExportHtmlDocument(finalVersion.content, `memo-${projectId}`);
 
   // Launch Puppeteer and render PDF
   const executablePath = process.env["PUPPETEER_EXECUTABLE_PATH"];
@@ -38,7 +43,7 @@ exportRoute.get("/pdf", async (c) => {
 
   try {
     const page = await browser.newPage();
-    await page.setContent(htmlVersion.content, { waitUntil: "networkidle0" });
+    await page.setContent(html, { waitUntil: "networkidle0" });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
@@ -54,6 +59,22 @@ exportRoute.get("/pdf", async (c) => {
   } finally {
     await browser.close();
   }
+});
+
+exportRoute.get("/pdf", async (c) => {
+  const projectId = c.req.query("projectId");
+
+  if (!projectId) {
+    return c.json({ error: "projectId is required" }, 400);
+  }
+
+  const req = new Request("http://worker.local/export/pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId }),
+  });
+
+  return exportRoute.fetch(req, c.env, c.executionCtx);
 });
 
 export { exportRoute };

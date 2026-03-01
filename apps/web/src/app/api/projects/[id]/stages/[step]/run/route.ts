@@ -26,6 +26,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Invalid step number" }, { status: 400 });
   }
 
+  if (stepNumber === 13) {
+    return NextResponse.json(
+      { error: "Step 13 is export-only. Use /api/projects/[id]/export endpoints." },
+      { status: 400 }
+    );
+  }
+
   // Verify user owns the project
   const project = await db.query.projects.findFirst({
     where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),

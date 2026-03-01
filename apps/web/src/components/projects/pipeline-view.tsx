@@ -105,7 +105,6 @@ export function PipelineView({
   const [step11SelectedCritiques, setStep11SelectedCritiques] = useState<string[]>([]);
   const [step12Running, setStep12Running] = useState(false);
   const [step12Skipping, setStep12Skipping] = useState(false);
-  const [step13Running, setStep13Running] = useState(false);
   const [step7FormatRunId, setStep7FormatRunId] = useState(0);
 
   // Shared document styling state — set in step 6, consumed in step 7
@@ -476,7 +475,6 @@ export function PipelineView({
       case 13:
         // Find the relevant versions for export
         const finalVersion = versions.find((v) => v.versionType === "final");
-        const exportedHtmlVersion = versions.find((v) => v.versionType === "exported_html");
         return (
           <ExportStep
             projectId={project.id}
@@ -485,10 +483,7 @@ export function PipelineView({
             dealType={project.briefData?.dealType}
             coverImageUrl={coverImageUrl}
             finalVersion={finalVersion}
-            exportedHtmlVersion={exportedHtmlVersion}
             stage12Status={stageMap[12]?.status ?? "pending"}
-            stage13Status={status}
-            onRunningChange={setStep13Running}
           />
         );
 
@@ -537,7 +532,6 @@ export function PipelineView({
               ...(step9Running ? { 9: "running" as const } : {}),
               ...(step11Running ? { 11: "running" as const } : {}),
               ...(step12Running ? { 12: "running" as const } : {}),
-              ...(step13Running ? { 13: "running" as const } : {}),
             }}
           />
         </div>

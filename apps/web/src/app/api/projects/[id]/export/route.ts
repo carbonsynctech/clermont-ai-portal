@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@repo/db";
-import { projects, versions } from "@repo/db";
+import { auditLogs, projects, stages, versions } from "@repo/db";
+import { buildExportHtmlDocument } from "@repo/core";
 import { eq, and } from "drizzle-orm";
 import {
   Document,
@@ -85,6 +86,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = user.id;
 
   const { id: projectId } = await params;
   const format = req.nextUrl.searchParams.get("format");
@@ -98,24 +100,56 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  // HTML export — serve exported_html version content
-  if (format === "html") {
-    const htmlVersion = await db.query.versions.findFirst({
-      where: and(
-        eq(versions.projectId, projectId),
-        eq(versions.versionType, "exported_html")
-      ),
-      orderBy: (v, { desc }) => [desc(v.createdAt)],
+  const finalVersion = await db.query.versions.findFirst({
+    where: and(
+      eq(versions.projectId, projectId),
+      eq(versions.versionType, "final")
+    ),
+    orderBy: (v, { desc }) => [desc(v.createdAt)],
+  });
+
+  if (!finalVersion) {
+    return NextResponse.json(
+      { error: "No final version found." },
+      { status: 404 }
+    );
+  }
+
+  const title = project.title || `memo-${projectId}`;
+  const htmlDocument = buildExportHtmlDocument(finalVersion.content, title);
+
+  async function markStep13Completed(exportFormat: "html" | "pdf" | "docx" | "md") {
+    const now = new Date();
+
+    await db
+      .update(stages)
+      .set({
+        status: "completed",
+        completedAt: now,
+        updatedAt: now,
+        errorMessage: null,
+      })
+      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 13)));
+
+    await db
+      .update(projects)
+      .set({ status: "completed", currentStage: 13, updatedAt: now })
+      .where(eq(projects.id, projectId));
+
+    await db.insert(auditLogs).values({
+      projectId,
+      userId,
+      action: "export_requested",
+      stepNumber: 13,
+      payload: { format: exportFormat },
     });
+  }
 
-    if (!htmlVersion) {
-      return NextResponse.json(
-        { error: "HTML export not yet generated. Run Step 13 first." },
-        { status: 404 }
-      );
-    }
+  // HTML export — generate from final markdown
+  if (format === "html") {
+    await markStep13Completed("html");
 
-    return new NextResponse(htmlVersion.content, {
+    return new NextResponse(htmlDocument, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Content-Disposition": `attachment; filename="memo-${projectId}.html"`,
@@ -125,20 +159,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   // Markdown export — serve final version content (already markdown)
   if (format === "md") {
-    const finalVersion = await db.query.versions.findFirst({
-      where: and(
-        eq(versions.projectId, projectId),
-        eq(versions.versionType, "final")
-      ),
-      orderBy: (v, { desc }) => [desc(v.createdAt)],
-    });
-
-    if (!finalVersion) {
-      return NextResponse.json(
-        { error: "No final version found." },
-        { status: 404 }
-      );
-    }
+    await markStep13Completed("md");
 
     return new NextResponse(finalVersion.content, {
       headers: {
@@ -150,23 +171,9 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   // DOCX export — convert final markdown to DOCX
   if (format === "docx") {
-    const finalVersion = await db.query.versions.findFirst({
-      where: and(
-        eq(versions.projectId, projectId),
-        eq(versions.versionType, "final")
-      ),
-      orderBy: (v, { desc }) => [desc(v.createdAt)],
-    });
-
-    if (!finalVersion) {
-      return NextResponse.json(
-        { error: "No final version found." },
-        { status: 404 }
-      );
-    }
-
     const doc = markdownToDocx(finalVersion.content);
     const buffer = await Packer.toBuffer(doc);
+    await markStep13Completed("docx");
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
@@ -181,14 +188,14 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const workerUrl = process.env["WORKER_URL"] ?? "http://localhost:3001";
   const workerSecret = process.env["WORKER_SECRET"] ?? "";
 
-  const workerRes = await fetch(
-    `${workerUrl}/export/pdf?projectId=${encodeURIComponent(projectId)}`,
-    {
-      headers: {
-        "x-worker-secret": workerSecret,
-      },
-    }
-  );
+  const workerRes = await fetch(`${workerUrl}/export/pdf`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-worker-secret": workerSecret,
+    },
+    body: JSON.stringify({ projectId, html: htmlDocument }),
+  });
 
   if (!workerRes.ok) {
     const text = await workerRes.text();
@@ -199,6 +206,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   }
 
   const pdfBuffer = await workerRes.arrayBuffer();
+  await markStep13Completed("pdf");
 
   return new NextResponse(pdfBuffer, {
     headers: {
