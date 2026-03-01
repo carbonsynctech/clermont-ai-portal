@@ -1,6 +1,17 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalEnv": [
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "DATABASE_URL",
+    "WORKER_SECRET",
+    "WORKER_URL",
+    "NEXT_PUBLIC_WORKER_URL",
+    "ANTHROPIC_API_KEY",
+    "GOOGLE_GEMINI_API_KEY"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
