@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@repo/db";
-import { projects, stages, auditLogs } from "@repo/db";
-import { eq, and } from "drizzle-orm";
+import { projects, stages, auditLogs, versions } from "@repo/db";
+import { eq, and, inArray } from "drizzle-orm";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -14,6 +14,21 @@ interface CritiqueDraftItem {
   detail: string;
   isCustom?: boolean;
 }
+
+function countWords(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
+}
+
+const CARRY_FORWARD_VERSION_TYPES = [
+  "final",
+  "human_reviewed",
+  "final_styled",
+  "fact_checked",
+  "styled",
+  "synthesis",
+] as const;
 
 function isValidCritiqueDraftItem(value: unknown): value is CritiqueDraftItem {
   if (!value || typeof value !== "object") return false;
@@ -131,6 +146,41 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
 
   if (selectedCritiques.length === 0) {
+    const carryForwardVersion = await db.query.versions.findFirst({
+      where: and(
+        eq(versions.projectId, projectId),
+        inArray(versions.versionType, [...CARRY_FORWARD_VERSION_TYPES])
+      ),
+      orderBy: (v, { desc }) => [desc(v.createdAt)],
+    });
+
+    if (!carryForwardVersion) {
+      return NextResponse.json(
+        { error: "No eligible version found to carry forward as final." },
+        { status: 400 }
+      );
+    }
+
+    const [finalVersion] = await db
+      .insert(versions)
+      .values({
+        projectId,
+        producedByStep: 12,
+        versionType: "final",
+        internalLabel: "Final V6 (No Critiques Selected)",
+        content: carryForwardVersion.content,
+        wordCount: countWords(carryForwardVersion.content),
+        isClientVisible: false,
+      })
+      .returning();
+
+    if (!finalVersion) {
+      return NextResponse.json(
+        { error: "Failed to create final version for skipped Step 12." },
+        { status: 500 }
+      );
+    }
+
     // Skip step 12 entirely when no critiques are selected
     await db
       .update(stages)
@@ -144,8 +194,22 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     await db
       .update(projects)
-      .set({ currentStage: 13, updatedAt: new Date() })
+      .set({ currentStage: 13, activeVersionId: finalVersion.id, updatedAt: new Date() })
       .where(eq(projects.id, projectId));
+
+    await db.insert(auditLogs).values({
+      projectId,
+      userId: user.id,
+      action: "stage_completed",
+      stepNumber: 12,
+      payload: {
+        skipped: true,
+        reason: "No critiques selected",
+        carriedForwardFromVersionId: carryForwardVersion.id,
+        carriedForwardFromVersionType: carryForwardVersion.versionType,
+        finalVersionId: finalVersion.id,
+      },
+    });
 
     return NextResponse.json({ ok: true, nextStep: 13, skippedStep12: true });
   }

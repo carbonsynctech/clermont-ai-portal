@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MoreHorizontal, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { parseCritiques } from "@repo/core";
 import { Button } from "@/components/ui/button";
@@ -82,6 +82,16 @@ export function CritiqueSelector({
   const [editDetail, setEditDetail] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const onSelectedCritiquesChangeRef = useRef(onSelectedCritiquesChange);
+  const onDraftChangeRef = useRef(onDraftChange);
+
+  useEffect(() => {
+    onSelectedCritiquesChangeRef.current = onSelectedCritiquesChange;
+  }, [onSelectedCritiquesChange]);
+
+  useEffect(() => {
+    onDraftChangeRef.current = onDraftChange;
+  }, [onDraftChange]);
 
   const allSelected = critiques.length > 0 && selectedIds.length === critiques.length;
 
@@ -292,13 +302,13 @@ export function CritiqueSelector({
       .filter((critique) => selectedIds.includes(critique.id))
       .map((critique) => `${stripNumericPrefix(critique.title)}\n${critique.detail}`);
 
-    onSelectedCritiquesChange?.(selectedCritiques);
-    onDraftChange?.({
+    onSelectedCritiquesChangeRef.current?.(selectedCritiques);
+    onDraftChangeRef.current?.({
       critiques,
       selectedIds,
       selectedCritiques,
     });
-  }, [critiques, onDraftChange, onSelectedCritiquesChange, selectedIds]);
+  }, [critiques, selectedIds]);
 
   return (
     <div className="space-y-4">

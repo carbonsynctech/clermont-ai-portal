@@ -73,10 +73,10 @@ export async function runJob(jobId: string): Promise<void> {
           await finalStylePass(projectId, userId, onChunk);
           break;
         case 11:
-          await devilsAdvocate(projectId, userId);
+          await devilsAdvocate(projectId, userId, onChunk);
           break;
         case 12:
-          await integrateCritiques(projectId, userId);
+          await integrateCritiques(projectId, userId, onChunk);
           break;
         default:
           throw new Error(`Step ${stepNumber} handler not implemented yet`);

@@ -7,7 +7,11 @@ import {
 } from "@repo/core";
 import { eq, and } from "drizzle-orm";
 
-export async function devilsAdvocate(projectId: string, userId: string): Promise<void> {
+export async function devilsAdvocate(
+  projectId: string,
+  userId: string,
+  onChunk?: (chunk: string) => void,
+): Promise<void> {
   // 1. Fetch project
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
@@ -37,12 +41,12 @@ export async function devilsAdvocate(projectId: string, userId: string): Promise
 
   const startedAt = Date.now();
 
-  // 4. Call Claude
-  const result = await claude.call({
+  // 4. Call Claude (streaming when callback is provided)
+  const callOptions = {
     system: buildDevilsAdvocateSystemPrompt(),
     messages: [
       {
-        role: "user",
+        role: "user" as const,
         content: buildDevilsAdvocateUserMessage(
           humanReviewedVersion.content,
           project.masterPrompt
@@ -50,7 +54,10 @@ export async function devilsAdvocate(projectId: string, userId: string): Promise
       },
     ],
     maxTokens: 4096,
-  });
+  };
+  const result = onChunk
+    ? await claude.stream(callOptions, onChunk)
+    : await claude.call(callOptions);
 
   const durationMs = Date.now() - startedAt;
 

@@ -10,7 +10,11 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).length;
 }
 
-export async function integrateCritiques(projectId: string, userId: string): Promise<void> {
+export async function integrateCritiques(
+  projectId: string,
+  userId: string,
+  onChunk?: (chunk: string) => void,
+): Promise<void> {
   // 1. Fetch project
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
@@ -55,23 +59,44 @@ export async function integrateCritiques(projectId: string, userId: string): Pro
 
   const startedAt = Date.now();
 
+  onChunk?.("Preparing critique integration input...\n");
 
   // 5. Integrate critiques (if any). For zero critiques, carry forward V5 as V6.
   const hasSelectedCritiques = selectedCritiques.length > 0;
+  if (!hasSelectedCritiques) {
+    onChunk?.("No critiques selected, carrying forward Step 10 output as Final V6.\n");
+  }
   const result = hasSelectedCritiques
-    ? await claude.callWithThinking({
-      system: buildCritiqueIntegrationSystemPrompt(),
-      messages: [
+    ? await (onChunk
+      ? claude.streamWithThinking(
         {
-          role: "user",
-          content: buildCritiqueIntegrationUserMessage(
-            humanReviewedVersion.content,
-            selectedCritiques
-          ),
+          system: buildCritiqueIntegrationSystemPrompt(),
+          messages: [
+            {
+              role: "user",
+              content: buildCritiqueIntegrationUserMessage(
+                humanReviewedVersion.content,
+                selectedCritiques
+              ),
+            },
+          ],
+          maxTokens: 18192, // 8192 output + 10000 thinking budget
         },
-      ],
-      maxTokens: 18192, // 8192 output + 10000 thinking budget
-    })
+        onChunk,
+      )
+      : claude.callWithThinking({
+        system: buildCritiqueIntegrationSystemPrompt(),
+        messages: [
+          {
+            role: "user",
+            content: buildCritiqueIntegrationUserMessage(
+              humanReviewedVersion.content,
+              selectedCritiques
+            ),
+          },
+        ],
+        maxTokens: 18192, // 8192 output + 10000 thinking budget
+      }))
     : null;
 
   const durationMs = Date.now() - startedAt;

@@ -164,6 +164,70 @@ class ClaudeClient {
 
     return { content, thinking, inputTokens, outputTokens, model };
   }
+
+  async streamWithThinking(
+    options: ClaudeCallOptions,
+    onChunk: (text: string) => void,
+  ): Promise<ClaudeThinkingResult> {
+    const {
+      system,
+      messages,
+      maxTokens = DEFAULT_MAX_TOKENS + THINKING_BUDGET_TOKENS,
+      model = DEFAULT_MODEL,
+      onComplete,
+    } = options;
+
+    const client = this.getClient();
+
+    type RawEvent = {
+      type: string;
+      delta?: { type: string; text?: string; thinking?: string };
+      message?: { usage?: { input_tokens: number } };
+      usage?: { output_tokens: number };
+    };
+
+    const rawStream = (await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      system,
+      messages,
+      stream: true,
+      thinking: {
+        type: "enabled",
+        budget_tokens: THINKING_BUDGET_TOKENS,
+      },
+    } as Parameters<typeof client.messages.create>[0])) as AsyncIterable<RawEvent>;
+
+    let content = "";
+    let thinking = "";
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    for await (const event of rawStream) {
+      if (
+        event.type === "content_block_delta" &&
+        event.delta?.type === "text_delta" &&
+        event.delta.text
+      ) {
+        onChunk(event.delta.text);
+        content += event.delta.text;
+      } else if (
+        event.type === "content_block_delta" &&
+        event.delta?.type === "thinking_delta" &&
+        event.delta.thinking
+      ) {
+        thinking += event.delta.thinking;
+      } else if (event.type === "message_start" && event.message?.usage) {
+        inputTokens = event.message.usage.input_tokens;
+      } else if (event.type === "message_delta" && event.usage) {
+        outputTokens = event.usage.output_tokens;
+      }
+    }
+
+    onComplete?.(inputTokens, outputTokens);
+
+    return { content, thinking, inputTokens, outputTokens, model };
+  }
 }
 
 export const claude = new ClaudeClient();

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, Copy, Check } from "lucide-react";
+import { useAnimatedStreamText } from "@/hooks/use-animated-stream-text";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -99,6 +100,8 @@ export function applyFixToDocument(docContent: string, raw: string): string {
 
 /** Render the AI chat bubble content. Parses structured format when complete. */
 export function AssistantContent({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
+  const animatedStreamingContent = useAnimatedStreamText(content, Boolean(isStreaming));
+
   if (!content) {
     return (
       <span className="flex items-center gap-1.5 text-muted-foreground text-sm">
@@ -109,7 +112,7 @@ export function AssistantContent({ content, isStreaming }: { content: string; is
   }
 
   if (isStreaming) {
-    return <p className="text-sm leading-relaxed whitespace-pre-wrap">{content}</p>;
+    return <p className="text-sm leading-relaxed whitespace-pre-wrap">{animatedStreamingContent}</p>;
   }
 
   const parsed = parseFixResponse(content);

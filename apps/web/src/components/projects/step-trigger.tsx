@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Loader2, XCircle } from "lucide-react";
 import { useJobStatus } from "@/hooks/use-job-status";
+import { useAnimatedStreamText } from "@/hooks/use-animated-stream-text";
 
 // ─── Shared state hook ────────────────────────────────────────────────────────
 
@@ -220,6 +221,8 @@ export function StepTriggerButton({ trigger, label, disabled = false, disabledRe
 export function StepTriggerOutput({ trigger }: { trigger: StepTriggerState }) {
   const { phase, showError, elapsedSeconds, partialOutput, outputRef, handleRun } = trigger;
   const showRetryCta = showError?.includes("Job not found") ?? false;
+  const isStreamingPhase = phase === "streaming" || phase === "waiting";
+  const animatedOutput = useAnimatedStreamText(partialOutput, isStreamingPhase);
 
   if (!phase && !showError) return null;
 
@@ -262,12 +265,12 @@ export function StepTriggerOutput({ trigger }: { trigger: StepTriggerState }) {
             ref={outputRef}
             className="p-4 text-xs font-mono leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto text-foreground/80"
           >
-            {partialOutput || (
+            {animatedOutput || (
               <span className="text-muted-foreground italic">
                 {phase === "dispatching" ? "Connecting…" : "Waiting for first token…"}
               </span>
             )}
-            {(phase === "streaming" || phase === "waiting") && (
+            {isStreamingPhase && (
               <span className="inline-block w-1.5 h-3.5 bg-primary/70 ml-0.5 animate-pulse align-text-bottom" />
             )}
           </pre>

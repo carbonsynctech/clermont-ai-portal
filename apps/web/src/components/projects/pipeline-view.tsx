@@ -695,7 +695,7 @@ export function PipelineView({
 
           <div className="relative">
             {renderStepContent()}
-            {showFloatingStepBar && !(activeStep === 4 && versions.length > 0) && (
+            {showFloatingStepBar && activeStep < 13 && !(activeStep === 4 && versions.length > 0) && (
               <div className="sticky bottom-4 z-30 mt-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 px-5 py-3.5 shadow-lg backdrop-blur">
                 <div className="flex items-center gap-2.5 min-w-0">
                   {activeStatus === "completed" && (
