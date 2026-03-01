@@ -13,7 +13,11 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).length;
 }
 
-export async function synthesize(projectId: string, userId: string): Promise<void> {
+export async function synthesize(
+  projectId: string,
+  userId: string,
+  onChunk?: (chunk: string) => void,
+): Promise<void> {
   // 1. Fetch project
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
@@ -21,6 +25,8 @@ export async function synthesize(projectId: string, userId: string): Promise<voi
 
   if (!project) throw new Error(`Project ${projectId} not found`);
   if (!project.masterPrompt) throw new Error(`Project ${projectId} has no master prompt`);
+
+  onChunk?.("Preparing synthesis input...\n");
 
   // 2. Update stage to running
   await db
@@ -43,6 +49,8 @@ export async function synthesize(projectId: string, userId: string): Promise<voi
     throw new Error(`Project ${projectId} has no persona draft versions`);
   }
 
+  onChunk?.(`Loaded ${draftVersions.length} persona drafts.\n`);
+
   // Fetch persona names
   const personaRows = await db.query.personas.findMany({
     where: eq(personas.projectId, projectId),
@@ -58,11 +66,16 @@ export async function synthesize(projectId: string, userId: string): Promise<voi
   const totalTokens = drafts.reduce((sum, d) => sum + estimateTokens(d.content), 0);
   if (totalTokens > MAX_DRAFT_TOKENS) {
     const ratio = MAX_DRAFT_TOKENS / totalTokens;
+    onChunk?.(
+      `Drafts exceed context budget (${totalTokens} tokens). Truncating to ${MAX_DRAFT_TOKENS} tokens...\n`,
+    );
     drafts = drafts.map((d) => ({
       ...d,
       content: d.content.slice(0, Math.floor(d.content.length * ratio)),
     }));
   }
+
+  onChunk?.("Running synthesis with Claude extended thinking...\n");
 
   // 5. Call Claude with extended thinking
   const result = await claude.callWithThinking({
@@ -77,6 +90,7 @@ export async function synthesize(projectId: string, userId: string): Promise<voi
   });
 
   const durationMs = Date.now() - startedAt;
+  onChunk?.(`Synthesis completed in ${Math.round(durationMs / 1000)}s. Saving version...\n`);
 
   // 6. Insert synthesis version
   const [newVersion] = await db
@@ -93,6 +107,8 @@ export async function synthesize(projectId: string, userId: string): Promise<voi
     .returning();
 
   if (!newVersion) throw new Error("Failed to insert synthesis version");
+
+  onChunk?.("Synthesis version saved. Finalizing stage...\n");
 
   // 7. Update activeVersionId
   await db

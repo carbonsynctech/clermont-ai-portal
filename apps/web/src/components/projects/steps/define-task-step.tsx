@@ -727,7 +727,6 @@ export function DefineTaskStep({
             <>
               <Button
                 size="sm"
-                variant="outline"
                 disabled={isSavingPrompt}
                 onClick={async () => {
                   setIsSavingPrompt(true);
@@ -740,6 +739,7 @@ export function DefineTaskStep({
                     });
                     if (!res.ok) throw new Error("Failed to save");
                     setIsEditingPrompt(false);
+                    router.push(`/projects/${projectId}?step=2`);
                   } catch {
                     setPromptSaveError("Failed to save prompt. Please try again.");
                   } finally {
@@ -747,7 +747,7 @@ export function DefineTaskStep({
                   }
                 }}
               >
-                {isSavingPrompt ? "Saving…" : "Update Step 1"}
+                {isSavingPrompt ? "Saving…" : "Save and continue to Step 2"}
               </Button>
             </>
           )}

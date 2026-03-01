@@ -40,6 +40,10 @@ export interface StageMetadata {
   durationMs?: number;
   factCheckIssues?: string[];
   factCheckFindings?: FactCheckFinding[];
+  factCheckApprovedFindingIds?: string[];
+  factCheckApprovedIssues?: string[];
+  factCheckAppliedCorrections?: number;
+  factCheckRevisedVersionId?: string;
   reviewDraftContent?: string;
   reviewDraftSavedAt?: string;
   reviewNotes?: string;

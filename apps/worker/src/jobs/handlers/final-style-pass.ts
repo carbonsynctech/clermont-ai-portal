@@ -10,7 +10,11 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).length;
 }
 
-export async function finalStylePass(projectId: string, userId: string): Promise<void> {
+export async function finalStylePass(
+  projectId: string,
+  userId: string,
+  onChunk?: (chunk: string) => void,
+): Promise<void> {
   // 1. Fetch project
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
@@ -31,18 +35,14 @@ export async function finalStylePass(projectId: string, userId: string): Promise
     throw new Error(`Project ${projectId} has no synthesis version`);
   }
 
-  // 3. Fetch approved fact-check issues from human checkpoint
-  const factCheckApprovalLog = await db.query.auditLogs.findFirst({
-    where: and(
-      eq(auditLogs.projectId, projectId),
-      eq(auditLogs.action, "fact_check_approved")
-    ),
-    orderBy: (al, { desc }) => [desc(al.createdAt)],
+  // 3. Fetch approved fact-check issues from Step 8 persisted metadata
+  const step8 = await db.query.stages.findFirst({
+    where: and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)),
   });
 
-  const approvalPayload = factCheckApprovalLog?.payload as { issuesApproved?: unknown } | null;
-  const approvedIssues = Array.isArray(approvalPayload?.issuesApproved)
-    ? approvalPayload.issuesApproved.filter((issue): issue is string => typeof issue === "string")
+  const approvedIssuesRaw = step8?.metadata?.factCheckApprovedIssues;
+  const approvedIssues = Array.isArray(approvedIssuesRaw)
+    ? approvedIssuesRaw.filter((issue): issue is string => typeof issue === "string")
     : [];
 
   // 4. Fetch condensed rules from style guide
@@ -65,17 +65,20 @@ export async function finalStylePass(projectId: string, userId: string): Promise
     ? `\n\nApproved fact-check corrections to integrate before final styling:\n${approvedIssues.map((issue, index) => `${index + 1}. ${issue}`).join("\n")}\n\nRequirements:\n- Integrate each approved correction into the memo where relevant.\n- Keep markdown structure and headings intact.\n- Preserve memo intent and readability while correcting factual claims.`
     : "\n\nNo approved fact-check corrections were selected. Apply only the final style pass.";
 
-  // 6. Call Claude
-  const result = await claude.call({
+  // 6. Call Claude (streaming when callback is provided)
+  const callOptions = {
     system: buildFinalStyleSystemPrompt(condensedRules),
     messages: [
       {
-        role: "user",
+        role: "user" as const,
         content: `${buildFinalStyleUserMessage(synthesisVersion.content)}${issueBlock}`,
       },
     ],
     maxTokens: 8192,
-  });
+  };
+  const result = onChunk
+    ? await claude.stream(callOptions, onChunk)
+    : await claude.call(callOptions);
 
   const durationMs = Date.now() - startedAt;
 

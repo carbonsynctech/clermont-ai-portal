@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GoogleGenAI } from "@google/genai";
 
 const DEFAULT_MODEL = "gemini-2.5-pro";
@@ -126,26 +125,23 @@ function normalizeFactCheckResult(parsed: unknown, fallbackContent: string): Fac
 }
 
 class GeminiClient {
-  private client: GoogleGenerativeAI | null = null;
-
-  private getClient(): GoogleGenerativeAI {
-    if (this.client) {
-      return this.client;
-    }
-
+  private getApiKey(): string {
     const apiKey = process.env["GOOGLE_GEMINI_API_KEY"];
     if (!apiKey) throw new Error("GOOGLE_GEMINI_API_KEY is not set");
-    this.client = new GoogleGenerativeAI(apiKey);
-    return this.client;
+    return apiKey;
   }
 
   async factCheck(
     content: string,
     claims: string[]
   ): Promise<FactCheckResult> {
-    const model = this.getClient().getGenerativeModel({ model: DEFAULT_MODEL });
+    const ai = new GoogleGenAI({ apiKey: this.getApiKey() });
 
     const prompt = `You are a professional fact-checker for investment memos and financial content.
+
+You must use web search/grounding to verify claims against reliable public sources.
+Prioritize primary/official sources where possible (company filings, regulator/government sources, major datasets, reputable publications).
+For each finding, include at least one source URL when available.
 
   You MUST preserve the original markdown structure in correctedContent.
   Rules for correctedContent:
@@ -185,10 +181,28 @@ Respond with a JSON object in this exact format:
   "correctedContent": "the full content with corrections applied"
 }`;
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const result = await ai.models.generateContent({
+      model: DEFAULT_MODEL,
+      contents: prompt,
+      config: {
+        temperature: 0,
+        tools: [{ googleSearch: {} }],
+      } as Record<string, unknown>,
+    });
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const textFromResponse = (() => {
+      if (typeof result.text === "string") return result.text;
+      const parts = result.candidates?.[0]?.content?.parts ?? [];
+      for (const part of parts) {
+        const partText = (part as Record<string, unknown>)["text"];
+        if (typeof partText === "string" && partText.length > 0) {
+          return partText;
+        }
+      }
+      return "";
+    })();
+
+    const jsonMatch = textFromResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return normalizeFactCheckResult(null, content);
     }

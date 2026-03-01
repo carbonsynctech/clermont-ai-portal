@@ -8,21 +8,18 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import Image from "next/image";
 
-function FleurDeLis(props: React.SVGProps<SVGSVGElement>) {
+function FleurDeLis({ className }: { className?: string }) {
+
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" {...props}>
-      {/* top petal */}
-      <path d="M12 1c-.6 1.8-2.5 4-2.5 6.5 0 1.6 1 2.7 2.5 3 1.5-.3 2.5-1.4 2.5-3C14.5 5 12.6 2.8 12 1z" />
-      {/* left petal */}
-      <path d="M9.5 10.5C7 10.5 4.5 12 4.5 14.5c0 1.8 1.3 3 3 3 1.2 0 2.2-.6 3-1.3-.3-.8-.5-1.7-.5-2.7 0-.7.2-2 1-3.5-.5-.3-1-.5-1.5-.5z" />
-      {/* right petal */}
-      <path d="M14.5 10.5c-.5 0-1 .2-1.5.5.8 1.5 1 2.8 1 3.5 0 1-.2 1.9-.5 2.7.8.7 1.8 1.3 3 1.3 1.7 0 3-1.2 3-3 0-2.5-2.5-4-5-4z" />
-      {/* collar band */}
-      <path d="M9.5 18.5h5l-.5 1h-4z" />
-      {/* base drop */}
-      <path d="M10 19.5l-.5 3h5l-.5-3z" />
-    </svg>
+    <Image
+      src="/fleur-de-lis.png"
+      alt="Fleur-de-lis"
+      width={16}
+      height={16}
+      className={`invert ${className ?? ""}`}
+    />
   );
 }
 

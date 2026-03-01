@@ -1,8 +1,13 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { Persona } from "@repo/db";
 
@@ -12,6 +17,8 @@ interface PersonaCardV2Props {
   onSelect: () => void;
   onView: () => void;
   disableSelect?: boolean;
+  onDelete?: () => void;
+  isDeleting?: boolean;
 }
 
 export function PersonaCardV2({
@@ -20,6 +27,8 @@ export function PersonaCardV2({
   onSelect,
   onView,
   disableSelect = false,
+  onDelete,
+  isDeleting = false,
 }: PersonaCardV2Props) {
   return (
     <div
@@ -36,11 +45,37 @@ export function PersonaCardV2({
       <div className="space-y-0.5">
         <div className="flex items-start justify-between gap-2">
           <p className="text-base font-semibold leading-snug">{persona.name}</p>
-          {isSelected && (
-            <Badge className="shrink-0 h-5 w-5 p-0 flex items-center justify-center">
-              <Check className="h-3 w-3" />
-            </Badge>
-          )}
+          <div className="flex items-center gap-1">
+            {onDelete && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    disabled={isDeleting}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreHorizontal className="size-4" />
+                    <span className="sr-only">Open persona actions</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
         {persona.tags.length > 0 && (
           <p className="text-sm text-muted-foreground">{persona.tags.join(" · ")}</p>

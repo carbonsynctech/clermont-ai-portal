@@ -138,7 +138,12 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
           <FileUpload
             className="w-full"
             value={selectedFiles}
-            onValueChange={setSelectedFiles}
+            onValueChange={(files) => {
+              setSelectedFiles(files);
+              if (files.length > 0) {
+                setNdaAcknowledged(true);
+              }
+            }}
             onFileReject={(_, message) => setUploadError(message)}
             accept=".pdf,.txt,.docx"
             maxFiles={1}
@@ -179,7 +184,7 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         <label className="flex items-start gap-2 cursor-pointer">
           <input
             type="checkbox"
-            className="mt-0.5 h-3.5 w-3.5 shrink-0"
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
             checked={ndaAcknowledged}
             onChange={(e) => setNdaAcknowledged(e.target.checked)}
           />
@@ -228,7 +233,7 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         </div>
 
         <Button
-          variant={hasMaterials ? "outline" : "default"}
+          variant="default"
           className="shrink-0"
           disabled={hasMaterials ? isUploading : isFinalizing || isUploading}
           onClick={() => void handlePrimaryAction()}
@@ -239,7 +244,7 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
               Saving…
             </>
           ) : (
-            hasMaterials ? "Update Step 3" : "Save & Continue to Step 4"
+            "Save and continue to Step 4"
           )}
         </Button>
       </div>

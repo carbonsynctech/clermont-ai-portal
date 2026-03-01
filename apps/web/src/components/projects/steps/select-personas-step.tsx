@@ -39,8 +39,13 @@ export function SelectPersonasStep({
   );
 
   const [customPersonas, setCustomPersonas] = useState<Persona[]>([]);
+  const [deletedPersonaIds, setDeletedPersonaIds] = useState<string[]>([]);
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+
+  const libraryInjectedPersonas = [...customPersonas, ...projectPersonas]
+    .filter((persona, index, arr) => arr.findIndex((p) => p.id === persona.id) === index)
+    .filter((persona) => !deletedPersonaIds.includes(persona.id));
 
   function handleSelect(persona: Persona) {
     if (selectedIds.includes(persona.id)) {
@@ -51,6 +56,13 @@ export function SelectPersonasStep({
       setSelectedIds((prev) => [...prev, persona.id]);
       setSelectedPersonas((ps) => [...ps, persona]);
     }
+  }
+
+  function handlePersonaDeleted(personaId: string) {
+    setCustomPersonas((prev) => prev.filter((persona) => persona.id !== personaId));
+    setSelectedIds((prev) => prev.filter((id) => id !== personaId));
+    setSelectedPersonas((prev) => prev.filter((persona) => persona.id !== personaId));
+    setDeletedPersonaIds((prev) => (prev.includes(personaId) ? prev : [...prev, personaId]));
   }
 
   async function handleConfirm() {
@@ -109,11 +121,16 @@ export function SelectPersonasStep({
         onSelect={handleSelect}
         selectedCount={selectedIds.length}
         maxCount={REQUIRED_COUNT}
-        onPersonaGenerated={(p) => setCustomPersonas((prev) => [p, ...prev])}
+        onPersonaGenerated={(p) => {
+          setCustomPersonas((prev) => [p, ...prev]);
+          setDeletedPersonaIds((prev) => prev.filter((id) => id !== p.id));
+        }}
       />
 
       <PersonaLibraryPanel
         projectId={projectId}
+        injectedPersonas={libraryInjectedPersonas}
+        onPersonaDeleted={handlePersonaDeleted}
         selectedIds={selectedIds}
         onSelect={handleSelect}
         selectedCount={selectedIds.length}
@@ -163,14 +180,12 @@ export function SelectPersonasStep({
             disabled={selectedIds.length !== REQUIRED_COUNT || isConfirming || !stage1Done}
             onClick={() => void handleConfirm()}
             className="shrink-0"
-            variant={isConfirmed ? "outline" : "default"}
+            variant="default"
           >
             {isConfirming ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirming…</>
-            ) : isConfirmed ? (
-              "Update Step 2"
             ) : (
-              "Save & Continue to Step 3"
+              "Save and continue to Step 3"
             )}
           </Button>
         </div>

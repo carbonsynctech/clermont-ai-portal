@@ -128,6 +128,9 @@ interface PipelineViewProps {
   latestStyleGuide: StyleGuide | null;
   initialStep: number;
   factCheckFindings: FactCheckFinding[] | null;
+  factCheckApprovedFindingIds?: string[] | null;
+  factCheckApprovedIssues?: string[] | null;
+  factCheckAppliedCorrections?: number | null;
   coverImageUrl?: string;
 }
 
@@ -140,6 +143,9 @@ export function PipelineView({
   latestStyleGuide,
   initialStep,
   factCheckFindings,
+  factCheckApprovedFindingIds,
+  factCheckApprovedIssues,
+  factCheckAppliedCorrections,
   coverImageUrl,
 }: PipelineViewProps) {
   const router = useRouter();
@@ -154,6 +160,7 @@ export function PipelineView({
   const [step11Submitting, setStep11Submitting] = useState(false);
   const [step11SelectedCritiques, setStep11SelectedCritiques] = useState<string[]>([]);
   const [step11Draft, setStep11Draft] = useState<Step11DraftPayload | null>(null);
+  const [optionalStepCompleting, setOptionalStepCompleting] = useState<number | null>(null);
   const [step12Running, setStep12Running] = useState(false);
   const [step12Skipping, setStep12Skipping] = useState(false);
   const [step7FormatRunId, setStep7FormatRunId] = useState(0);
@@ -220,6 +227,7 @@ export function PipelineView({
 
   const sourceSynthesisVersion = getLatestVersion("synthesis");
   const factCheckVersion = versions.filter((v) => v.versionType === "fact_checked").at(-1);
+  const finalStyledVersion = getLatestVersion("final_styled");
 
   const persistStep11Draft = useCallback(
     (draft: Step11DraftPayload) => {
@@ -257,10 +265,32 @@ export function PipelineView({
   const activeStatus = stageMap[activeStep]?.status ?? "pending";
   const isNewStep = activeStep >= project.currentStage;
 
-  function goToNextStep() {
+  async function goToNextStep() {
+    if (activeStep === 7 || activeStep === 9) {
+      setOptionalStepCompleting(activeStep);
+      try {
+        const res = await fetch(`/api/projects/${project.id}/stages/${activeStep}/complete`, {
+          method: "POST",
+        });
+
+        if (!res.ok) {
+          throw new Error(`Failed to complete Step ${activeStep}`);
+        }
+      } catch (error) {
+        console.error(`Step ${activeStep} completion error:`, error);
+        alert(error instanceof Error ? error.message : `Failed to complete Step ${activeStep}`);
+        return;
+      } finally {
+        setOptionalStepCompleting(null);
+      }
+    }
+
     const next = activeStep + 1;
     setActiveStep(next);
     router.push(`/projects/${project.id}?step=${next}`);
+    if (activeStep === 7 || activeStep === 9) {
+      router.refresh();
+    }
   }
 
   async function handleStep11Continue() {
@@ -443,7 +473,7 @@ export function PipelineView({
         );
 
       case 8: {
-        const canRunStep8 = stageMap[7]?.status === "completed";
+        const canRunStep8 = stageMap[5]?.status === "completed";
         if (factCheckVersion && (status === "awaiting_human" || status === "completed")) {
           return (
             <FactCheckReviewStep
@@ -451,6 +481,10 @@ export function PipelineView({
               factCheckFindings={factCheckFindings ?? []}
               sourceVersion={sourceSynthesisVersion}
               factCheckedVersion={factCheckVersion}
+              approvedFindingIds={factCheckApprovedFindingIds ?? undefined}
+              approvedIssues={factCheckApprovedIssues ?? undefined}
+              appliedCorrections={factCheckAppliedCorrections ?? undefined}
+              isStepApproved={status === "completed"}
             />
           );
         }
@@ -469,7 +503,7 @@ export function PipelineView({
                 label="Fact-Check with Gemini"
                 currentStatus={status}
                 disabled={!canRunStep8}
-                disabledReason="Complete Step 7 to run this step."
+                disabledReason="Complete Step 5 to run this step."
                 autoRun={canRunStep8}
                 onRunningChange={setStep8Running}
               />
@@ -506,10 +540,11 @@ export function PipelineView({
               projectId={project.id}
               initialContent={
                 getLatestVersion("human_reviewed")?.content
-                ?? getLatestVersion("final_styled")?.content
+                ?? finalStyledVersion?.content
+                ?? factCheckVersion?.content
                 ?? ""
               }
-              compareContent={getLatestVersion("final_styled")?.content}
+              compareContent={finalStyledVersion?.content ?? factCheckVersion?.content}
               versionLabel="Final Styled V4"
               hideActions
               onContentChange={handleStep10ContentChange}
@@ -668,7 +703,9 @@ export function PipelineView({
                   )}
 
                   <span className="text-sm font-medium text-foreground truncate">
-                    {activeStatus === "completed"
+                    {((activeStep === 7 || activeStep === 9) && activeStatus !== "completed")
+                      ? "Optional step — continue anytime or run it before moving on."
+                      : activeStatus === "completed"
                       ? STEP_COMPLETION_MESSAGES[activeStep]
                       : activeStatus === "running"
                         ? "Step is running…"
@@ -716,34 +753,46 @@ export function PipelineView({
                       <Button
                         size="sm"
                         disabled={
+                          optionalStepCompleting !== null
+                          ||
                           activeStep === 11
                             ? !["completed", "awaiting_human"].includes(activeStatus) || step11Submitting
                             : activeStep === 12
                               ? step12Skipping
-                              : activeStatus !== "completed"
+                              : activeStep === 7 || activeStep === 9
+                                ? false
+                                : activeStatus !== "completed"
                         }
                         onClick={
                           activeStep === 11
                             ? () => void handleStep11Continue()
                             : activeStep === 12
                               ? () => void handleStep12SkipContinue()
-                              : goToNextStep
+                              : () => void goToNextStep()
                         }
                       >
                         {activeStep === 11 && step11Submitting
                           ? "Saving…"
                           : activeStep === 12 && step12Skipping
                             ? "Saving…"
-                          : `Save and continue to Step ${activeStep + 1}`}
+                          : (activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
+                            ? "Saving…"
+                          : activeStep === 8
+                            ? "Continue to Step 9"
+                            : `Save and continue to Step ${activeStep + 1}`}
                       </Button>
                     ) : (
-                      activeStatus === "completed" && (
+                      (activeStatus === "completed" || activeStep === 7 || activeStep === 9) && (
                         <Button
-                          variant="outline"
                           size="sm"
-                          onClick={goToNextStep}
+                          onClick={() => void goToNextStep()}
+                          disabled={(activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep}
                         >
-                          Update Step {activeStep}
+                          {(activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
+                            ? "Saving…"
+                            : activeStep === 8
+                              ? "Continue to Step 9"
+                              : `Save and continue to Step ${activeStep + 1}`}
                         </Button>
                       )
                     )
@@ -790,18 +839,17 @@ export function PipelineView({
                   <Button
                     size="sm"
                     disabled={activeStatus !== "completed"}
-                    onClick={goToNextStep}
+                    onClick={() => void goToNextStep()}
                   >
                     Save and continue to Step {activeStep + 1}
                   </Button>
                 ) : (
                   activeStatus === "completed" && (
                     <Button
-                      variant="outline"
                       size="sm"
-                      onClick={goToNextStep}
+                      onClick={() => void goToNextStep()}
                     >
-                      Update Step {activeStep}
+                      Save and continue to Step {activeStep + 1}
                     </Button>
                   )
                 )}
@@ -829,7 +877,7 @@ function getPrerequisiteMessage(
     5: 4,
     6: 5,
     7: 5,
-    8: 7,
+    8: 5,
     9: 8,
     10: 9,
     11: 10,

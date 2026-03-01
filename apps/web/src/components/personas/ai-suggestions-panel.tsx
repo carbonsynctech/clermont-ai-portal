@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Sparkles, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,14 +32,12 @@ export function AISuggestionsPanel({
   selectedCount,
   maxCount,
 }: AISuggestionsPanelProps) {
-  const router = useRouter();
   const trigger = useStepTrigger(projectId, 2, stage2Status);
   const hasAutoDispatched = useRef(false);
   const [showCustomPrompt, setShowCustomPrompt] = useState(false);
   const [customPrompt, setCustomPrompt] = useState("");
   const [drawerPersona, setDrawerPersona] = useState<Persona | null>(null);
 
-  // Auto-dispatch on first mount if conditions met
   useEffect(() => {
     if (
       !hasAutoDispatched.current &&
@@ -51,15 +48,7 @@ export function AISuggestionsPanel({
       hasAutoDispatched.current = true;
       void trigger.handleRun();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Refresh page when generation completes to show new personas
-  useEffect(() => {
-    if (!trigger.isRunning && hasAutoDispatched.current && projectPersonas.length === 0) {
-      router.refresh();
-    }
-  }, [trigger.isRunning, projectPersonas.length, router]);
+  }, [projectPersonas.length, stage1Done, stage2Status, trigger]);
 
   return (
     <div className="rounded-xl border bg-card p-6 space-y-4">

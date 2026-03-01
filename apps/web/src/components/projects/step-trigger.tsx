@@ -218,16 +218,28 @@ export function StepTriggerButton({ trigger, label, disabled = false, disabledRe
 // ─── Panel-only (use full-width below the button row) ────────────────────────
 
 export function StepTriggerOutput({ trigger }: { trigger: StepTriggerState }) {
-  const { phase, showError, elapsedSeconds, partialOutput, outputRef } = trigger;
+  const { phase, showError, elapsedSeconds, partialOutput, outputRef, handleRun } = trigger;
+  const showRetryCta = showError?.includes("Job not found") ?? false;
 
   if (!phase && !showError) return null;
 
   return (
     <div className="space-y-2">
       {showError && (
-        <p className="text-xs text-destructive bg-destructive/10 rounded px-2 py-1.5 leading-relaxed">
-          {showError}
-        </p>
+        <div className="flex items-center gap-2 rounded bg-destructive/10 px-2 py-1.5">
+          <p className="text-xs text-destructive leading-relaxed">{showError}</p>
+          {showRetryCta && (
+            <Button
+              type="button"
+              size="xs"
+              variant="destructive"
+              className="ml-auto"
+              onClick={() => void handleRun()}
+            >
+              Try again
+            </Button>
+          )}
+        </div>
       )}
 
       {phase && (

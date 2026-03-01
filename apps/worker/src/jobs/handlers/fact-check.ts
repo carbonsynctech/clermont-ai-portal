@@ -46,7 +46,7 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
     throw new Error(`Project ${projectId} has no synthesis version to fact-check`);
   }
 
-  onChunk?.("Extracting factual claims with Claude…\n");
+  onChunk?.("Extracting factual claims…\n");
 
   // 4. Extract factual claims via Claude
   const claimsResult = await claude.call({
@@ -112,7 +112,7 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
     userId,
     action: "agent_response_received",
     stepNumber: 8,
-    modelId: "gemini-2.5-flash",
+    modelId: "gemini-2.5-pro+google-search",
     payload: {
       durationMs,
       issueCount,

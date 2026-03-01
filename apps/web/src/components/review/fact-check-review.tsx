@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,12 @@ function computeWordDiff(textA: string, textB: string) {
   const addedTokens = textB.split(/(\s+)/);
 
   return { wordsA, wordsB, removedTokens, addedTokens };
+}
+
+function countWords(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
 }
 
 function renderDiffTokens(tokens: string[], oppositeWordSet: Set<string>, mode: "removed" | "added") {
@@ -53,6 +59,62 @@ function renderDiffTokens(tokens: string[], oppositeWordSet: Set<string>, mode: 
   });
 }
 
+function renderPurpleDiffTokens(tokens: string[], oppositeWordSet: Set<string>, mode: "removed" | "added") {
+  return tokens.map((token, index) => {
+    if (/\s+/.test(token)) {
+      return <span key={`purple-${mode}-space-${index}`}>{token}</span>;
+    }
+
+    if (oppositeWordSet.has(token)) {
+      return <span key={`purple-${mode}-same-${index}`}>{token}</span>;
+    }
+
+    if (mode === "removed") {
+      return (
+        <mark
+          key={`purple-${mode}-diff-${index}`}
+          className="rounded px-0.5 bg-primary/20 text-primary line-through dark:bg-primary/35 dark:text-primary-foreground"
+        >
+          {token}
+        </mark>
+      );
+    }
+
+    return (
+      <mark
+        key={`purple-${mode}-diff-${index}`}
+        className="rounded px-0.5 bg-primary/25 text-primary dark:bg-primary/40 dark:text-primary-foreground"
+      >
+        {token}
+      </mark>
+    );
+  });
+}
+
+function escapeHtml(input: string): string {
+  return input
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function highlightAcceptedCorrections(content: string, correctedTexts: string[]): string {
+  if (correctedTexts.length === 0) return content;
+
+  let highlighted = content;
+  const uniqueTexts = [...new Set(correctedTexts.filter((text) => text.trim().length > 0))]
+    .sort((a, b) => b.length - a.length);
+
+  for (const correctedText of uniqueTexts) {
+    if (!highlighted.includes(correctedText)) continue;
+    highlighted = highlighted.split(correctedText).join(`<mark>${escapeHtml(correctedText)}</mark>`);
+  }
+
+  return highlighted;
+}
+
 function formatSourceLabel(source: FactCheckSource) {
   if (source.documentName && typeof source.pageNumber === "number") {
     return `${source.documentName} · p.${source.pageNumber}`;
@@ -74,6 +136,10 @@ interface FactCheckReviewStepProps {
   factCheckFindings: FactCheckFinding[];
   sourceVersion?: Version;
   factCheckedVersion: Version;
+  approvedFindingIds?: string[];
+  approvedIssues?: string[];
+  appliedCorrections?: number;
+  isStepApproved?: boolean;
 }
 
 export function FactCheckReviewStep({
@@ -81,26 +147,80 @@ export function FactCheckReviewStep({
   factCheckFindings,
   sourceVersion,
   factCheckedVersion,
+  approvedFindingIds,
+  approvedIssues,
+  appliedCorrections,
+  isStepApproved = false,
 }: FactCheckReviewStepProps) {
   const router = useRouter();
   const findingIds = useMemo(
     () => factCheckFindings.map((finding) => finding.id),
     [factCheckFindings],
   );
-  const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>(findingIds);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>(approvedFindingIds ?? findingIds);
+  const [isStartingOver, setIsStartingOver] = useState(false);
+  const [isApplyingCorrections, setIsApplyingCorrections] = useState(false);
+  const [isApproved, setIsApproved] = useState(false);
+  const [displayedContent, setDisplayedContent] = useState(factCheckedVersion.content);
+  const [appliedDiff, setAppliedDiff] = useState<ReturnType<typeof computeWordDiff> | null>(null);
+  const [lastApiOutput, setLastApiOutput] = useState<{
+    appliedCorrections: number;
+    issuesApproved: string[];
+    findingIds: string[];
+  } | null>(null);
 
   const issueCount = factCheckFindings.length;
   const acceptedCount = selectedFindingIds.length;
 
   const selectedSet = useMemo(() => new Set(selectedFindingIds), [selectedFindingIds]);
+  const approvedIdSet = useMemo(
+    () => new Set((isApproved ? (approvedFindingIds ?? selectedFindingIds) : approvedFindingIds) ?? []),
+    [approvedFindingIds, isApproved, selectedFindingIds],
+  );
+  const approvedFindings = useMemo(
+    () => factCheckFindings.filter((finding) => approvedIdSet.has(finding.id)),
+    [factCheckFindings, approvedIdSet],
+  );
+  const inlineHighlightedContent = useMemo(() => {
+    if (!isApproved && (!approvedFindingIds || approvedFindingIds.length === 0)) {
+      return displayedContent;
+    }
+    const correctedTexts = approvedFindings
+      .map((finding) => (typeof finding.correctedText === "string" ? finding.correctedText : ""))
+      .filter((value) => value.trim().length > 0);
+    return highlightAcceptedCorrections(displayedContent, correctedTexts);
+  }, [approvedFindingIds, approvedFindings, displayedContent, isApproved]);
+
+  useEffect(() => {
+    setSelectedFindingIds(approvedFindingIds ?? findingIds);
+    setDisplayedContent(factCheckedVersion.content);
+    setAppliedDiff(null);
+    setIsApproved(issueCount === 0 || isStepApproved);
+    if (isStepApproved) {
+      setLastApiOutput({
+        appliedCorrections: typeof appliedCorrections === "number" ? appliedCorrections : 0,
+        issuesApproved: approvedIssues ?? [],
+        findingIds: approvedFindingIds ?? [],
+      });
+    } else {
+      setLastApiOutput(null);
+    }
+  }, [
+    appliedCorrections,
+    approvedFindingIds,
+    approvedIssues,
+    factCheckedVersion.content,
+    findingIds,
+    isStepApproved,
+    issueCount,
+  ]);
 
   const wordDiff = useMemo(() => {
     if (!sourceVersion) {
       return null;
     }
-    return computeWordDiff(sourceVersion.content, factCheckedVersion.content);
-  }, [sourceVersion, factCheckedVersion.content]);
+    return computeWordDiff(sourceVersion.content, displayedContent);
+  }, [sourceVersion, displayedContent]);
 
   function toggleFinding(findingId: string) {
     setSelectedFindingIds((current) =>
@@ -111,7 +231,7 @@ export function FactCheckReviewStep({
   }
 
   async function handleStartOver() {
-    setIsSubmitting(true);
+    setIsStartingOver(true);
     try {
       const res = await fetch(`/api/projects/${projectId}/fact-check/restart`, {
         method: "POST",
@@ -131,7 +251,53 @@ export function FactCheckReviewStep({
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to restart fact-check");
     } finally {
-      setIsSubmitting(false);
+      setIsStartingOver(false);
+    }
+  }
+
+  async function handleAcceptCorrections() {
+    setIsApplyingCorrections(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/fact-check/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseContent: displayedContent,
+          findingIds: selectedFindingIds,
+        }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        revisedContent?: unknown;
+        appliedCorrections?: unknown;
+      };
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to apply accepted corrections");
+      }
+
+      const revisedContent = typeof data.revisedContent === "string" ? data.revisedContent : displayedContent;
+      const diff = computeWordDiff(displayedContent, revisedContent);
+      const issuesApproved = factCheckFindings
+        .filter((finding) => selectedFindingIds.includes(finding.id))
+        .map((finding) => finding.issue);
+      const appliedCount =
+        typeof data.appliedCorrections === "number" ? data.appliedCorrections : issuesApproved.length;
+
+      setDisplayedContent(revisedContent);
+      setAppliedDiff(diff);
+      setIsApproved(true);
+      setLastApiOutput({
+        appliedCorrections: appliedCount,
+        issuesApproved,
+        findingIds: selectedFindingIds,
+      });
+      router.refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to apply accepted corrections");
+    } finally {
+      setIsApplyingCorrections(false);
     }
   }
 
@@ -140,9 +306,41 @@ export function FactCheckReviewStep({
       <div className="space-y-4">
         <MarkdownVersionPanel
           title="Fact-Checked Content (Text)"
-          content={factCheckedVersion.content}
-          wordCount={factCheckedVersion.wordCount ?? undefined}
+          content={inlineHighlightedContent}
+          wordCount={countWords(displayedContent)}
         />
+
+        {lastApiOutput && (
+          <div className="rounded-xl border bg-card p-4 space-y-2">
+            <h4 className="font-medium text-sm">API Output (`/fact-check/approve`)</h4>
+            <pre className="rounded-md border bg-muted/30 p-3 text-xs overflow-auto whitespace-pre-wrap break-words">
+{JSON.stringify(lastApiOutput, null, 2)}
+            </pre>
+          </div>
+        )}
+
+        {appliedDiff && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <h4 className="font-medium text-sm">Accepted Correction Changes (Purple Highlight)</h4>
+              <div className="grid gap-3 xl:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Before applying accepted corrections</p>
+                  <ScrollArea className="h-[260px] rounded-lg border p-3 text-sm leading-relaxed whitespace-pre-wrap">
+                    {renderPurpleDiffTokens(appliedDiff.removedTokens, appliedDiff.wordsB, "removed")}
+                  </ScrollArea>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">After applying accepted corrections</p>
+                  <ScrollArea className="h-[260px] rounded-lg border p-3 text-sm leading-relaxed whitespace-pre-wrap">
+                    {renderPurpleDiffTokens(appliedDiff.addedTokens, appliedDiff.wordsA, "added")}
+                  </ScrollArea>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {wordDiff && issueCount > 0 && (
           <>
@@ -168,7 +366,7 @@ export function FactCheckReviewStep({
         )}
       </div>
 
-      <div className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 h-fit space-y-4">
+      <div className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)] h-fit flex flex-col gap-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="size-4 text-primary" />
@@ -182,17 +380,24 @@ export function FactCheckReviewStep({
             Content verified — no issues found.
           </div>
         ) : (
-          <ScrollArea className="h-[420px] pr-3">
+          <ScrollArea className="flex-1 min-h-0 pr-3">
             <div className="space-y-2">
               {factCheckFindings.map((finding) => {
                 const selected = selectedSet.has(finding.id);
                 const hasSources = Array.isArray(finding.sources) && finding.sources.length > 0;
                 return (
-                  <button
+                  <div
                     key={finding.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => toggleFinding(finding.id)}
-                    className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        toggleFinding(finding.id);
+                      }
+                    }}
+                    className={`w-full rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       selected ? "border-primary bg-primary/5" : "hover:bg-muted/40"
                     }`}
                   >
@@ -221,20 +426,39 @@ export function FactCheckReviewStep({
                         </div>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
           </ScrollArea>
         )}
 
-        <div className="flex items-center justify-between gap-2 pt-1">
+        <div className="mt-auto space-y-2 pt-1">
+          <div className="flex items-center justify-between gap-2">
+            <Button variant="outline" onClick={() => void handleStartOver()} disabled={isStartingOver || isApplyingCorrections}>
+              {isStartingOver ? "Restarting…" : "Start Over Fact Check"}
+            </Button>
+            <Button
+              variant={isApproved ? "secondary" : "default"}
+              className={isApproved ? "text-muted-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90"}
+              onClick={() => void handleAcceptCorrections()}
+              disabled={
+                isApproved
+                ||
+                isApplyingCorrections
+                || isStartingOver
+                || issueCount === 0
+                || acceptedCount === 0
+              }
+            >
+              {isApplyingCorrections ? "Applying…" : isApproved ? `${acceptedCount}/${issueCount} accepted` : "Accept Corrections"}
+            </Button>
+          </div>
+
           <p className="text-sm text-muted-foreground">
             {acceptedCount} of {issueCount} corrections accepted
           </p>
-          <Button onClick={() => void handleStartOver()} disabled={isSubmitting}>
-            {isSubmitting ? "Restarting…" : "Start Over"}
-          </Button>
+
         </div>
       </div>
     </div>

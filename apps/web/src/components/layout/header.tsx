@@ -27,6 +27,7 @@ interface HeaderProps {
 export function Header({ title, actionsSlot }: HeaderProps) {
   const pathname = usePathname();
   const isDashboardRoute = pathname === "/dashboard";
+  const resolvedActions = actionsSlot ?? (isDashboardRoute ? null : <NavActions />);
   const [dashboardFolderName, setDashboardFolderName] = React.useState<string | null>(null);
 
   const breadcrumbSegments = React.useMemo(() => {
@@ -127,9 +128,9 @@ export function Header({ title, actionsSlot }: HeaderProps) {
           </BreadcrumbList>
         </Breadcrumb>
       </div>
-      <div className="ml-auto flex items-center gap-2 px-3">
-        {actionsSlot ?? <NavActions />}
-      </div>
+      {resolvedActions ? (
+        <div className="ml-auto flex items-center gap-2 px-3">{resolvedActions}</div>
+      ) : null}
     </header>
   );
 }

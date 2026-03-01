@@ -13,7 +13,11 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).length;
 }
 
-export async function generatePersonaDrafts(projectId: string, userId: string): Promise<void> {
+export async function generatePersonaDrafts(
+  projectId: string,
+  userId: string,
+  onChunk?: (chunk: string) => void,
+): Promise<void> {
   // 1. Fetch project
   const project = await db.query.projects.findFirst({
     where: eq(projects.id, projectId),
@@ -21,6 +25,8 @@ export async function generatePersonaDrafts(projectId: string, userId: string): 
 
   if (!project) throw new Error(`Project ${projectId} not found`);
   if (!project.masterPrompt) throw new Error(`Project ${projectId} has no master prompt`);
+
+  onChunk?.("Preparing persona draft generation...\n");
 
   // 2. Update stage to running
   await db
@@ -53,6 +59,8 @@ export async function generatePersonaDrafts(projectId: string, userId: string): 
     throw new Error(`Project ${projectId} has no selected personas`);
   }
 
+  onChunk?.(`Found ${selectedPersonas.length} selected personas.\n`);
+
   // 5. Fetch all source chunks for this project (via source_materials)
   const materials = await db.query.sourceMaterials.findMany({
     where: eq(sourceMaterials.projectId, projectId),
@@ -82,23 +90,38 @@ export async function generatePersonaDrafts(projectId: string, userId: string): 
   const chunkBudget = availableTokens - masterPromptTokens - 4000; // reserve for system + response
   const selectedChunks = selectChunksForBudget(allChunks, chunkBudget);
 
+  onChunk?.(
+    `Selected ${selectedChunks.length} source chunks for context (${Math.max(
+      chunkBudget,
+      0,
+    )} token budget).\n\nStarting parallel persona draft generation...\n`,
+  );
+
   // 6. Run all 5 persona drafts in parallel
   const results = await Promise.all(
     selectedPersonas.map((persona) =>
-      claude.call({
-        system: buildPersonaDraftSystemPrompt(persona.name, persona.systemPrompt),
-        messages: [
-          {
-            role: "user",
-            content: buildPersonaDraftUserMessage(project.masterPrompt!, selectedChunks),
-          },
-        ],
-        maxTokens: 4096,
-      })
+      (async () => {
+        onChunk?.(`\n[${persona.name}] Generating draft...\n`);
+        const result = await claude.call({
+          system: buildPersonaDraftSystemPrompt(persona.name, persona.systemPrompt),
+          messages: [
+            {
+              role: "user",
+              content: buildPersonaDraftUserMessage(project.masterPrompt!, selectedChunks),
+            },
+          ],
+          maxTokens: 4096,
+        });
+        onChunk?.(
+          `[${persona.name}] Completed (${result.outputTokens} output tokens).\n`,
+        );
+        return result;
+      })()
     )
   );
 
   const durationMs = Date.now() - startedAt;
+  onChunk?.(`\nAll persona drafts completed in ${Math.round(durationMs / 1000)}s.\n`);
 
   // 7. Insert a version row for each persona draft
   for (let i = 0; i < selectedPersonas.length; i++) {

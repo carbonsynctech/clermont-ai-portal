@@ -13,6 +13,8 @@ const TAGS = ["All", "Technology", "Finance", "Healthcare", "Strategy", "Legal",
 
 interface PersonaLibraryPanelProps {
   projectId: string;
+  injectedPersonas?: Persona[];
+  onPersonaDeleted?: (personaId: string) => void;
   selectedIds: string[];
   onSelect: (persona: Persona) => void;
   selectedCount: number;
@@ -21,6 +23,8 @@ interface PersonaLibraryPanelProps {
 
 export function PersonaLibraryPanel({
   projectId,
+  injectedPersonas = [],
+  onPersonaDeleted,
   selectedIds,
   onSelect,
   selectedCount,
@@ -30,6 +34,7 @@ export function PersonaLibraryPanel({
   const [activeTag, setActiveTag] = useState<string>("All");
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [drawerPersona, setDrawerPersona] = useState<Persona | null>(null);
 
   const fetchPersonas = useCallback(async () => {
@@ -57,6 +62,63 @@ export function PersonaLibraryPanel({
     const timer = setTimeout(() => void fetchPersonas(), 400);
     return () => clearTimeout(timer);
   }, [fetchPersonas]);
+
+  const normalizedQuery = q.trim().toLowerCase();
+  const queryFilteredInjected = injectedPersonas.filter((persona) => {
+    if (!normalizedQuery) return true;
+    const inName = persona.name.toLowerCase().includes(normalizedQuery);
+    const inDesc = persona.description.toLowerCase().includes(normalizedQuery);
+    const inTags = (persona.tags ?? []).some((tag) => tag.toLowerCase().includes(normalizedQuery));
+    return inName || inDesc || inTags;
+  });
+
+  const tagFilteredInjected = activeTag === "All"
+    ? queryFilteredInjected
+    : queryFilteredInjected.filter((persona) =>
+      (persona.tags ?? []).some((tag) => tag.toLowerCase() === activeTag.toLowerCase())
+    );
+
+  const injectedOrder = new Map(tagFilteredInjected.map((persona, index) => [persona.id, index]));
+
+  const mergedPersonas = [...tagFilteredInjected, ...personas].filter(
+    (persona, index, arr) => arr.findIndex((p) => p.id === persona.id) === index
+  ).sort((a, b) => {
+    const aInjectedIndex = injectedOrder.get(a.id);
+    const bInjectedIndex = injectedOrder.get(b.id);
+
+    if (aInjectedIndex !== undefined && bInjectedIndex !== undefined) {
+      return aInjectedIndex - bInjectedIndex;
+    }
+    if (aInjectedIndex !== undefined) return -1;
+    if (bInjectedIndex !== undefined) return 1;
+    return 0;
+  });
+
+  async function handleDelete(personaId: string) {
+    setDeletingId(personaId);
+    const isInjectedPersona = injectedPersonas.some((persona) => persona.id === personaId);
+    if (isInjectedPersona) {
+      onPersonaDeleted?.(personaId);
+    }
+
+    try {
+      const res = await fetch(`/api/personas/${personaId}`, { method: "DELETE" });
+      if (!res.ok) {
+        if (isInjectedPersona) {
+          await fetchPersonas();
+        }
+        return;
+      }
+
+      setPersonas((prev) => prev.filter((persona) => persona.id !== personaId));
+      if (drawerPersona?.id === personaId) setDrawerPersona(null);
+      if (!isInjectedPersona) {
+        onPersonaDeleted?.(personaId);
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <div className="rounded-xl border bg-card p-6 space-y-4">
@@ -95,7 +157,7 @@ export function PersonaLibraryPanel({
             <Skeleton key={i} className="h-32 rounded-xl" />
           ))}
         </div>
-      ) : personas.length === 0 ? (
+      ) : mergedPersonas.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-8">
           {q || activeTag !== "All"
             ? "No personas match your search."
@@ -103,13 +165,15 @@ export function PersonaLibraryPanel({
         </p>
       ) : (
         <div className="grid grid-cols-3 gap-3">
-          {personas.map((persona) => (
+          {mergedPersonas.map((persona) => (
             <PersonaCardV2
               key={persona.id}
               persona={persona}
               isSelected={selectedIds.includes(persona.id)}
               onSelect={() => onSelect(persona)}
               onView={() => setDrawerPersona(persona)}
+              onDelete={() => void handleDelete(persona.id)}
+              isDeleting={deletingId === persona.id}
               disableSelect={selectedCount >= maxCount && !selectedIds.includes(persona.id)}
             />
           ))}

@@ -58,10 +58,10 @@ export async function runJob(jobId: string): Promise<void> {
           await suggestPersonas(projectId, userId, onChunk);
           break;
         case 4:
-          await generatePersonaDrafts(projectId, userId);
+          await generatePersonaDrafts(projectId, userId, onChunk);
           break;
         case 5:
-          await synthesize(projectId, userId);
+          await synthesize(projectId, userId, onChunk);
           break;
         case 7:
           await styleEdit(projectId, userId, onChunk);
@@ -70,7 +70,7 @@ export async function runJob(jobId: string): Promise<void> {
           await factCheck(projectId, userId, onChunk);
           break;
         case 9:
-          await finalStylePass(projectId, userId);
+          await finalStylePass(projectId, userId, onChunk);
           break;
         case 11:
           await devilsAdvocate(projectId, userId);

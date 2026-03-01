@@ -101,6 +101,22 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
 
     return null;
   })();
+  const factCheckApprovedFindingIds = (() => {
+    const rawIds = step8Stage?.metadata?.factCheckApprovedFindingIds;
+    if (!Array.isArray(rawIds)) return null;
+    const ids = rawIds.filter((value): value is string => typeof value === "string");
+    return ids.length > 0 ? ids : null;
+  })();
+  const factCheckApprovedIssues = (() => {
+    const rawIssues = step8Stage?.metadata?.factCheckApprovedIssues;
+    if (!Array.isArray(rawIssues)) return null;
+    const issues = rawIssues.filter((value): value is string => typeof value === "string");
+    return issues.length > 0 ? issues : null;
+  })();
+  const factCheckAppliedCorrections =
+    typeof step8Stage?.metadata?.factCheckAppliedCorrections === "number"
+      ? step8Stage.metadata.factCheckAppliedCorrections
+      : null;
 
   // Fetch selected cover image signed URL for the styled document preview
   let coverImageUrl: string | undefined;
@@ -130,6 +146,9 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       latestStyleGuide={styleGuideRows[0] ?? null}
       initialStep={initialStep}
       factCheckFindings={factCheckFindings}
+      factCheckApprovedFindingIds={factCheckApprovedFindingIds}
+      factCheckApprovedIssues={factCheckApprovedIssues}
+      factCheckAppliedCorrections={factCheckAppliedCorrections}
       coverImageUrl={coverImageUrl}
     />
   );
