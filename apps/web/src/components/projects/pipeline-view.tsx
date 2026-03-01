@@ -8,6 +8,7 @@ import { DefineTaskStep } from "./steps/define-task-step";
 import { StepTrigger } from "./step-trigger";
 import { SelectPersonasStep } from "./steps/select-personas-step";
 import { SynthesisStep } from "./steps/synthesis-step";
+import { ExportStep } from "./steps/export-step";
 import { StyleEditStep } from "./steps/style-edit-step";
 import { FinalStylePassStep } from "./steps/final-style-pass-step";
 import { IntegrateCritiquesStep } from "./steps/integrate-critiques-step";
@@ -106,7 +107,6 @@ export function PipelineView({
   const [step12Skipping, setStep12Skipping] = useState(false);
   const [step13Running, setStep13Running] = useState(false);
   const [step7FormatRunId, setStep7FormatRunId] = useState(0);
-  const [step13RunId, setStep13RunId] = useState(0);
 
   // Shared document styling state — set in step 6, consumed in step 7
   const [documentColors, setDocumentColors] = useState<DocumentColors>(DEFAULT_COLORS);
@@ -163,7 +163,6 @@ export function PipelineView({
   const stageMap = Object.fromEntries(stages.map((s) => [s.stepNumber, s]));
   const brief = project.briefData as ProjectBriefData | null;
 
-  const personaDrafts = versions.filter((v) => v.versionType === "persona_draft");
   const factCheckVersion = versions.filter((v) => v.versionType === "fact_checked").at(-1);
 
   function handleStepClick(step: number) {
@@ -475,31 +474,22 @@ export function PipelineView({
         );
 
       case 13:
-        const canRunStep13 = stageMap[12]?.status === "completed";
-        const canTriggerStep13 = status === "completed" || canRunStep13;
+        // Find the relevant versions for export
+        const finalVersion = versions.find((v) => v.versionType === "final");
+        const exportedHtmlVersion = versions.find((v) => v.versionType === "exported_html");
         return (
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            <StepTrigger
-              key={`step13-${step13RunId}`}
-              projectId={project.id}
-              stepNumber={13}
-              label={status === "completed" ? "Regenerate HTML Export" : "Generate HTML Export"}
-              currentStatus={status}
-              disabled={!canTriggerStep13}
-              disabledReason="Complete Step 12 to run this step."
-              onRunningChange={setStep13Running}
-            />
-            {status === "completed" && (
-              <div className="flex items-center gap-3">
-                <Link
-                  href={`/api/projects/${project.id}/export`}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  Download PDF
-                </Link>
-              </div>
-            )}
-          </div>
+          <ExportStep
+            projectId={project.id}
+            projectTitle={project.briefData?.companyName ?? ""}
+            companyName={project.briefData?.companyName}
+            dealType={project.briefData?.dealType}
+            coverImageUrl={coverImageUrl}
+            finalVersion={finalVersion}
+            exportedHtmlVersion={exportedHtmlVersion}
+            stage12Status={stageMap[12]?.status ?? "pending"}
+            stage13Status={status}
+            onRunningChange={setStep13Running}
+          />
         );
 
       default:
@@ -603,17 +593,6 @@ export function PipelineView({
                     </Button>
                   )}
 
-                  {activeStep === 13 && activeStatus === "completed" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setStep13RunId((curr) => curr + 1)}
-                      className="gap-1.5 shrink-0"
-                    >
-                      <RefreshCw className="size-3.5" />
-                      Regenerate
-                    </Button>
-                  )}
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">

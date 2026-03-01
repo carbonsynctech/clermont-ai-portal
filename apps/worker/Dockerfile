@@ -28,6 +28,7 @@ WORKDIR /app
 # ── Install Node dependencies (monorepo-aware) ───────────────────────────────
 # Copy only the manifests first so Docker can cache this layer
 COPY package.json pnpm-workspace.yaml turbo.json ./
+COPY pnpm-lock.yaml ./
 COPY apps/worker/package.json apps/worker/
 COPY packages/core/package.json packages/core/
 COPY packages/db/package.json packages/db/

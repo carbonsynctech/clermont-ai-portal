@@ -32,9 +32,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 // Removed unused Popover/Sidebar imports
@@ -46,6 +44,22 @@ interface ProjectNavActionsProps {
 }
 
 export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNavActionsProps) {
+    // Simulate folders for demo; replace with real folder state in production
+    const [folders, setFolders] = React.useState([
+      { id: "default", name: "Projects" },
+      { id: "archive", name: "Archive" },
+      { id: "team", name: "Team" },
+    ]);
+    const [moveOpen, setMoveOpen] = React.useState(false);
+    function handleMoveTo(folderId: string) {
+      // TODO: Replace with real move logic (API/local state)
+      alert(`Project moved to folder: ${folders.find(f => f.id === folderId)?.name}`);
+      setMoveOpen(false);
+    }
+    function handleUndo() {
+      // TODO: Implement undo logic
+      alert("Undo last action (not implemented)");
+    }
   const [isSaving, setIsSaving] = React.useState(false);
   const [isFavorite, setIsFavorite] = React.useState(false);
   const createdDate = React.useMemo(() => new Date(createdAt), [createdAt]);
@@ -146,7 +160,7 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
             <DropdownMenuItem onClick={() => window.location.href = `/projects/${projectId}/audit`}>
               <GalleryVerticalEnd className="mr-2 size-4" /> Version History
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => {/* TODO: implement undo logic */}}>
+            <DropdownMenuItem onClick={handleUndo}>
               <CornerUpLeft className="mr-2 size-4" /> Undo
             </DropdownMenuItem>
           </DropdownMenuGroup>
@@ -170,30 +184,34 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
             }}>
               <Copy className="mr-2 size-4" /> Duplicate
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => {/* TODO: implement move to logic */}}>
+            <DropdownMenuItem onClick={() => setMoveOpen(!moveOpen)}>
               <CornerUpRight className="mr-2 size-4" /> Move to
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={async () => {
-              // Move to Trash logic
-              const res = await fetch(`/api/projects/${projectId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "trash" }),
-              });
-              if (res.ok) window.location.reload();
-            }} className="text-destructive">
-              <Trash2 className="mr-2 size-4" /> Move to Trash
+            {moveOpen && (
+              <div className="pl-8 pr-2 py-2">
+                {folders.map(folder => (
+                  <Button key={folder.id} variant="ghost" size="sm" className="w-full text-left mb-1" onClick={() => handleMoveTo(folder.id)}>
+                    {folder.name}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <DropdownMenuItem
+              onClick={async () => {
+                // Move to Trash logic
+                const res = await fetch(`/api/projects/${projectId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "trash" }),
+                });
+                if (res.ok) window.location.reload();
+              }}
+              className="text-red-600 focus:text-red-700 hover:text-red-700"
+            >
+              <Trash2 className="mr-2 size-4 text-red-600" /> Move to Trash
             </DropdownMenuItem>
           </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem onClick={() => {/* TODO: implement import logic */}}>
-              <ArrowUp className="mr-2 size-4" /> Import
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => {/* TODO: implement export logic */}}>
-              <ArrowDown className="mr-2 size-4" /> Export
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
+          {/* Removed Import/Export buttons as requested */}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
