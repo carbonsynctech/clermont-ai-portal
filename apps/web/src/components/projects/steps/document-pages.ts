@@ -729,8 +729,8 @@ function buildContentPages(
   const contentBlocks = allBlocks.filter((block) => block.replace(/<[^>]*>/g, "").trim().length > 0);
   if (contentBlocks.length === 0) return pages;
 
-  const firstPageLines = 80;
-  const subsequentPageLines = 90;
+  const firstPageLines = 104;
+  const subsequentPageLines = 104;
 
   const pageChunkBlocks: string[][] = [];
   let currentBlocks: string[] = [];
@@ -768,7 +768,7 @@ function buildContentPages(
 
   for (let i = 0; i < pageChunkBlocks.length - 1; i++) {
     const pageLimit = i === 0 ? firstPageLines : subsequentPageLines;
-    const minTarget = Math.floor(pageLimit * 0.9);
+    const minTarget = Math.floor(pageLimit * 0.94);
     const current = pageChunkBlocks[i]!;
     const next = pageChunkBlocks[i + 1]!;
 
@@ -778,7 +778,22 @@ function buildContentPages(
       const candidate = next[0]!;
       const nextCandidate = next[1];
 
-      if (isSectionHeadingBlock(candidate)) break;
+      if (isSectionHeadingBlock(candidate)) {
+        const headingBodyCandidate = nextCandidate;
+        if (!headingBodyCandidate) break;
+
+        const headingLines = estimateBlockLines(candidate);
+        const bodyLines = estimateBlockLines(headingBodyCandidate);
+        const combinedProjectedLines = currentLinesNow + headingLines + bodyLines;
+
+        if (combinedProjectedLines > pageLimit) break;
+
+        current.push(candidate, headingBodyCandidate);
+        next.shift();
+        next.shift();
+        currentLinesNow = combinedProjectedLines;
+        continue;
+      }
       if (isHeadingBlock(candidate) && !nextCandidate) break;
 
       const candidateLines = estimateBlockLines(candidate);
