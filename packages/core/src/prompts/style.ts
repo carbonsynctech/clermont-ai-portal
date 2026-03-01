@@ -53,11 +53,21 @@ export function parseStyleEditResponse(response: string): {
   rules: string;
   editedDraft: string;
 } {
-  const rulesMatch = response.match(/<rules>([\s\S]*?)<\/rules>/);
-  const draftMatch = response.match(/<edited_draft>([\s\S]*?)<\/edited_draft>/);
+  const rulesMatch = response.match(/<rules\b[^>]*>([\s\S]*?)<\/rules>/i);
+  const draftMatch = response.match(/<edited_draft\b[^>]*>([\s\S]*?)<\/edited_draft>/i);
 
   const rules = rulesMatch?.[1]?.trim() ?? "";
-  const editedDraft = draftMatch?.[1]?.trim() ?? response.trim();
+  if (draftMatch?.[1]?.trim()) {
+    return { rules, editedDraft: draftMatch[1].trim() };
+  }
+
+  const markdownDraftMatch = response.match(/(?:^|\n)#+\s*edited[_\s-]*draft\s*\n([\s\S]*)$/i);
+  if (markdownDraftMatch?.[1]?.trim()) {
+    return { rules, editedDraft: markdownDraftMatch[1].trim() };
+  }
+
+  const dividerDraftMatch = response.match(/(?:^|\n)edited[_\s-]*draft\s*:\s*\n([\s\S]*)$/i);
+  const editedDraft = dividerDraftMatch?.[1]?.trim() ?? response.trim();
 
   return { rules, editedDraft };
 }

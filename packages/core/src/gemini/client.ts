@@ -4,6 +4,127 @@ import { GoogleGenAI } from "@google/genai";
 const DEFAULT_MODEL = "gemini-2.5-pro";
 const IMAGE_MODEL = process.env["NANO_BANANA_MODEL"] ?? "gemini-2.5-flash-image";
 
+export interface FactCheckSource {
+  documentName: string | null;
+  pageNumber: number | null;
+  url?: string | null;
+  evidence?: string | null;
+}
+
+export interface FactCheckFinding {
+  id: string;
+  issue: string;
+  incorrectText?: string | null;
+  correctedText?: string | null;
+  sources?: FactCheckSource[];
+}
+
+export interface FactCheckResult {
+  verified: boolean;
+  issues: string[];
+  findings: FactCheckFinding[];
+  correctedContent: string;
+}
+
+function parseSources(input: unknown): FactCheckSource[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((source): FactCheckSource | null => {
+      if (!source || typeof source !== "object") return null;
+      const record = source as Record<string, unknown>;
+      const documentName =
+        typeof record["documentName"] === "string"
+          ? record["documentName"]
+          : typeof record["sourceName"] === "string"
+            ? record["sourceName"]
+            : null;
+      const pageRaw = record["pageNumber"];
+      const pageNumber = typeof pageRaw === "number" && Number.isFinite(pageRaw)
+        ? pageRaw
+        : typeof pageRaw === "string" && Number.isFinite(Number(pageRaw))
+          ? Number(pageRaw)
+          : null;
+      const url = typeof record["url"] === "string" ? record["url"] : null;
+      const evidence = typeof record["evidence"] === "string" ? record["evidence"] : null;
+
+      return {
+        documentName,
+        pageNumber,
+        url,
+        evidence,
+      };
+    })
+    .filter((source): source is FactCheckSource => source !== null);
+}
+
+function parseFindings(input: unknown): FactCheckFinding[] {
+  if (!Array.isArray(input)) return [];
+
+  const findings: FactCheckFinding[] = [];
+  for (const [index, finding] of input.entries()) {
+    if (!finding || typeof finding !== "object") continue;
+    const record = finding as Record<string, unknown>;
+    const issue = typeof record["issue"] === "string" ? record["issue"] : null;
+    if (!issue) continue;
+
+    const id = typeof record["id"] === "string" && record["id"].length > 0
+      ? record["id"]
+      : `finding-${index + 1}`;
+    findings.push({
+      id,
+      issue,
+      incorrectText: typeof record["incorrectText"] === "string" ? record["incorrectText"] : null,
+      correctedText: typeof record["correctedText"] === "string" ? record["correctedText"] : null,
+      sources: parseSources(record["sources"]),
+    });
+  }
+
+  return findings;
+}
+
+function normalizeFactCheckResult(parsed: unknown, fallbackContent: string): FactCheckResult {
+  if (!parsed || typeof parsed !== "object") {
+    return {
+      verified: false,
+      issues: ["Failed to parse fact-check response"],
+      findings: [
+        {
+          id: "finding-1",
+          issue: "Failed to parse fact-check response",
+          sources: [],
+        },
+      ],
+      correctedContent: fallbackContent,
+    };
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const findings = parseFindings(record["findings"]);
+  const parsedIssues = Array.isArray(record["issues"])
+    ? record["issues"].filter((issue): issue is string => typeof issue === "string")
+    : [];
+  const issues = parsedIssues.length > 0 ? parsedIssues : findings.map((finding) => finding.issue);
+
+  const normalizedFindings = findings.length > 0
+    ? findings
+    : issues.map((issue, index) => ({
+        id: `finding-${index + 1}`,
+        issue,
+        sources: [],
+      }));
+
+  return {
+    verified: Boolean(record["verified"]),
+    issues,
+    findings: normalizedFindings,
+    correctedContent:
+      typeof record["correctedContent"] === "string" && record["correctedContent"].length > 0
+        ? record["correctedContent"]
+        : fallbackContent,
+  };
+}
+
 class GeminiClient {
   private client: GoogleGenerativeAI | null = null;
 
@@ -21,7 +142,7 @@ class GeminiClient {
   async factCheck(
     content: string,
     claims: string[]
-  ): Promise<{ verified: boolean; issues: string[]; correctedContent: string }> {
+  ): Promise<FactCheckResult> {
     const model = this.getClient().getGenerativeModel({ model: DEFAULT_MODEL });
 
     const prompt = `You are a professional fact-checker for investment memos and financial content.
@@ -36,6 +157,22 @@ Respond with a JSON object in this exact format:
 {
   "verified": boolean,
   "issues": ["list of factual issues found"],
+  "findings": [
+    {
+      "id": "short-stable-id",
+      "issue": "concise issue summary",
+      "incorrectText": "optional exact problematic text",
+      "correctedText": "optional corrected text",
+      "sources": [
+        {
+          "documentName": "source document name if known, otherwise null",
+          "pageNumber": 12,
+          "url": "optional URL if available",
+          "evidence": "optional evidence quote"
+        }
+      ]
+    }
+  ],
   "correctedContent": "the full content with corrections applied"
 }`;
 
@@ -44,15 +181,15 @@ Respond with a JSON object in this exact format:
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return { verified: false, issues: ["Failed to parse fact-check response"], correctedContent: content };
+      return normalizeFactCheckResult(null, content);
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
-      verified: boolean;
-      issues: string[];
-      correctedContent: string;
-    };
-    return parsed;
+    try {
+      const parsed = JSON.parse(jsonMatch[0]) as unknown;
+      return normalizeFactCheckResult(parsed, content);
+    } catch {
+      return normalizeFactCheckResult(null, content);
+    }
   }
 
   /**

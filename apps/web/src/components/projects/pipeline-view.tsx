@@ -29,6 +29,7 @@ import type {
   Version,
   StyleGuide,
   Project,
+  FactCheckFinding,
 } from "@repo/db";
 import type { ProjectBriefData } from "@repo/db";
 import { type DocumentColors, DEFAULT_COLORS } from "./steps/document-template";
@@ -77,7 +78,7 @@ interface PipelineViewProps {
   versions: Version[];
   latestStyleGuide: StyleGuide | null;
   initialStep: number;
-  factCheckIssues: string[] | null;
+  factCheckFindings: FactCheckFinding[] | null;
   coverImageUrl?: string;
 }
 
@@ -89,7 +90,7 @@ export function PipelineView({
   versions,
   latestStyleGuide,
   initialStep,
-  factCheckIssues,
+  factCheckFindings,
   coverImageUrl,
 }: PipelineViewProps) {
   const router = useRouter();
@@ -161,6 +162,10 @@ export function PipelineView({
 
   const stageMap = Object.fromEntries(stages.map((s) => [s.stepNumber, s]));
   const brief = project.briefData as ProjectBriefData | null;
+  const getLatestVersion = useCallback(
+    (versionType: Version["versionType"]) => versions.filter((v) => v.versionType === versionType).at(-1),
+    [versions],
+  );
 
   const factCheckVersion = versions.filter((v) => v.versionType === "fact_checked").at(-1);
 
@@ -298,7 +303,7 @@ export function PipelineView({
             projectId={project.id}
             stage4Status={stageMap[4]?.status ?? "pending"}
             stage5Status={status}
-            synthesisVersion={versions.find((v) => v.versionType === "synthesis")}
+            synthesisVersion={getLatestVersion("synthesis")}
             onRunningChange={setStep5Running}
           />
         );
@@ -346,8 +351,7 @@ export function PipelineView({
             dealType={brief?.dealType}
             stage5Status={stageMap[5]?.status ?? "pending"}
             stage7Status={status}
-            styledVersion={versions.find((v) => v.versionType === "styled")}
-            synthesisVersion={versions.find((v) => v.versionType === "synthesis")}
+            synthesisVersion={getLatestVersion("synthesis")}
             latestStyleGuide={latestStyleGuide}
             coverImageUrl={liveCoverImageUrl}
             colors={documentColors}
@@ -361,11 +365,8 @@ export function PipelineView({
           return (
             <FactCheckReviewStep
               projectId={project.id}
-              projectTitle={project.title}
-              companyName={brief?.companyName}
-              dealType={brief?.dealType}
-              coverImageUrl={coverImageUrl}
-              factCheckIssues={factCheckIssues ?? []}
+              factCheckFindings={factCheckFindings ?? []}
+              sourceVersion={getLatestVersion("synthesis")}
               factCheckedVersion={factCheckVersion}
             />
           );
@@ -394,7 +395,7 @@ export function PipelineView({
             companyName={brief?.companyName}
             dealType={brief?.dealType}
             coverImageUrl={coverImageUrl}
-            finalStyledVersion={versions.find((v) => v.versionType === "final_styled")}
+            finalStyledVersion={getLatestVersion("final_styled")}
             stage8Status={stageMap[8]?.status ?? "pending"}
             stage9Status={status}
             onRunningChange={setStep9Running}
@@ -412,11 +413,11 @@ export function PipelineView({
               ref={editorRef}
               projectId={project.id}
               initialContent={
-                versions.find((v) => v.versionType === "human_reviewed")?.content
-                ?? versions.find((v) => v.versionType === "final_styled")?.content
+                getLatestVersion("human_reviewed")?.content
+                ?? getLatestVersion("final_styled")?.content
                 ?? ""
               }
-              compareContent={versions.find((v) => v.versionType === "final_styled")?.content}
+              compareContent={getLatestVersion("final_styled")?.content}
               versionLabel="Final Styled V4"
               hideActions
               onContentChange={handleStep10ContentChange}
@@ -427,7 +428,7 @@ export function PipelineView({
 
       case 11: {
         const canRunStep11 = stageMap[10]?.status === "completed";
-        const redReportContent = versions.find((v) => v.versionType === "red_report")?.content ?? "";
+        const redReportContent = getLatestVersion("red_report")?.content ?? "";
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">
             <StepTrigger
@@ -446,8 +447,8 @@ export function PipelineView({
                 projectId={project.id}
                 redReport={redReportContent}
                 step10Markdown={
-                  versions.find((v) => v.versionType === "human_reviewed")?.content
-                  ?? versions.find((v) => v.versionType === "final_styled")?.content
+                  getLatestVersion("human_reviewed")?.content
+                  ?? getLatestVersion("final_styled")?.content
                   ?? ""
                 }
                 onSelectedCritiquesChange={setStep11SelectedCritiques}
@@ -465,7 +466,7 @@ export function PipelineView({
             companyName={brief?.companyName}
             dealType={brief?.dealType}
             coverImageUrl={coverImageUrl}
-            finalVersion={versions.find((v) => v.versionType === "final")}
+            finalVersion={getLatestVersion("final")}
             stage11Status={stageMap[11]?.status ?? "pending"}
             stage12Status={status}
             onRunningChange={setStep12Running}
@@ -474,11 +475,11 @@ export function PipelineView({
 
       case 13:
         // Find the relevant versions for export
-        const finalVersion = versions.find((v) => v.versionType === "final");
+        const finalVersion = getLatestVersion("final");
         return (
           <ExportStep
             projectId={project.id}
-            projectTitle={project.briefData?.companyName ?? ""}
+            projectTitle={project.title}
             companyName={project.briefData?.companyName}
             dealType={project.briefData?.dealType}
             coverImageUrl={coverImageUrl}

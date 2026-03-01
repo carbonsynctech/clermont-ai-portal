@@ -28,9 +28,15 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { issuesApproved?: unknown };
+  const body = (await req.json().catch(() => ({}))) as {
+    issuesApproved?: unknown;
+    findingIds?: unknown;
+  };
   const issuesApproved = Array.isArray(body.issuesApproved)
     ? body.issuesApproved.filter((issue): issue is string => typeof issue === "string")
+    : [];
+  const findingIds = Array.isArray(body.findingIds)
+    ? body.findingIds.filter((findingId): findingId is string => typeof findingId === "string")
     : [];
 
   await db
@@ -43,7 +49,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     userId: user.id,
     action: "fact_check_approved",
     stepNumber: 8,
-    payload: { issuesApproved, count: issuesApproved.length },
+    payload: { issuesApproved, findingIds, count: issuesApproved.length },
   });
 
   await db

@@ -254,7 +254,7 @@ export function getDocumentCSS(colors: DocumentColors = DEFAULT_COLORS): string 
   flex: 1;
   column-count: 2;
   column-gap: 44px;
-  column-fill: auto;
+  column-fill: balance;
   overflow: hidden;
 }
 .page-content.page-content-flow .flow-columns p,
@@ -266,6 +266,7 @@ export function getDocumentCSS(colors: DocumentColors = DEFAULT_COLORS): string 
   margin-bottom: 9px;
   text-align: left;
   hyphens: auto;
+  break-inside: auto;
 }
 .page-content.page-content-flow .flow-columns h2 {
   font-family: 'Gill Sans MT Light', 'Gill Sans Light', 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
@@ -284,6 +285,7 @@ export function getDocumentCSS(colors: DocumentColors = DEFAULT_COLORS): string 
   color: ${colors.accent};
   margin: 10px 0 8px;
   break-after: avoid-column;
+  break-inside: avoid;
 }
 .page-content.page-content-flow .flow-columns ol,
 .page-content.page-content-flow .flow-columns ul {

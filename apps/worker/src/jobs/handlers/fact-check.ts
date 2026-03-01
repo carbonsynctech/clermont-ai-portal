@@ -14,7 +14,7 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
 
   if (!project) throw new Error(`Project ${projectId} not found`);
 
-  onChunk?.("Fetching latest styled version…\n");
+  onChunk?.("Fetching latest synthesis version…\n");
 
   // 2. Update stage to running
   await db
@@ -24,26 +24,26 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
 
   const startedAt = Date.now();
 
-  // 3. Fetch latest styled version (activeVersionId or latest styled)
-  let styledContent: string;
+  // 3. Fetch latest synthesis version (Step 5 canonical source)
+  let synthesisContent: string;
   if (project.activeVersionId) {
     const activeVersion = await db.query.versions.findFirst({
       where: eq(versions.id, project.activeVersionId),
     });
-    styledContent = activeVersion?.content ?? "";
+    synthesisContent = activeVersion?.content ?? "";
   } else {
-    const latestStyled = await db.query.versions.findFirst({
+    const latestSynthesis = await db.query.versions.findFirst({
       where: and(
         eq(versions.projectId, projectId),
-        eq(versions.versionType, "styled")
+        eq(versions.versionType, "synthesis")
       ),
       orderBy: (v, { desc }) => [desc(v.createdAt)],
     });
-    styledContent = latestStyled?.content ?? "";
+    synthesisContent = latestSynthesis?.content ?? "";
   }
 
-  if (!styledContent) {
-    throw new Error(`Project ${projectId} has no styled version to fact-check`);
+  if (!synthesisContent) {
+    throw new Error(`Project ${projectId} has no synthesis version to fact-check`);
   }
 
   onChunk?.("Extracting factual claims with Claude…\n");
@@ -51,7 +51,7 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
   // 4. Extract factual claims via Claude
   const claimsResult = await claude.call({
     system: "Extract all specific factual claims (numbers, dates, names, statistics, percentages, financial figures) from the provided content. Return a JSON array of strings — one claim per item. Return ONLY the JSON array, no other text.",
-    messages: [{ role: "user", content: styledContent }],
+    messages: [{ role: "user", content: synthesisContent }],
     maxTokens: 2048,
   });
 
@@ -70,21 +70,21 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
   onChunk?.("Sending to Gemini for fact-checking…\n");
 
   // 5. Call Gemini fact-check
-  const geminiResult = await gemini.factCheck(styledContent, claims);
+  const geminiResult = await gemini.factCheck(synthesisContent, claims);
 
   const durationMs = Date.now() - startedAt;
 
-  const issueWord = geminiResult.issues.length === 1 ? "issue" : "issues";
+  const issueCount = geminiResult.findings.length;
+  const issueWord = issueCount === 1 ? "issue" : "issues";
   onChunk?.(
     geminiResult.verified
       ? `Fact-check complete. No issues found.\n`
-      : `Fact-check complete. ${geminiResult.issues.length} ${issueWord} found:\n${geminiResult.issues.map((i) => `  • ${i}`).join("\n")}\n`
+      : `Fact-check complete. ${issueCount} ${issueWord} found:\n${geminiResult.findings.map((finding) => `  • ${finding.issue}`).join("\n")}\n`
   );
   onChunk?.(`\n${geminiResult.correctedContent}\n`);
   onChunk?.("\nSaving corrected version…\n");
 
   // 6. Insert fact-checked version
-  const issueCount = geminiResult.issues.length;
   const [newVersion] = await db
     .insert(versions)
     .values({
@@ -118,6 +118,7 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
       issueCount,
       verified: geminiResult.verified,
       claimsChecked: claims.length,
+      findingsWithSources: geminiResult.findings.filter((finding) => (finding.sources?.length ?? 0) > 0).length,
     },
   });
 
@@ -130,6 +131,7 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
       metadata: {
         durationMs,
         factCheckIssues: geminiResult.issues,
+        factCheckFindings: geminiResult.findings,
       },
     })
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));

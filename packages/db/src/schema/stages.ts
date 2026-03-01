@@ -18,12 +18,28 @@ export const stageStatusEnum = pgEnum("stage_status", [
   "skipped",
 ]);
 
+export interface FactCheckSource {
+  documentName: string | null;
+  pageNumber: number | null;
+  url?: string | null;
+  evidence?: string | null;
+}
+
+export interface FactCheckFinding {
+  id: string;
+  issue: string;
+  incorrectText?: string | null;
+  correctedText?: string | null;
+  sources?: FactCheckSource[];
+}
+
 export interface StageMetadata {
   modelId?: string;
   inputTokens?: number;
   outputTokens?: number;
   durationMs?: number;
   factCheckIssues?: string[];
+  factCheckFindings?: FactCheckFinding[];
   reviewDraftContent?: string;
   reviewDraftSavedAt?: string;
   reviewNotes?: string;

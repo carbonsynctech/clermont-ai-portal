@@ -175,14 +175,14 @@ jobsRoute.post("/style-edit-fix", async (c) => {
 
   const { projectId, userId, userMessage } = parsed.data;
 
-  // Fetch latest styled version
-  const styledVersion = await db.query.versions.findFirst({
-    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "styled")),
+  // Fetch latest synthesis version (Step 5 canonical source)
+  const synthesisVersion = await db.query.versions.findFirst({
+    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "synthesis")),
     orderBy: [desc(versions.createdAt)],
   });
 
-  if (!styledVersion) {
-    return c.json({ error: "Styled version not found" }, 404);
+  if (!synthesisVersion) {
+    return c.json({ error: "Synthesis version not found" }, 404);
   }
 
   // Optionally fetch condensed style rules for context
@@ -196,12 +196,12 @@ jobsRoute.post("/style-edit-fix", async (c) => {
     : "";
 
   const prompt = [
-    "You are an expert editor refining a styled investment memo.",
-    "The document has already been formatted according to a style guide.",
+    "You are an expert editor refining a synthesis draft.",
+    "The document text should remain semantically identical unless the user asks for a rewrite.",
     rulesContext,
-    "Here is the full styled document:",
+    "Here is the full synthesis document:",
     "---",
-    styledVersion.content,
+    synthesisVersion.content,
     "---",
     "",
     `The user wants: ${userMessage}`,

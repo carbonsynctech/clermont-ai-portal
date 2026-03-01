@@ -4,6 +4,30 @@ import { db } from "@repo/db";
 import { projects, stages, personas, sourceMaterials, versions, styleGuides } from "@repo/db";
 import { eq, and } from "drizzle-orm";
 import { PipelineView } from "@/components/projects/pipeline-view";
+import type { FactCheckFinding, FactCheckSource } from "@repo/db";
+
+function isFactCheckSource(value: unknown): value is FactCheckSource {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  const hasValidDocumentName = record.documentName === null || typeof record.documentName === "string";
+  const hasValidPageNumber = record.pageNumber === null || typeof record.pageNumber === "number";
+  return hasValidDocumentName && hasValidPageNumber;
+}
+
+function isFactCheckFinding(value: unknown): value is FactCheckFinding {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== "string" || typeof record.issue !== "string") {
+    return false;
+  }
+
+  if (record.sources !== undefined && record.sources !== null) {
+    if (!Array.isArray(record.sources)) return false;
+    if (!record.sources.every(isFactCheckSource)) return false;
+  }
+
+  return true;
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -55,9 +79,28 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
     ? stepParam
     : project.currentStage;
   const step8Stage = stageRows.find((stage) => stage.stepNumber === 8);
-  const factCheckIssues = Array.isArray(step8Stage?.metadata?.factCheckIssues)
-    ? (step8Stage.metadata.factCheckIssues as string[])
-    : null;
+  const factCheckFindings = (() => {
+    const rawFindings = step8Stage?.metadata?.factCheckFindings;
+    if (Array.isArray(rawFindings)) {
+      const parsedFindings = rawFindings.filter(isFactCheckFinding);
+      if (parsedFindings.length > 0) {
+        return parsedFindings;
+      }
+    }
+
+    const rawIssues = step8Stage?.metadata?.factCheckIssues;
+    if (Array.isArray(rawIssues)) {
+      return rawIssues
+        .filter((issue): issue is string => typeof issue === "string")
+        .map((issue, index) => ({
+          id: `finding-${index + 1}`,
+          issue,
+          sources: [],
+        }));
+    }
+
+    return null;
+  })();
 
   // Fetch selected cover image signed URL for the styled document preview
   let coverImageUrl: string | undefined;
@@ -86,7 +129,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       versions={versionRows}
       latestStyleGuide={styleGuideRows[0] ?? null}
       initialStep={initialStep}
-      factCheckIssues={factCheckIssues}
+      factCheckFindings={factCheckFindings}
       coverImageUrl={coverImageUrl}
     />
   );

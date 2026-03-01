@@ -9,10 +9,6 @@ import {
 import { eq, and, desc } from "drizzle-orm";
 import { createAdminClient } from "../../lib/supabase-admin";
 
-function countWords(text: string): number {
-  return text.trim().split(/\s+/).length;
-}
-
 export async function styleEdit(projectId: string, userId: string, onChunk?: (chunk: string) => void): Promise<void> {
   // 1. Fetch project
   const project = await db.query.projects.findFirst({
@@ -104,8 +100,8 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
 
   const durationMs = Date.now() - startedAt;
 
-  // 7. Parse XML response
-  const { rules, editedDraft } = parseStyleEditResponse(result.content);
+  // 7. Parse XML response (only rules are used; Step 7 no longer persists a styled text version)
+  const { rules } = parseStyleEditResponse(result.content);
 
   // 8. Update style guide with extracted rules
   await db
@@ -116,26 +112,10 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
     })
     .where(eq(styleGuides.id, styleGuide.id));
 
-  // 9. Insert styled version
-  const [newVersion] = await db
-    .insert(versions)
-    .values({
-      projectId,
-      producedByStep: 7,
-      versionType: "styled",
-      internalLabel: "Styled V2",
-      content: editedDraft,
-      wordCount: countWords(editedDraft),
-      isClientVisible: false,
-    })
-    .returning();
-
-  if (!newVersion) throw new Error("Failed to insert styled version");
-
-  // 10. Update activeVersionId
+  // 9. Keep active version unchanged (Step 7 is display/style metadata only)
   await db
     .update(projects)
-    .set({ activeVersionId: newVersion.id, updatedAt: new Date() })
+    .set({ updatedAt: new Date() })
     .where(eq(projects.id, projectId));
 
   // 11. Audit log

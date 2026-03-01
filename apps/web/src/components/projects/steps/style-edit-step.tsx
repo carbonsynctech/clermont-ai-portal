@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 import {
   type ChatMsg,
   parseFixResponse,
-  applyFixToDocument,
   AssistantContent,
   CopyButton,
 } from "./chat-utils";
@@ -27,7 +26,6 @@ interface StyleEditStepProps {
   dealType?: string;
   stage5Status: string;
   stage7Status: string;
-  styledVersion: Version | undefined;
   synthesisVersion?: Version | undefined;
   latestStyleGuide: StyleGuide | null;
   coverImageUrl?: string;
@@ -44,49 +42,29 @@ export function StyleEditStep({
   companyName,
   dealType,
   stage5Status,
-  styledVersion,
   synthesisVersion,
   coverImageUrl,
   colors,
   formatRunId,
 }: StyleEditStepProps) {
-  const sourceContent = styledVersion?.content ?? synthesisVersion?.content ?? "";
-  const versionId = styledVersion?.id ?? synthesisVersion?.id ?? "";
-  const wordCount = (styledVersion ?? synthesisVersion)?.wordCount;
+  const canonicalSourceVersion = synthesisVersion;
+  const sourceContent = canonicalSourceVersion?.content ?? "";
+  const versionId = canonicalSourceVersion?.id ?? "";
+  const wordCount = canonicalSourceVersion?.wordCount;
   const hasContent = !!sourceContent;
-
+  const sourceHash = `${versionId}:${sourceContent.length}:${sourceContent.slice(0, 200)}`;
   // ── sessionStorage keys ───────────────────────────────────────────────────
   const chatKey = `style-edit-chat-${projectId}`;
-  const contentKey = `style-edit-content-${projectId}`;
-  const versionKey = `style-edit-version-${projectId}`;
+  const sourceHashKey = `style-edit-source-hash-${projectId}`;
 
-  const prevVersionIdRef = useRef(versionId);
-
-  // ── displayContent: live-patchable by AI fixes ────────────────────────────
-  const [displayContent, setDisplayContent] = useState<string>(() => {
-    try {
-      const savedVer = sessionStorage.getItem(versionKey);
-      const savedContent = sessionStorage.getItem(contentKey);
-      if (savedVer === versionId && savedContent !== null) {
-        return savedContent;
-      }
-    } catch { /* ignore */ }
-    return sourceContent;
-  });
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(contentKey, displayContent);
-      sessionStorage.setItem(versionKey, versionId);
-    } catch { /* ignore */ }
-  }, [displayContent, contentKey, versionKey, versionId]);
+  const prevSourceHashRef = useRef(sourceHash);
 
   // ── Chat messages ─────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMsg[]>(() => {
     try {
-      const savedVer = sessionStorage.getItem(versionKey);
+      const savedHash = sessionStorage.getItem(sourceHashKey);
       const raw = sessionStorage.getItem(chatKey);
-      if (savedVer === versionId && raw) {
+      if (savedHash === sourceHash && raw) {
         return JSON.parse(raw) as ChatMsg[];
       }
     } catch { /* ignore */ }
@@ -97,20 +75,20 @@ export function StyleEditStep({
     const stable = messages.filter((m) => !m.isLoading && !m.isStreaming);
     try {
       sessionStorage.setItem(chatKey, JSON.stringify(stable));
+      sessionStorage.setItem(sourceHashKey, sourceHash);
     } catch { /* ignore */ }
-  }, [messages, chatKey]);
+  }, [messages, chatKey, sourceHashKey, sourceHash]);
 
-  // Reset when a new version arrives
+  // Reset when the source hash changes
   useEffect(() => {
-    if (prevVersionIdRef.current === versionId) return;
-    prevVersionIdRef.current = versionId;
+    if (prevSourceHashRef.current === sourceHash) return;
+    prevSourceHashRef.current = sourceHash;
     try {
       sessionStorage.removeItem(chatKey);
-      sessionStorage.removeItem(contentKey);
+      sessionStorage.setItem(sourceHashKey, sourceHash);
     } catch { /* ignore */ }
-    setDisplayContent(sourceContent);
     setMessages([]);
-  }, [versionId, sourceContent, chatKey, contentKey]);
+  }, [sourceHash, sourceHashKey, chatKey]);
 
   // ── Job / streaming ───────────────────────────────────────────────────────
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -149,9 +127,6 @@ export function StyleEditStep({
             : m,
         ),
       );
-      if (jobStatus === "completed" && partialOutput) {
-        setDisplayContent((curr) => applyFixToDocument(curr, partialOutput));
-      }
       setActiveJobId(null);
     }
   }, [jobStatus, activeJobId, partialOutput]);
@@ -232,7 +207,7 @@ export function StyleEditStep({
 
         <StyledDocumentPreview
           key={`local-format-${formatRunId ?? 0}`}
-          content={displayContent}
+          content={sourceContent}
           projectTitle={projectTitle}
           companyName={companyName}
           dealType={dealType}

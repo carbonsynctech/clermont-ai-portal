@@ -18,17 +18,17 @@ export async function finalStylePass(projectId: string, userId: string): Promise
 
   if (!project) throw new Error(`Project ${projectId} not found`);
 
-  // 2. Fetch latest styled version (Step 7 output)
-  const styledVersion = await db.query.versions.findFirst({
+  // 2. Fetch latest synthesis version (Step 5 canonical source)
+  const synthesisVersion = await db.query.versions.findFirst({
     where: and(
       eq(versions.projectId, projectId),
-      eq(versions.versionType, "styled")
+      eq(versions.versionType, "synthesis")
     ),
     orderBy: (v, { desc }) => [desc(v.createdAt)],
   });
 
-  if (!styledVersion) {
-    throw new Error(`Project ${projectId} has no styled version`);
+  if (!synthesisVersion) {
+    throw new Error(`Project ${projectId} has no synthesis version`);
   }
 
   // 3. Fetch approved fact-check issues from human checkpoint
@@ -71,7 +71,7 @@ export async function finalStylePass(projectId: string, userId: string): Promise
     messages: [
       {
         role: "user",
-        content: `${buildFinalStyleUserMessage(styledVersion.content)}${issueBlock}`,
+        content: `${buildFinalStyleUserMessage(synthesisVersion.content)}${issueBlock}`,
       },
     ],
     maxTokens: 8192,

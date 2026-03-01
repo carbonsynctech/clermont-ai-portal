@@ -98,6 +98,22 @@ function blockToHtml(text: string): string {
       continue;
     }
 
+    if (/^\*\*[^*]{4,140}\*\*:?$/.test(trimmed)) {
+      if (inList) { html += `</${inList}>`; inList = null; }
+      const headingText = trimmed
+        .replace(/^\*\*/, "")
+        .replace(/\*\*:?$/, "")
+        .trim();
+      html += `<h3>${mdToHtml(headingText)}</h3>`;
+      continue;
+    }
+
+    if (/^[A-Z][^.!?]{4,140}:$/.test(trimmed)) {
+      if (inList) { html += `</${inList}>`; inList = null; }
+      html += `<h3>${mdToHtml(trimmed.slice(0, -1))}</h3>`;
+      continue;
+    }
+
     // Skip markdown horizontal rules (---, ***, ___)
     if (/^[-*_]{3,}$/.test(trimmed)) {
       if (inList) { html += `</${inList}>`; inList = null; }
@@ -110,6 +126,16 @@ function blockToHtml(text: string): string {
 
   if (inList) html += `</${inList}>`;
   return html;
+}
+
+/**
+ * Splits rendered HTML into atomic flow blocks so pagination can break
+ * between paragraphs/headings/lists instead of clipping one giant block.
+ */
+function splitFlowHtmlBlocks(html: string): string[] {
+  const matches = html.match(/<(h2|h3|p|ul|ol|blockquote)\b[^>]*>[\s\S]*?<\/\1>/gi);
+  if (!matches) return html.trim() ? [html.trim()] : [];
+  return matches.map((block) => block.trim()).filter((block) => block.length > 0);
 }
 
 //  Content parser 
@@ -136,11 +162,22 @@ function parseContentSections(markdown: string): ContentSection[] {
   for (const line of lines) {
     const h2Match = line.match(/^##\s+(.+)/);
     const h3Match = line.match(/^###\s+(.+)/);
+    // Recognize "Section N: Title" as H2 heading
+    const sectionMatch = line.match(/^(?:section|part)\s+\d+\s*[:\-–]\s*(.+)$/i);
 
     if (h2Match) {
       flushSub();
       if (currentSection) sections.push(currentSection);
-      currentSection = { heading: h2Match[1]!, subSections: [] };
+      // Strip leading "Section N:" prefix from ## headings too
+      const cleanedH2 = h2Match[1]!.replace(/^(?:section|part)\s+\d+\s*[:\-–]\s*/i, "").trim();
+      currentSection = { heading: cleanedH2 || h2Match[1]!, subSections: [] };
+      continue;
+    }
+
+    if (sectionMatch && !h2Match) {
+      flushSub();
+      if (currentSection) sections.push(currentSection);
+      currentSection = { heading: sectionMatch[1]!.trim(), subSections: [] };
       continue;
     }
 
@@ -162,14 +199,189 @@ function parseContentSections(markdown: string): ContentSection[] {
   return sections;
 }
 
+/** Style-guide rule label patterns that should never appear in document content. */
+const STYLE_RULE_LABELS = [
+  "tone", "voice", "headers?(?:\\s+and\\s+subheaders?)?", "callout\\s+labels?",
+  "lists?(?:\\s+and\\s+bullets?)?", "numbered\\s+lists?", "footnote\\s+citations?",
+  "data\\s+presentation", "exhibit\\s+placeholders?", "prohibited\\s+language",
+  "sentence\\s+structure", "paragraph\\s+structure", "vocabulary",
+  "formatting", "citations?", "style\\s+rules?",
+];
+const STYLE_RULE_RE = new RegExp(
+  `^(?:[-*•]\\s*)?(?:${STYLE_RULE_LABELS.join("|")})\\s*:`,
+  "i",
+);
+
+/**
+ * Detects and removes contiguous blocks of style-guide rules that were
+ * accidentally stored in version content (e.g. when XML parsing failed on
+ * the Step 7 Claude response).
+ */
+function stripStyleRulesBlocks(text: string): string {
+  const paragraphs = text.split(/\n\s*\n/);
+  const kept: string[] = [];
+
+  for (const para of paragraphs) {
+    const lines = para
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (lines.length === 0) {
+      kept.push(para);
+      continue;
+    }
+
+    // Count how many lines in this paragraph look like style-rule bullets
+    const ruleLineCount = lines.filter((l) => STYLE_RULE_RE.test(l)).length;
+
+    // If ≥ 3 style-rule lines OR the majority of lines are rules, drop the block
+    if (ruleLineCount >= 3 || (ruleLineCount > 0 && ruleLineCount >= lines.length * 0.6)) {
+      continue; // skip entire paragraph block
+    }
+
+    kept.push(para);
+  }
+
+  return kept.join("\n\n");
+}
+
+/** Boilerplate noise patterns that appear before the real content. */
+const BOILERPLATE_LINE_PATTERNS: RegExp[] = [
+  // Document title repeated in all-caps or title case
+  /^[A-Z][A-Z\s]{8,}$/,
+  // Subtitles like "Strategic Briefing for Decision-Makers"
+  /^(?:strategic|confidential|prepared|briefing|for\s+(?:decision|internal|senior))\b/i,
+  // Date lines like "January 2026"
+  /^(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}$/i,
+  // Confidentiality / permission notices
+  /^no\s+part\s+of\s+this\s+document/i,
+  /^whilst\s+every\s+care/i,
+  /^this\s+document\s+is\s+(?:confidential|proprietary)/i,
+  /^(?:confidential|private|proprietary)\s*[.—:]/i,
+  // Standalone "Section N: ..." lines that look like a TOC listing
+  /^section\s+\d+\s*[:\-–]\s*.+$/i,
+  // Explicit synthesis header boilerplate
+  /^strategic\s+briefing\s+for\s+decision\s+makers$/i,
+  /^prepared\s+by\s+the\s+global\s+games\s+research\s*&\s*strategy\s+practice$/i,
+];
+
+const NORMALIZED_BOILERPLATE_DENYLIST = [
+  "strategic briefing for decision makers",
+  "prepared by the global games research strategy practice",
+  "prepared by the global games research and strategy practice",
+  "document note",
+  "contents",
+  "table of contents",
+  "copyright",
+  "all rights reserved",
+];
+
+function normalizeForComparison(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isNormalizedBoilerplate(line: string): boolean {
+  const normalized = normalizeForComparison(line);
+  if (!normalized) return false;
+
+  return NORMALIZED_BOILERPLATE_DENYLIST.some((entry) =>
+    normalized === entry || normalized.startsWith(`${entry} `),
+  );
+}
+
+/**
+ * Strips boilerplate preamble blocks that appear before the real
+ * analytical content (title repetition, subtitle, date, confidentiality,
+ * inline section-list TOC).
+ */
+function stripBoilerplateBlocks(text: string): string {
+  const paragraphs = text.split(/\n\s*\n/);
+  const kept: string[] = [];
+  let foundRealContent = false;
+
+  for (const para of paragraphs) {
+    const lines = para
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (lines.length === 0) {
+      kept.push(para);
+      continue;
+    }
+
+    // Once we've seen a markdown heading (## or ###), everything after is real content
+    if (lines.some((l) => /^#{1,3}\s+/.test(l))) {
+      foundRealContent = true;
+    }
+
+    // Also treat "Section N:" as real content when it's a heading (parsed into sections later)
+    if (lines.some((l) => /^section\s+\d+\s*[:\-–]/i.test(l)) && foundRealContent) {
+      kept.push(para);
+      continue;
+    }
+
+    if (!foundRealContent) {
+      // Check if the majority of lines in this block match boilerplate patterns
+      const boilerplateCount = lines.filter((l) =>
+        BOILERPLATE_LINE_PATTERNS.some((re) => re.test(l)) || isNormalizedBoilerplate(l),
+      ).length;
+
+      if (boilerplateCount >= lines.length * 0.5 && boilerplateCount >= 1) {
+        continue; // drop this paragraph
+      }
+
+      // A block of consecutive "Section N: ..." lines is a TOC listing, drop it
+      const sectionListCount = lines.filter((l) =>
+        /^section\s+\d+\s*[:\-–]\s*.+$/i.test(l),
+      ).length;
+      if (sectionListCount >= 3) {
+        continue; // drop section list TOC
+      }
+    }
+
+    // After first real content block, mark as found
+    if (lines.length > 0) foundRealContent = true;
+    kept.push(para);
+  }
+
+  return kept.join("\n\n");
+}
+
 function sanitizeMarkdownForPreview(markdown: string): string {
-  const lines = markdown.split("\n");
+  // 1. Extract <edited_draft> content if present
+  const editedDraftMatch = markdown.match(/<edited_draft\b[^>]*>([\s\S]*?)<\/edited_draft>/i);
+  let source = editedDraftMatch?.[1]?.trim() ? editedDraftMatch[1].trim() : markdown;
+
+  // 2. Strip <rules>...</rules> blocks if present
+  source = source.replace(/<rules\b[^>]*>[\s\S]*?<\/rules>/gi, "");
+
+  // 2b. Strip synthesis boilerplate document note blocks
+  source = source.replace(
+    /document\s+note\s*:[\s\S]*?(?=\n\s*\n|\n\s*(?:section|part)\s+\d+\s*[:\-–]|\n\s*##\s+|$)/gi,
+    "",
+  );
+
+  // 3. Strip accidentally-inlined style-rules paragraphs
+  source = stripStyleRulesBlocks(source);
+
+  // 4. Strip boilerplate preamble blocks (title repeat, subtitle, date, confidentiality, section list)
+  source = stripBoilerplateBlocks(source);
+
+  const lines = source.split("\n");
 
   const filtered = lines
     .map((line) => line.replace(/\u00a0/g, " "))
     .map((line) => line.trimEnd())
     .filter((line) => {
       const trimmed = line.trim();
+      const normalized = normalizeForComparison(trimmed);
       if (!trimmed) return true;
 
       // Drop XML-like control tags and injected meta wrappers
@@ -178,9 +390,13 @@ function sanitizeMarkdownForPreview(markdown: string): string {
       // Drop common noise lines seen in draft/system outputs
       if (/^contents$/i.test(trimmed)) return false;
       if (/^document\s+note\s*:/i.test(trimmed)) return false;
+      if (/^strategic\s+briefing\s+for\s+decision\s+makers$/i.test(trimmed)) return false;
+      if (/^prepared\s+by\s+the\s+global\s+games\s+research\s*&\s*strategy\s+practice$/i.test(trimmed)) return false;
       if (/^copyright\b/i.test(trimmed)) return false;
       if (/^[a-z]+\s+\d{4}\s+copyright\b/i.test(trimmed)) return false;
       if (/^rules\s*:/i.test(trimmed)) return false;
+      if (isNormalizedBoilerplate(trimmed)) return false;
+      if (/^section\s+\d+\s*[:\-–]/i.test(trimmed) && normalized.length < 160) return false;
 
       return true;
     });
@@ -403,27 +619,94 @@ function buildSeparatorPage(): DocPage {
   };
 }
 
-function buildContentPages(markdown: string, sections: ContentSection[], startPage: number): DocPage[] {
+function buildContentPages(
+  markdown: string,
+  sections: ContentSection[],
+  startPage: number,
+): DocPage[] {
   const pages: DocPage[] = [];
   let currentPage = startPage;
-  const firstHeading = sections[0]?.heading ?? "Summary";
+  const isHeadingBlock = (block: string): boolean => {
+    const trimmed = block.trim();
+    return /^<h[23][^>]*>[\s\S]*<\/h[23]>$/.test(trimmed);
+  };
+  const isSectionHeadingBlock = (block: string): boolean => {
+    const trimmed = block.trim();
+    return /^<h2[^>]*>[\s\S]*<\/h2>$/.test(trimmed);
+  };
+  const extractSectionHeadingText = (block: string): string | null => {
+    const match = block.trim().match(/^<h2[^>]*>([\s\S]*?)<\/h2>$/);
+    if (!match?.[1]) return null;
+    return match[1]
+      .replace(/<[^>]*>/g, "")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .trim();
+  };
 
-  const blocks: string[] = [];
+  /**
+   * Estimate the number of visual lines a block will occupy in a single column.
+   *
+   * Page metrics (from the CSS):
+   *   - Page width:  794px, padding: 88px each side → content width = 618px
+   *   - Column gap:  44px → single column width ≈ (618 - 44) / 2 = 287px
+   *   - Body font:   13px Georgia, line-height 1.55 → ~20px per line
+   *   - Heading h3:  15px, line-height 1.35 → ~20px per line (+margins ~18px)
+   *   - Heading h2:  18px, line-height 1.3 → ~23px per line (+margins ~18px)
+   *   - Paragraph bottom margin: 9px ≈ 0.45 lines
+   *   - Approx chars per column line: ~42 (Georgia 13px in 287px)
+   */
+  const CHARS_PER_LINE = 42;
+  const PARAGRAPH_MARGIN_LINES = 0.42;
+  const HEADING_MARGIN_LINES = 1.6; // top + bottom margins
+
+  const estimateBlockLines = (block: string): number => {
+    const textOnly = block.replace(/<[^>]*>/g, "").trim();
+    if (!textOnly) return 0;
+
+    if (isHeadingBlock(block)) {
+      const headingLines = Math.ceil(textOnly.length / (CHARS_PER_LINE * 0.8)); // headings are wider font
+      return headingLines + HEADING_MARGIN_LINES;
+    }
+
+    // Count list items — each gets its own line(s) plus spacing
+    const liMatches = block.match(/<li>/g);
+    if (liMatches) {
+      const itemTexts = block.split(/<li>/).slice(1).map((s) => s.replace(/<[^>]*>/g, "").trim());
+      let total = 0;
+      for (const itemText of itemTexts) {
+        total += Math.ceil(itemText.length / CHARS_PER_LINE) + 0.35; // li margin
+      }
+      return total + 0.5; // list margin
+    }
+
+    // Regular paragraph
+    const lines = Math.ceil(textOnly.length / CHARS_PER_LINE);
+    return lines + PARAGRAPH_MARGIN_LINES;
+  };
+
+  const allBlocks: string[] = [];
 
   if (sections.length > 0) {
-    for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
-      const section = sections[sectionIndex]!;
-      if (sectionIndex > 0) {
-        blocks.push(`<h2>${escHtml(section.heading)}</h2>`);
+    for (const section of sections) {
+      const heading = section.heading.trim();
+      if (heading) {
+        allBlocks.push(`<h2>${escHtml(heading)}</h2>`);
       }
 
       for (const sub of section.subSections) {
         if (sub.subHeading) {
-          blocks.push(`<h3>${escHtml(sub.subHeading)}</h3>`);
+          allBlocks.push(`<h3>${escHtml(sub.subHeading)}</h3>`);
         }
 
         const html = blockToHtml(sub.body).trim();
-        if (html) blocks.push(html);
+        if (!html) continue;
+        const flowBlocks = splitFlowHtmlBlocks(html);
+        if (flowBlocks.length > 0) {
+          allBlocks.push(...flowBlocks);
+        }
       }
     }
   } else {
@@ -432,41 +715,109 @@ function buildContentPages(markdown: string, sections: ContentSection[], startPa
       .map((chunk) => chunk.trim())
       .filter((chunk) => chunk.length > 0);
 
+    allBlocks.push("<h2>Summary</h2>");
     for (const paragraph of paragraphs) {
       const html = blockToHtml(paragraph).trim();
-      if (html) blocks.push(html);
+      if (!html) continue;
+      const flowBlocks = splitFlowHtmlBlocks(html);
+      if (flowBlocks.length > 0) {
+        allBlocks.push(...flowBlocks);
+      }
     }
   }
 
-  if (blocks.length === 0) {
-    blocks.push("<p></p>");
+  const contentBlocks = allBlocks.filter((block) => block.replace(/<[^>]*>/g, "").trim().length > 0);
+  if (contentBlocks.length === 0) return pages;
+
+  const firstPageLines = 80;
+  const subsequentPageLines = 90;
+
+  const pageChunkBlocks: string[][] = [];
+  let currentBlocks: string[] = [];
+  let currentLines = 0;
+
+  for (const block of contentBlocks) {
+    const blockLines = estimateBlockLines(block);
+    const pageLimit = pageChunkBlocks.length === 0 ? firstPageLines : subsequentPageLines;
+    const wouldExceed = currentLines > 0 && currentLines + blockLines > pageLimit;
+
+    if (wouldExceed) {
+      const lastBlock = currentBlocks.at(-1);
+
+      if (lastBlock && isHeadingBlock(lastBlock) && currentBlocks.length > 1) {
+        const movedHeading = currentBlocks.pop();
+        pageChunkBlocks.push([...currentBlocks]);
+        currentBlocks = movedHeading ? [movedHeading, block] : [block];
+        currentLines = currentBlocks.reduce((sum, candidate) => sum + estimateBlockLines(candidate), 0);
+        continue;
+      }
+
+      pageChunkBlocks.push([...currentBlocks]);
+      currentBlocks = [block];
+      currentLines = blockLines;
+      continue;
+    }
+
+    currentBlocks.push(block);
+    currentLines += blockLines;
   }
 
-  const pageChunks: string[] = [];
-  let currentChunk = "";
+  if (currentBlocks.length > 0) {
+    pageChunkBlocks.push([...currentBlocks]);
+  }
 
-  for (const block of blocks) {
-    const chunkBudget = pageChunks.length === 0 ? 3000 : 3600;
-    if (currentChunk.length > 0 && currentChunk.length + block.length > chunkBudget) {
-      pageChunks.push(currentChunk);
-      currentChunk = block;
-    } else {
-      currentChunk += block;
+  for (let i = 0; i < pageChunkBlocks.length - 1; i++) {
+    const pageLimit = i === 0 ? firstPageLines : subsequentPageLines;
+    const minTarget = Math.floor(pageLimit * 0.9);
+    const current = pageChunkBlocks[i]!;
+    const next = pageChunkBlocks[i + 1]!;
+
+    let currentLinesNow = current.reduce((sum, block) => sum + estimateBlockLines(block), 0);
+
+    while (next.length > 0 && currentLinesNow < minTarget) {
+      const candidate = next[0]!;
+      const nextCandidate = next[1];
+
+      if (isSectionHeadingBlock(candidate)) break;
+      if (isHeadingBlock(candidate) && !nextCandidate) break;
+
+      const candidateLines = estimateBlockLines(candidate);
+      const projectedLines = currentLinesNow + candidateLines;
+      if (projectedLines > pageLimit) break;
+
+      current.push(candidate);
+      next.shift();
+      currentLinesNow = projectedLines;
     }
   }
 
-  if (currentChunk.length > 0) {
-    pageChunks.push(currentChunk);
+  const normalizedChunks = pageChunkBlocks.filter((chunk) => chunk.length > 0);
+  for (let i = 0; i < normalizedChunks.length - 1; i++) {
+    const current = normalizedChunks[i]!;
+    const next = normalizedChunks[i + 1]!;
+    const currentIsHeadingOnly = current.every((block) => isHeadingBlock(block));
+    if (!currentIsHeadingOnly) continue;
+
+    normalizedChunks[i + 1] = [...current, ...next];
+    normalizedChunks[i] = [];
   }
 
-  for (let i = 0; i < pageChunks.length; i++) {
-    const chunk = pageChunks[i]!;
+  for (const chunkBlocksRaw of normalizedChunks.filter((chunk) => chunk.length > 0)) {
+    const chunkBlocks = [...chunkBlocksRaw];
+    let pageHeading: string | null = null;
 
+    const firstBlock = chunkBlocks[0];
+    if (firstBlock && isSectionHeadingBlock(firstBlock)) {
+      pageHeading = extractSectionHeadingText(firstBlock);
+      chunkBlocks.shift();
+    }
+
+    const chunk = chunkBlocks.join("");
     pages.push({
       type: "content",
       html: `
 <div class="doc-page page-content page-content-flow">
-  ${i === 0 ? `<div class="flow-page-title">${escHtml(firstHeading)}</div>` : ""}
+  ${pageHeading ? `<div class="flow-page-title">${escHtml(pageHeading)}</div>` : ""}
   <div class="flow-columns">
     ${chunk}
   </div>
@@ -525,6 +876,7 @@ export interface BuildStyledPagesOptions {
   dealType?: string;
   coverImageUrl?: string;
   colors?: DocumentColors;
+  paginationSafetyLevel?: number;
 }
 
 export function buildStyledPages(opts: BuildStyledPagesOptions): DocPage[] {

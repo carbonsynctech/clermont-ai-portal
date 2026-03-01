@@ -1,80 +1,76 @@
 import { Hono } from "hono";
 import puppeteer from "puppeteer";
-import { buildExportHtmlDocument } from "@repo/core";
-import { db, versions } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 import { workerAuth } from "../middleware/auth";
 
 const exportRoute = new Hono();
 
 exportRoute.use("*", workerAuth);
 
+/**
+ * POST /export/pdf
+ * Accepts { projectId, html } and returns a rendered PDF via Puppeteer.
+ * The styled HTML is built on the web side and sent here fully formed.
+ */
 exportRoute.post("/pdf", async (c) => {
-  const body = await c.req.json().catch(() => ({})) as { projectId?: string; html?: string };
-  const projectId = body.projectId;
+  const body = (await c.req.json().catch(() => ({}))) as {
+    projectId?: string;
+    html?: string;
+  };
 
-  if (!projectId) {
+  if (!body.projectId) {
     return c.json({ error: "projectId is required" }, 400);
   }
-
-  const finalVersion = await db.query.versions.findFirst({
-    where: and(
-      eq(versions.projectId, projectId),
-      eq(versions.versionType, "final")
-    ),
-    orderBy: (v, { desc }) => [desc(v.createdAt)],
-  });
-
-  if (!finalVersion) {
-    return c.json({ error: "No final version found for this project" }, 404);
+  if (!body.html?.trim()) {
+    return c.json({ error: "html body is required" }, 400);
   }
 
-  const html = body.html?.trim()
-    ? body.html
-    : buildExportHtmlDocument(finalVersion.content, `memo-${projectId}`);
-
-  // Launch Puppeteer and render PDF
   const executablePath = process.env["PUPPETEER_EXECUTABLE_PATH"];
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    ...(executablePath ? { executablePath } : {}),
-  });
+
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      ...(executablePath ? { executablePath } : {}),
+    });
+  } catch (err) {
+    console.error("[export/pdf] Failed to launch Puppeteer:", err);
+    return c.json(
+      {
+        error: "PDF generation failed: could not launch browser",
+        detail: String(err),
+      },
+      500
+    );
+  }
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(body.html, { waitUntil: "networkidle0" });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
-      margin: { top: "20mm", right: "20mm", bottom: "20mm", left: "20mm" },
+      margin: { top: "0", right: "0", bottom: "0", left: "0" },
     });
 
     return new Response(pdf, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="memo-${projectId}.pdf"`,
+        "Content-Disposition": `attachment; filename="memo-${body.projectId}.pdf"`,
       },
     });
+  } catch (err) {
+    console.error("[export/pdf] Puppeteer render error:", err);
+    return c.json(
+      {
+        error: "PDF generation failed during rendering",
+        detail: String(err),
+      },
+      500
+    );
   } finally {
-    await browser.close();
+    await browser.close().catch(() => {});
   }
-});
-
-exportRoute.get("/pdf", async (c) => {
-  const projectId = c.req.query("projectId");
-
-  if (!projectId) {
-    return c.json({ error: "projectId is required" }, 400);
-  }
-
-  const req = new Request("http://worker.local/export/pdf", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ projectId }),
-  });
-
-  return exportRoute.fetch(req, c.env, c.executionCtx);
 });
 
 export { exportRoute };
