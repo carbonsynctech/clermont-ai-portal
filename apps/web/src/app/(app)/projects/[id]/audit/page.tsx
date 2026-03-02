@@ -6,6 +6,7 @@ import { projects, auditLogs } from "@repo/db";
 import { eq, and, desc } from "drizzle-orm";
 import { Badge } from "@/components/ui/badge";
 import { AuditFilterBar } from "./audit-filter-bar";
+import { summarizeTokenUsage } from "@/lib/token-usage-cost";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -38,6 +39,16 @@ function categoryVariant(cat: "human" | "ai" | "system") {
   return "outline" as const;
 }
 
+function formatUsd(value: number): string {
+  if (value < 0.01) return `$${value.toFixed(4)}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 export default async function AuditPage({ params, searchParams }: PageProps) {
   const supabase = await createClient();
   const {
@@ -66,6 +77,14 @@ export default async function AuditPage({ params, searchParams }: PageProps) {
       ? logs.filter((log) => getActionCategory(log.action) === filter)
       : logs;
 
+  const tokenSummary = summarizeTokenUsage(
+    logs.map((log) => ({
+      modelId: log.modelId,
+      inputTokens: log.inputTokens,
+      outputTokens: log.outputTokens,
+    })),
+  );
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -84,6 +103,68 @@ export default async function AuditPage({ params, searchParams }: PageProps) {
 
       {/* Filter bar (client component) */}
       <AuditFilterBar activeFilter={filter ?? "all"} />
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-md border bg-card px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">Total tokens</p>
+          <p className="text-lg font-semibold">{tokenSummary.totalTokens.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            In {tokenSummary.totalInputTokens.toLocaleString()} • Out {tokenSummary.totalOutputTokens.toLocaleString()}
+          </p>
+        </div>
+        <div className="rounded-md border bg-card px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">Estimated AI cost</p>
+          <p className="text-lg font-semibold">{formatUsd(tokenSummary.estimatedCostUsd)}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Based on priced model mappings
+          </p>
+        </div>
+        <div className="rounded-md border bg-card px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">Model usage tracked</p>
+          <p className="text-lg font-semibold">{tokenSummary.models.length.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {tokenSummary.unpricedInputTokens + tokenSummary.unpricedOutputTokens > 0
+              ? `${(
+                  tokenSummary.unpricedInputTokens + tokenSummary.unpricedOutputTokens
+                ).toLocaleString()} tokens unpriced`
+              : "All logged tokens priced"}
+          </p>
+        </div>
+      </div>
+
+      {tokenSummary.models.length > 0 && (
+        <div className="rounded-md border overflow-hidden">
+          <div className="px-3 py-2 border-b bg-muted/40 text-xs font-medium text-muted-foreground">
+            Usage by model
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-muted/20">
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Model</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Input</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Output</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Total</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Estimated Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tokenSummary.models.map((model) => (
+                  <tr key={model.modelId} className="border-b last:border-0">
+                    <td className="px-3 py-2 font-mono text-muted-foreground">{model.modelId}</td>
+                    <td className="px-3 py-2 text-right text-muted-foreground">{model.inputTokens.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right text-muted-foreground">{model.outputTokens.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right text-muted-foreground">{model.totalTokens.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right text-muted-foreground">
+                      {model.isPriced ? formatUsd(model.estimatedCostUsd) : "–"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="rounded-md border overflow-hidden">
@@ -127,7 +208,7 @@ export default async function AuditPage({ params, searchParams }: PageProps) {
                     <td className="px-3 py-2 text-center text-muted-foreground">
                       {log.stepNumber ?? "–"}
                     </td>
-                    <td className="px-3 py-2 font-mono text-muted-foreground truncate max-w-[160px]">
+                    <td className="px-3 py-2 font-mono text-muted-foreground truncate max-w-40">
                       {log.modelId ?? "–"}
                     </td>
                     <td className="px-3 py-2 text-right text-muted-foreground">

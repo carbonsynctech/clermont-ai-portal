@@ -134,7 +134,7 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm text-muted-foreground">File (PDF, TXT, DOCX)</label>
+          <label className="text-sm text-muted-foreground">File (PDF, DOCX, TXT, CSV)</label>
           <FileUpload
             className="w-full"
             value={selectedFiles}
@@ -145,7 +145,7 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
               }
             }}
             onFileReject={(_, message) => setUploadError(message)}
-            accept=".pdf,.txt,.docx"
+            accept=".pdf,.txt,.docx,.doc,.csv"
             maxFiles={1}
           >
             <FileUploadDropzone>

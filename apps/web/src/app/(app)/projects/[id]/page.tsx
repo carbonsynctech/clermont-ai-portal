@@ -1,10 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { db } from "@repo/db";
-import { projects, stages, personas, sourceMaterials, versions, styleGuides } from "@repo/db";
+import { projects, stages, personas, sourceMaterials, versions, styleGuides, auditLogs } from "@repo/db";
 import { eq, and } from "drizzle-orm";
 import { PipelineView } from "@/components/projects/pipeline-view";
 import type { FactCheckFinding, FactCheckSource } from "@repo/db";
+import { summarizeTokenUsage } from "@/lib/token-usage-cost";
 
 function isFactCheckSource(value: unknown): value is FactCheckSource {
   if (!value || typeof value !== "object") return false;
@@ -51,7 +52,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
 
   if (!project) notFound();
 
-  const [stageRows, personaRows, materialRows, versionRows, styleGuideRows] = await Promise.all([
+  const [stageRows, personaRows, materialRows, versionRows, styleGuideRows, usageRows] = await Promise.all([
     db.query.stages.findMany({
       where: eq(stages.projectId, id),
       orderBy: (s, { asc }) => [asc(s.stepNumber)],
@@ -72,7 +73,17 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       where: eq(styleGuides.projectId, id),
       orderBy: (sg, { desc }) => [desc(sg.uploadedAt)],
     }),
+    db.query.auditLogs.findMany({
+      where: eq(auditLogs.projectId, id),
+      columns: {
+        modelId: true,
+        inputTokens: true,
+        outputTokens: true,
+      },
+    }),
   ]);
+
+  const usageSummary = summarizeTokenUsage(usageRows);
 
   const stepParam = typeof sp["step"] === "string" ? Number(sp["step"]) : NaN;
   const initialStep = Number.isFinite(stepParam) && stepParam >= 1 && stepParam <= 13
@@ -150,6 +161,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       factCheckApprovedIssues={factCheckApprovedIssues}
       factCheckAppliedCorrections={factCheckAppliedCorrections}
       coverImageUrl={coverImageUrl}
+      tokenUsageSummary={usageSummary}
     />
   );
 }

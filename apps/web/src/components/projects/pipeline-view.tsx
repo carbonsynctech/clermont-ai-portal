@@ -34,6 +34,7 @@ import type {
 } from "@repo/db";
 import type { ProjectBriefData } from "@repo/db";
 import { type DocumentColors, DEFAULT_COLORS } from "./steps/document-template";
+import type { TokenUsageSummary } from "@/lib/token-usage-cost";
 
 const STEP_TITLES: Record<number, string> = {
   1: "Define Task",
@@ -132,6 +133,17 @@ interface PipelineViewProps {
   factCheckApprovedIssues?: string[] | null;
   factCheckAppliedCorrections?: number | null;
   coverImageUrl?: string;
+  tokenUsageSummary: TokenUsageSummary;
+}
+
+function formatUsd(value: number): string {
+  if (value < 0.01) return `$${value.toFixed(4)}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 export function PipelineView({
@@ -147,6 +159,7 @@ export function PipelineView({
   factCheckApprovedIssues,
   factCheckAppliedCorrections,
   coverImageUrl,
+  tokenUsageSummary,
 }: PipelineViewProps) {
   const router = useRouter();
   const [activeStep, setActiveStep] = useState(initialStep);
@@ -675,6 +688,30 @@ export function PipelineView({
 
         {/* Right: active step content */}
         <div>
+          <div className="mb-4 rounded-lg border bg-card px-4 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Token Usage</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Input {tokenUsageSummary.totalInputTokens.toLocaleString()} • Output {tokenUsageSummary.totalOutputTokens.toLocaleString()}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-muted-foreground">Estimated Cost</p>
+                <p className="text-lg font-semibold">{formatUsd(tokenUsageSummary.estimatedCostUsd)}</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Total {tokenUsageSummary.totalTokens.toLocaleString()} tokens across {tokenUsageSummary.models.length.toLocaleString()} model
+              {tokenUsageSummary.models.length === 1 ? "" : "s"}
+              {tokenUsageSummary.unpricedInputTokens + tokenUsageSummary.unpricedOutputTokens > 0
+                ? ` • ${(
+                    tokenUsageSummary.unpricedInputTokens + tokenUsageSummary.unpricedOutputTokens
+                  ).toLocaleString()} tokens are not priced yet`
+                : ""}
+            </p>
+          </div>
+
           {/* Step header */}
           <div className="mb-6">
             <p className="text-sm text-muted-foreground mb-1">

@@ -1,4 +1,6 @@
 import { PDFParse } from "pdf-parse";
+import mammoth from "mammoth";
+import { parse as csvParse } from "csv-parse/sync";
 import { db, sourceMaterials, sourceChunks, auditLogs } from "@repo/db";
 import { eq } from "drizzle-orm";
 import { chunkText, claude } from "@repo/core";
@@ -36,7 +38,31 @@ export async function extractAndChunk(materialId: string): Promise<void> {
     const result = await parser.getText();
     text = result.text;
     await parser.destroy();
+  } else if (
+    material.mimeType ===
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
+    const result = await mammoth.extractRawText({ buffer });
+    text = result.value;
+  } else if (material.mimeType === "text/csv") {
+    // Parse CSV into rows, then format as readable text
+    const raw = buffer.toString("utf-8");
+    const records = csvParse(raw, {
+      columns: true,
+      skip_empty_lines: true,
+      relax_column_count: true,
+    }) as Record<string, string>[];
+    if (records.length === 0) {
+      text = raw; // fallback to raw text if parsing fails
+    } else {
+      const headers = Object.keys(records[0] as Record<string, string>);
+      const lines = records.map((row) =>
+        headers.map((h) => `${h}: ${row[h] ?? ""}`).join(" | "),
+      );
+      text = `Columns: ${headers.join(", ")}\n\n${lines.join("\n")}`;
+    }
   } else {
+    // Plain text fallback
     text = buffer.toString("utf-8");
   }
 

@@ -84,7 +84,7 @@ export function StyleGuideUpload({ projectId, existingStyleGuide }: StyleGuideUp
           value={selectedFiles}
           onValueChange={setSelectedFiles}
           onFileReject={(_, message) => setError(message)}
-          accept=".pdf,.txt,.docx"
+          accept=".pdf,.txt,.docx,.doc,.csv"
           maxFiles={1}
         >
           <FileUploadDropzone>
@@ -94,7 +94,7 @@ export function StyleGuideUpload({ projectId, existingStyleGuide }: StyleGuideUp
               </div>
               <p className="font-medium text-sm">Drag & drop style guide here</p>
               <p className="text-muted-foreground text-sm">
-                Or click to browse (PDF, TXT, DOCX)
+                Or click to browse (PDF, DOCX, TXT, CSV)
               </p>
             </div>
             <FileUploadTrigger asChild>
