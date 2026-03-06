@@ -82,7 +82,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     twitter: {
       card: "summary_large_image",
-      title: "AI Content Portal | Investment Memo Studio",
+      title: "Clermont AI Portal | Investment Memo Studio",
       description:
         "Turn source material into investor-ready memos with a structured AI workflow, human review checkpoints, and polished exports.",
       images: [socialPreviewImage],
