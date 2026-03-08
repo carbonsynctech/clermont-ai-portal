@@ -1,1 +1,1 @@
-linkedin-scraper
+social-analyzer
