@@ -19,12 +19,20 @@ interface DuckDuckGoResponse {
   AbstractSource?: string;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Person lookup types ───────────────────────────────────────────────────────
 
-function extractLinkedInSlug(url: string): string | null {
-  const m = url.match(/linkedin\.com\/in\/([^/?#]+)/i);
-  return m?.[1] ?? null;
+export interface PersonLookupResult {
+  found: boolean;
+  name?: string;
+  headline?: string;
+  summary?: string;
+  platforms?: Array<{
+    platform: string;
+    url: string;
+  }>;
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function searchBrave(query: string, apiKey: string): Promise<string | null> {
   try {
@@ -76,10 +84,8 @@ export async function searchForPerson(
   name: string,
   linkedinUrl?: string,
 ): Promise<string | null> {
-  const slug = linkedinUrl ? extractLinkedInSlug(linkedinUrl) : null;
-  // Include the LinkedIn slug in the query to help disambiguate common names
-  const query = slug
-    ? `${name} ${slug} professional`
+  const query = linkedinUrl
+    ? `${name} LinkedIn professional`
     : `${name} professional profile`;
 
   const braveKey = process.env["BRAVE_SEARCH_API_KEY"];
@@ -94,85 +100,62 @@ export async function searchForPerson(
   return null;
 }
 
-interface LinkedInProfile {
-  name?: string;
-  headline?: string;
-  about?: string;
-  location?: string;
-  experiences?: Array<{
-    title?: string;
-    company?: string;
-    date_range?: string;
-    description?: string;
-  }>;
-  educations?: Array<{
-    institution?: string;
-    degree?: string;
-  }>;
-  skills?: string[];
-}
-
-function formatLinkedInProfile(profile: LinkedInProfile): string {
+/**
+ * Format a PersonLookupResult into human-readable text for AI consumption.
+ */
+function formatPersonLookup(result: PersonLookupResult): string {
   const parts: string[] = [];
 
-  if (profile.name) parts.push(`Name: ${profile.name}`);
-  if (profile.headline) parts.push(`Headline: ${profile.headline}`);
-  if (profile.location) parts.push(`Location: ${profile.location}`);
-  if (profile.about) parts.push(`About: ${profile.about}`);
+  if (result.name) parts.push(`Name: ${result.name}`);
+  if (result.headline) parts.push(`Headline: ${result.headline}`);
+  if (result.summary) parts.push(`Summary: ${result.summary}`);
 
-  if (profile.experiences && profile.experiences.length > 0) {
-    const lines = profile.experiences.map((e) => {
-      const tokens: string[] = [];
-      if (e.title) tokens.push(e.title);
-      if (e.company) tokens.push(`at ${e.company}`);
-      if (e.date_range) tokens.push(`(${e.date_range})`);
-      return tokens.join(" ");
-    });
-    parts.push(`Experience:\n${lines.map((l) => `  - ${l}`).join("\n")}`);
-  }
-
-  if (profile.educations && profile.educations.length > 0) {
-    const lines = profile.educations.map((e) => {
-      const tokens: string[] = [];
-      if (e.degree) tokens.push(e.degree);
-      if (e.institution) tokens.push(`— ${e.institution}`);
-      return tokens.join(" ");
-    });
-    parts.push(`Education:\n${lines.map((l) => `  - ${l}`).join("\n")}`);
-  }
-
-  if (profile.skills && profile.skills.length > 0) {
-    parts.push(`Skills: ${profile.skills.join(", ")}`);
+  if (result.platforms && result.platforms.length > 0) {
+    const platformList = result.platforms
+      .map((p) => `  - ${p.platform}: ${p.url}`)
+      .join("\n");
+    parts.push(`Social Profiles:\n${platformList}`);
   }
 
   return parts.join("\n");
 }
 
 /**
- * Scrape a LinkedIn profile via the Python linkedin_scraper library.
+ * Lookup a person's public profile via social-analyzer (OSINT).
+ * No credentials required.
+ *
  * Returns formatted profile text, or null if:
- *   - LINKEDIN_USER / LINKEDIN_PASSWORD env vars are not set
  *   - The Python script fails or times out
+ *   - No results found
+ *
+ * If webSearchFallback is true (default), will automatically fall back to
+ * web search if OSINT lookup returns no results.
  */
-export async function scrapeLinkedIn(url: string): Promise<string | null> {
-  const email = process.env["LINKEDIN_USER"] ?? process.env["LINKEDIN_EMAIL"];
-  const password = process.env["LINKEDIN_PASSWORD"];
-  if (!email || !password) return null;
-
+export async function lookupPerson(
+  name: string,
+  linkedinUrl?: string,
+  webSearchFallback = true,
+): Promise<string | null> {
   // scripts/ lives alongside the worker app root (apps/worker/scripts/)
   const scriptPath = path.resolve(process.cwd(), "scripts", "linkedin_fetch.py");
 
-  return new Promise((resolve) => {
+  // Build arguments for Python script
+  const args = [scriptPath, name];
+  if (linkedinUrl) {
+    args.push("--linkedin-url", linkedinUrl);
+  }
+
+  const osintResult = await new Promise<PersonLookupResult | null>((resolve) => {
     let stdout = "";
     let stderr = "";
 
-    const proc = spawn("python3", [scriptPath, url], {
+    const proc = spawn("python3", args, {
       env: { ...process.env },
     });
 
     const timeout = setTimeout(() => {
       proc.kill();
-      console.warn("[linkedin] Scrape timed out after 60s");
+      console.warn("[person-lookup] OSINT lookup timed out after 60s");
       resolve(null);
     }, 60_000);
 
@@ -186,23 +169,36 @@ export async function scrapeLinkedIn(url: string): Promise<string | null> {
     proc.on("close", (code) => {
       clearTimeout(timeout);
       if (code !== 0) {
-        console.warn(`[linkedin] Scrape failed (exit ${code ?? "?"}):\n${stderr.trim()}`);
+        console.warn(`[person-lookup] Script failed (exit ${code ?? "?"}):\n${stderr.trim()}`);
         resolve(null);
         return;
       }
       try {
-        const profile = JSON.parse(stdout.trim()) as LinkedInProfile;
-        resolve(formatLinkedInProfile(profile));
+        const result = JSON.parse(stdout.trim()) as PersonLookupResult;
+        resolve(result);
       } catch {
-        console.warn("[linkedin] Failed to parse JSON output:", stdout.slice(0, 200));
+        console.warn("[person-lookup] Failed to parse JSON output:", stdout.slice(0, 200));
         resolve(null);
       }
     });
 
     proc.on("error", (err) => {
       clearTimeout(timeout);
-      console.warn("[linkedin] Failed to spawn python3:", err.message);
+      console.warn("[person-lookup] Failed to spawn python3:", err.message);
       resolve(null);
     });
   });
+
+  // If OSINT found results, format and return
+  if (osintResult?.found) {
+    return `OSINT profile data:\n${formatPersonLookup(osintResult)}`;
+  }
+
+  // Fall back to web search if enabled
+  if (webSearchFallback) {
+    console.log("[person-lookup] OSINT returned no results, falling back to web search");
+    return searchForPerson(name, linkedinUrl);
+  }
+
+  return null;
 }
