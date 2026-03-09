@@ -55,7 +55,8 @@
       "Bash(lsof:*)",
       "Bash(sips:*)",
       "Read(//tmp/**)",
-      "Bash(rm /tmp/env-check)"
+      "Bash(rm /tmp/env-check)",
+      "Bash(brew install:*)"
     ]
   },
   "defaultMode": "bypassPermissions"
