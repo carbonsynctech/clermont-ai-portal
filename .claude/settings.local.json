@@ -52,7 +52,8 @@
       "Bash(social-analyzer --cli --username edwardzehuazhang --metadata --silent --output json --folder /tmp/sa-test)",
       "Bash(social-analyzer:*)",
       "Bash(git:*)",
-      "Bash(lsof:*)"
+      "Bash(lsof:*)",
+      "Bash(sips:*)"
     ]
   },
   "defaultMode": "bypassPermissions"
