@@ -21,7 +21,7 @@ export function LoginForm({
 }: React.ComponentProps<"div">) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [mode, setMode] = useState<"magic" | "password">("password")
+  const [mode, setMode] = useState<"magic" | "password">("magic")
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -223,11 +223,10 @@ export function LoginForm({
                   </Field>
                 </>
               )}
-              <Field>
-                <Button
+              <FieldDescription className="text-center">
+                <button
                   type="button"
-                  variant="ghost"
-                  className="text-muted-foreground text-sm"
+                  className="text-muted-foreground hover:underline text-sm cursor-pointer"
                   onClick={() => {
                     setMode(mode === "magic" ? "password" : "magic")
                     setError(null)
@@ -237,8 +236,8 @@ export function LoginForm({
                   {mode === "magic"
                     ? "Sign in with password instead"
                     : "Sign in with magic link instead"}
-                </Button>
-              </Field>
+                </button>
+              </FieldDescription>
             </FieldGroup>
           </form>
           <div className="bg-muted relative hidden overflow-hidden md:block">
