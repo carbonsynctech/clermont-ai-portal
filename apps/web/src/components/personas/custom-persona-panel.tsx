@@ -57,30 +57,24 @@ export function CustomPersonaPanel({
     if (handledResultRef.current === completedPersonaId) return;
     handledResultRef.current = completedPersonaId;
 
-    let cancelled = false;
-
-    (async () => {
+    void (async () => {
       try {
         const r = await fetch(`/api/personas/${completedPersonaId}`);
-        if (!r.ok || cancelled) return;
-        const p = (await r.json()) as Persona;
-        if (cancelled) return;
-        setGeneratedPersonas((prev) => [p, ...prev]);
-        onPersonaGeneratedRef.current(p);
-        onSelectRef.current(p);
+        if (r.ok) {
+          const p = (await r.json()) as Persona;
+          setGeneratedPersonas((prev) => [p, ...prev]);
+          onPersonaGeneratedRef.current(p);
+          onSelectRef.current(p);
+        }
       } catch (err) {
         console.error("[custom-persona] Failed to fetch persona:", err);
-      } finally {
-        if (!cancelled) {
-          setJobId(null);
-          setOutputDismissed(true);
-          setName("");
-          setContext("");
-        }
       }
+      // Always dismiss output and reset form
+      setJobId(null);
+      setOutputDismissed(true);
+      setName("");
+      setContext("");
     })();
-
-    return () => { cancelled = true; };
   }, [completedPersonaId]);
 
   const isRunning = isDispatching || isPolling;
