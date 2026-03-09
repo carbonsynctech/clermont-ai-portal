@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -20,11 +20,14 @@ export function LoginForm({
   ...props
 }: React.ComponentProps<"div">) {
   const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [mode, setMode] = useState<"magic" | "password">("password")
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cooldown, setCooldown] = useState(0)
   const searchParams = useSearchParams()
+  const router = useRouter()
 
   useEffect(() => {
     const urlError = searchParams.get("error")
@@ -57,7 +60,7 @@ export function LoginForm({
     return undefined
   })()
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleMagicLink(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
     setError(null)
@@ -86,11 +89,40 @@ export function LoginForm({
     setCooldown(60)
   }
 
+  async function handlePasswordLogin(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    const supabase = createClient()
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (signInError) {
+      setError(signInError.message)
+      setLoading(false)
+      return
+    }
+
+    setLoading(false)
+    router.push("/dashboard")
+    router.refresh()
+  }
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card className="overflow-hidden border-0 p-0 shadow-none">
         <CardContent className="grid p-0 md:grid-cols-2">
-          <form className="p-6 md:p-8" onSubmit={(e) => void handleSubmit(e)}>
+          <form
+            className="p-6 md:p-8"
+            onSubmit={(e) =>
+              void (mode === "magic"
+                ? handleMagicLink(e)
+                : handlePasswordLogin(e))
+            }
+          >
             <FieldGroup>
               <div className="flex flex-col items-center gap-2 text-center">
                 <Image
@@ -102,12 +134,50 @@ export function LoginForm({
                 />
                 <h1 className="text-2xl font-bold">AI Content Portal</h1>
                 <p className="text-muted-foreground text-balance">
-                  {sent
-                    ? "Check your email for a magic link"
-                    : "Sign in with a one-time magic link"}
+                  {mode === "magic"
+                    ? sent
+                      ? "Check your email for a magic link"
+                      : "Sign in with a one-time magic link"
+                    : "Sign in with your password"}
                 </p>
               </div>
-              {!sent ? (
+              {mode === "password" ? (
+                <>
+                  <Field>
+                    <FieldLabel htmlFor="email">Email</FieldLabel>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="password">Password</FieldLabel>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </Field>
+                  {error ? (
+                    <FieldDescription className="text-center text-destructive">
+                      {error}
+                    </FieldDescription>
+                  ) : null}
+                  <Field>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? "Signing in..." : "Sign in"}
+                    </Button>
+                  </Field>
+                </>
+              ) : !sent ? (
                 <>
                   <Field>
                     <FieldLabel htmlFor="email">Email</FieldLabel>
@@ -153,9 +223,22 @@ export function LoginForm({
                   </Field>
                 </>
               )}
-              <FieldDescription className="text-center">
-                This portal sends one-time sign-in links. No password required.
-              </FieldDescription>
+              <Field>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-muted-foreground text-sm"
+                  onClick={() => {
+                    setMode(mode === "magic" ? "password" : "magic")
+                    setError(null)
+                    setSent(false)
+                  }}
+                >
+                  {mode === "magic"
+                    ? "Sign in with password instead"
+                    : "Sign in with magic link instead"}
+                </Button>
+              </Field>
             </FieldGroup>
           </form>
           <div className="bg-muted relative hidden overflow-hidden md:block">
