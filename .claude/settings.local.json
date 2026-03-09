@@ -51,7 +51,8 @@
       "Read(//private/tmp/**)",
       "Bash(social-analyzer --cli --username edwardzehuazhang --metadata --silent --output json --folder /tmp/sa-test)",
       "Bash(social-analyzer:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(lsof:*)"
     ]
   },
   "defaultMode": "bypassPermissions"

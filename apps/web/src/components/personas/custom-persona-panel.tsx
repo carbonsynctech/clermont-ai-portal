@@ -48,29 +48,40 @@ export function CustomPersonaPanel({
   const { status, job, isPolling, elapsedSeconds, partialOutput } = useJobStatus(jobId);
 
   // When job completes, fetch the new persona, auto-select it, and hide output
-  useEffect(() => {
-    if (status !== "completed" || !job?.result) return;
-    const result = job.result as { personaId?: string };
-    if (!result.personaId) return;
-    // Prevent re-processing the same result
-    if (handledResultRef.current === result.personaId) return;
-    handledResultRef.current = result.personaId;
+  const completedPersonaId = status === "completed" && job?.result
+    ? (job.result as { personaId?: string }).personaId ?? null
+    : null;
 
-    const personaId = result.personaId;
-    fetch(`/api/personas/${personaId}`)
-      .then(async (r) => {
-        if (!r.ok) return;
+  useEffect(() => {
+    if (!completedPersonaId) return;
+    if (handledResultRef.current === completedPersonaId) return;
+    handledResultRef.current = completedPersonaId;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const r = await fetch(`/api/personas/${completedPersonaId}`);
+        if (!r.ok || cancelled) return;
         const p = (await r.json()) as Persona;
+        if (cancelled) return;
         setGeneratedPersonas((prev) => [p, ...prev]);
         onPersonaGeneratedRef.current(p);
         onSelectRef.current(p);
-        setJobId(null);
-        setOutputDismissed(true);
-        setName("");
-        setContext("");
-      })
-      .catch(() => { /* ignore fetch errors — user can try again */ });
-  }, [status, job?.result]);
+      } catch (err) {
+        console.error("[custom-persona] Failed to fetch persona:", err);
+      } finally {
+        if (!cancelled) {
+          setJobId(null);
+          setOutputDismissed(true);
+          setName("");
+          setContext("");
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [completedPersonaId]);
 
   const isRunning = isDispatching || isPolling;
 
