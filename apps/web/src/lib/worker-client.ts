@@ -2,7 +2,9 @@ const WORKER_URL = process.env.WORKER_URL ?? "http://localhost:3001";
 const WORKER_SECRET = process.env.WORKER_SECRET ?? "";
 
 async function workerFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`${WORKER_URL}${path}`, {
+  const url = `${WORKER_URL}${path}`;
+  console.log(`[workerFetch] ${init?.method ?? "GET"} ${url}`);
+  const res = await fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -13,10 +15,13 @@ async function workerFetch(path: string, init?: RequestInit) {
 
   if (!res.ok) {
     const text = await res.text();
+    console.error(`[workerFetch] Error ${res.status}: ${text.slice(0, 200)}`);
     throw new Error(`Worker error ${res.status}: ${text}`);
   }
 
-  return res.json() as Promise<unknown>;
+  const data = await res.json() as unknown;
+  console.log(`[workerFetch] Response OK from ${path}:`, JSON.stringify(data).slice(0, 300));
+  return data;
 }
 
 export interface WorkerJob {

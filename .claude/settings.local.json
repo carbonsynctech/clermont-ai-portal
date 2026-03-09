@@ -53,7 +53,9 @@
       "Bash(social-analyzer:*)",
       "Bash(git:*)",
       "Bash(lsof:*)",
-      "Bash(sips:*)"
+      "Bash(sips:*)",
+      "Read(//tmp/**)",
+      "Bash(rm /tmp/env-check)"
     ]
   },
   "defaultMode": "bypassPermissions"

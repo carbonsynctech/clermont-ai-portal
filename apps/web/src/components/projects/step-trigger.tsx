@@ -34,16 +34,19 @@ export function useStepTrigger(
   const outputKey = `output-${projectId}-${stepNumber}`;
 
   // Restore jobId from sessionStorage so polling survives navigation
-  const [jobId, setJobId] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return sessionStorage.getItem(jobKey);
-  });
+  // NOTE: Always init as null/"" to avoid hydration mismatch, then sync in useEffect
+  const [jobId, setJobId] = useState<string | null>(null);
 
   // Restore last output so completed steps stay visible after navigation
-  const [cachedOutput, setCachedOutput] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return sessionStorage.getItem(outputKey) ?? "";
-  });
+  const [cachedOutput, setCachedOutput] = useState<string>("");
+
+  // Hydration-safe: restore from sessionStorage after mount
+  useEffect(() => {
+    const storedJob = sessionStorage.getItem(jobKey);
+    if (storedJob) setJobId(storedJob);
+    const storedOutput = sessionStorage.getItem(outputKey);
+    if (storedOutput) setCachedOutput(storedOutput);
+  }, [jobKey, outputKey]);
 
   const [isDispatching, setIsDispatching] = useState(false);
   const [hasDispatched, setHasDispatched] = useState(false);
