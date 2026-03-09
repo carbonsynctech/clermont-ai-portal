@@ -695,66 +695,63 @@ export function DefineTaskStep({
 
       <div className="sticky bottom-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 backdrop-blur px-5 py-3.5 shadow-lg">
         <div className="flex items-center gap-3">
-          <Button
-            onClick={() => void handleSave({ refresh: true })}
-            disabled={!isFormValid || isSaving || stage1Status === "completed"}
-            variant={saved ? "outline" : "default"}
-          >
-            {isSaving
-              ? "Saving…"
-              : stage1Status === "completed"
-                ? "Saved ✓"
-                : "Save & Continue to Step 2"}
-          </Button>
+          {stage1Status !== "completed" && (
+            <StepTriggerButton
+              trigger={step1Trigger}
+              label="Generate Master Prompt"
+              disabled={!isFormValid}
+              onBeforeRun={async () => {
+                if (!saved) await handleSave({ refresh: false });
+              }}
+            />
+          )}
+
+          {stage1Status === "completed" && (
+            <StepTriggerButton
+              trigger={step1Trigger}
+              label="Regenerate Master Prompt"
+              variant="outline"
+            />
+          )}
 
           {stage1Status === "completed" && (
             <div className="flex items-center gap-2 text-green-600">
               <CheckCircle2 className="size-4" />
-              <span className="text-sm font-medium">Brief saved & master prompt generated.</span>
+              <span className="text-sm font-medium">Master prompt generated.</span>
             </div>
           )}
         </div>
 
         <div className="flex items-center gap-2">
-          {saved && stage1Status !== "completed" && (
-            <StepTriggerButton
-              trigger={step1Trigger}
-              label="Generate Master Prompt"
-            />
-          )}
-
           {stage1Status === "completed" && (
-            <>
-              <Button
-                size="sm"
-                disabled={isSavingPrompt}
-                onClick={async () => {
-                  setIsSavingPrompt(true);
-                  setPromptSaveError(null);
-                  try {
-                    const res = await fetch(`/api/projects/${projectId}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ masterPrompt: promptText }),
-                    });
-                    if (!res.ok) throw new Error("Failed to save");
-                    setIsEditingPrompt(false);
-                    router.push(`/projects/${projectId}?step=2`);
-                  } catch {
-                    setPromptSaveError("Failed to save prompt. Please try again.");
-                  } finally {
-                    setIsSavingPrompt(false);
-                  }
-                }}
-              >
-                {isSavingPrompt ? "Saving…" : "Save and continue to Step 2"}
-              </Button>
-            </>
+            <Button
+              disabled={isSavingPrompt}
+              onClick={async () => {
+                setIsSavingPrompt(true);
+                setPromptSaveError(null);
+                try {
+                  const res = await fetch(`/api/projects/${projectId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ masterPrompt: promptText }),
+                  });
+                  if (!res.ok) throw new Error("Failed to save");
+                  setIsEditingPrompt(false);
+                  router.push(`/projects/${projectId}?step=2`);
+                } catch {
+                  setPromptSaveError("Failed to save prompt. Please try again.");
+                } finally {
+                  setIsSavingPrompt(false);
+                }
+              }}
+            >
+              {isSavingPrompt ? "Saving…" : "Save & Continue to Step 2"}
+            </Button>
           )}
         </div>
       </div>
 
-      {saved && stage1Status !== "completed" && (
+      {stage1Status !== "completed" && (
         <StepTriggerOutput trigger={step1Trigger} />
       )}
 

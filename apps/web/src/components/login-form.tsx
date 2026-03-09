@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -23,6 +24,14 @@ export function LoginForm({
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const urlError = searchParams.get("error")
+    if (urlError) {
+      setError(urlError)
+    }
+  }, [searchParams])
 
   const emailRedirectTo = (() => {
     const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL

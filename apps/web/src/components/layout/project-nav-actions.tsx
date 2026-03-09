@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 import {
   PROJECT_SAVED_EVENT,
+  PROJECT_COST_EVENT,
   type ProjectSavedEventDetail,
+  type ProjectCostEventDetail,
   emitSaveRequest,
 } from "@/lib/project-save-events";
 import {
@@ -62,12 +64,18 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
     }
   const [isSaving, setIsSaving] = React.useState(false);
   const [isFavorite, setIsFavorite] = React.useState(false);
+  const [estimatedCost, setEstimatedCost] = React.useState<number | null>(null);
   const createdDate = React.useMemo(() => new Date(createdAt), [createdAt]);
   const updatedDate = React.useMemo(() => new Date(updatedAt), [updatedAt]);
   const initialSavedAt = React.useMemo(() => {
     return updatedDate.getTime() > createdDate.getTime() ? updatedDate : null;
   }, [createdDate, updatedDate]);
   const [savedAt, setSavedAt] = React.useState<Date | null>(initialSavedAt);
+  const [hasMounted, setHasMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   React.useEffect(() => {
     setSavedAt(initialSavedAt);
@@ -96,6 +104,17 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
     return () => window.removeEventListener(PROJECT_SAVED_EVENT, onProjectSaved);
   }, [projectId]);
 
+  React.useEffect(() => {
+    const onCostUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<ProjectCostEventDetail>;
+      if (!customEvent.detail || customEvent.detail.projectId !== projectId) return;
+      setEstimatedCost(customEvent.detail.estimatedCostUsd);
+    };
+
+    window.addEventListener(PROJECT_COST_EVENT, onCostUpdate);
+    return () => window.removeEventListener(PROJECT_COST_EVENT, onCostUpdate);
+  }, [projectId]);
+
   function handleSaveClick() {
     setIsSaving(true);
     setSavedAt(new Date()); // optimistic update
@@ -108,13 +127,15 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
     setIsFavorite(toggleProjectFavorite(projectId));
   }
 
-  const formattedCreatedDate = createdDate.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const formattedCreatedDate = hasMounted
+    ? createdDate.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "";
 
-  const formattedSavedDate = savedAt
+  const formattedSavedDate = hasMounted && savedAt
     ? savedAt.toLocaleString("en-US", {
         hour: "numeric",
         minute: "2-digit",
@@ -124,12 +145,21 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
       })
     : null;
 
+  function formatCost(value: number): string {
+    if (value < 0.01) return `$${value.toFixed(4)}`;
+    return `$${value.toFixed(2)}`;
+  }
+
+  const costText = estimatedCost !== null ? ` · Est. cost: ${formatCost(estimatedCost)}` : "";
+
   // Removed unused actionGroups and isOpen/setIsOpen
 
   return (
     <div className="flex items-center gap-2 text-sm">
-      <div className="text-muted-foreground hidden font-medium md:inline-block">
-        {formattedSavedDate ? `Saved ${formattedSavedDate}` : `Created ${formattedCreatedDate}`}
+      <div className="text-muted-foreground hidden font-medium md:inline-block" suppressHydrationWarning>
+        {hasMounted
+          ? (formattedSavedDate ? `Saved ${formattedSavedDate}${costText}` : `Created ${formattedCreatedDate}${costText}`)
+          : "\u00A0"}
       </div>
       <Button
         size="sm"

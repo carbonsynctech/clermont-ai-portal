@@ -175,16 +175,22 @@ interface StepTriggerButtonProps {
   label: string;
   disabled?: boolean;
   disabledReason?: string;
+  variant?: "default" | "outline" | "secondary" | "ghost" | "link" | "destructive";
+  onBeforeRun?: () => Promise<void>;
 }
 
-export function StepTriggerButton({ trigger, label, disabled = false, disabledReason }: StepTriggerButtonProps) {
+export function StepTriggerButton({ trigger, label, disabled = false, disabledReason, variant = "default", onBeforeRun }: StepTriggerButtonProps) {
   const { isRunning, isDispatching, handleRun, handleReset } = trigger;
 
   return (
     <div className="flex items-center gap-2">
       <Button
         size="sm"
-        onClick={() => void handleRun()}
+        variant={variant}
+        onClick={async () => {
+          if (onBeforeRun) await onBeforeRun();
+          void handleRun();
+        }}
         disabled={disabled || isRunning}
       >
         {isRunning ? (

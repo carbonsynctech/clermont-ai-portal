@@ -35,6 +35,7 @@ import type {
 import type { ProjectBriefData } from "@repo/db";
 import { type DocumentColors, DEFAULT_COLORS } from "./steps/document-template";
 import type { TokenUsageSummary } from "@/lib/token-usage-cost";
+import { emitProjectCost } from "@/lib/project-save-events";
 
 const STEP_TITLES: Record<number, string> = {
   1: "Define Task",
@@ -136,15 +137,6 @@ interface PipelineViewProps {
   tokenUsageSummary: TokenUsageSummary;
 }
 
-function formatUsd(value: number): string {
-  if (value < 0.01) return `$${value.toFixed(4)}`;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
 
 export function PipelineView({
   project,
@@ -182,6 +174,11 @@ export function PipelineView({
   // Shared document styling state — set in step 6, consumed in step 7
   const [documentColors, setDocumentColors] = useState<DocumentColors>(DEFAULT_COLORS);
   const [liveCoverImageUrl, setLiveCoverImageUrl] = useState<string | undefined>(coverImageUrl);
+
+  // Emit token cost to header nav
+  useEffect(() => {
+    emitProjectCost({ projectId: project.id, estimatedCostUsd: tokenUsageSummary.estimatedCostUsd });
+  }, [project.id, tokenUsageSummary.estimatedCostUsd]);
 
   // Keep liveCoverImageUrl in sync when the server refreshes the signed URL
   useEffect(() => {
@@ -271,6 +268,7 @@ export function PipelineView({
 
   function handleStepClick(step: number) {
     setActiveStep(step);
+    window.history.replaceState(null, "", `/projects/${project.id}?step=${step}`);
   }
 
   const prerequisiteMessage = getPrerequisiteMessage(activeStep, stageMap);
@@ -688,30 +686,6 @@ export function PipelineView({
 
         {/* Right: active step content */}
         <div>
-          <div className="mb-4 rounded-lg border bg-card px-4 py-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Token Usage</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Input {tokenUsageSummary.totalInputTokens.toLocaleString()} • Output {tokenUsageSummary.totalOutputTokens.toLocaleString()}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-muted-foreground">Estimated Cost</p>
-                <p className="text-lg font-semibold">{formatUsd(tokenUsageSummary.estimatedCostUsd)}</p>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Total {tokenUsageSummary.totalTokens.toLocaleString()} tokens across {tokenUsageSummary.models.length.toLocaleString()} model
-              {tokenUsageSummary.models.length === 1 ? "" : "s"}
-              {tokenUsageSummary.unpricedInputTokens + tokenUsageSummary.unpricedOutputTokens > 0
-                ? ` • ${(
-                    tokenUsageSummary.unpricedInputTokens + tokenUsageSummary.unpricedOutputTokens
-                  ).toLocaleString()} tokens are not priced yet`
-                : ""}
-            </p>
-          </div>
-
           {/* Step header */}
           <div className="mb-6">
             <p className="text-sm text-muted-foreground mb-1">

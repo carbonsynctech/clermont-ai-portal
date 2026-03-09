@@ -3,9 +3,16 @@ import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
+
+  // Use the configured site URL for redirects to avoid http/https mismatches on Vercel
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : new URL(request.url).origin);
 
   if (code) {
     const cookieStore = await cookies();
@@ -28,9 +35,17 @@ export async function GET(request: NextRequest) {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      return NextResponse.redirect(`${siteUrl}${next}`);
     }
+
+    console.error("[auth/callback] Code exchange failed:", error.message);
+    return NextResponse.redirect(
+      `${siteUrl}/login?error=${encodeURIComponent(error.message)}`
+    );
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
+  console.error("[auth/callback] No code parameter in callback URL");
+  return NextResponse.redirect(
+    `${siteUrl}/login?error=${encodeURIComponent("No authentication code received. Check Supabase Redirect URLs configuration.")}`
+  );
 }
