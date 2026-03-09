@@ -60,10 +60,10 @@ export async function generateMetadata(): Promise<Metadata> {
     icons: {
       icon: [
         { url: "/favicon.ico" },
-        { url: "/fleur-de-lis.png", type: "image/png" },
+        { url: "/site-icon.png", type: "image/png" },
       ],
       shortcut: ["/favicon.ico"],
-      apple: [{ url: "/fleur-de-lis.png", type: "image/png" }],
+      apple: [{ url: "/site-icon.png", type: "image/png" }],
     },
     openGraph: {
       title: "Clermont Group | AI Content Portal 2026",
