@@ -35,6 +35,9 @@ COPY packages/db/package.json packages/db/
 
 RUN pnpm install --frozen-lockfile
 
+# ── Ensure Puppeteer's Chrome is installed ─────────────────────────────────
+RUN cd apps/worker && npx puppeteer browsers install chrome
+
 # ── Copy full source ─────────────────────────────────────────────────────────
 COPY . .
 

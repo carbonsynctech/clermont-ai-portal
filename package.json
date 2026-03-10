@@ -16,5 +16,8 @@
     "typescript": "^5.7.0"
   },
   "engines": { "node": ">=22.0.0", "pnpm": ">=10.0.0" },
-  "packageManager": "pnpm@10.17.1"
+  "packageManager": "pnpm@10.17.1",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "puppeteer"]
+  }
 }
