@@ -5,6 +5,7 @@ import { projects, stages, personas, sourceMaterials, versions, styleGuides, aud
 import { eq, and } from "drizzle-orm";
 import { PipelineView } from "@/components/projects/pipeline-view";
 import type { FactCheckFinding, FactCheckSource } from "@repo/db";
+import type { CritiqueItem } from "@/components/review/critique-selector";
 import { summarizeTokenUsage } from "@/lib/token-usage-cost";
 
 function isFactCheckSource(value: unknown): value is FactCheckSource {
@@ -129,6 +130,23 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       ? step8Stage.metadata.factCheckAppliedCorrections
       : null;
 
+  // Extract Step 11 critiques from stage metadata (server-side, like persona DB fetch)
+  const step11Stage = stageRows.find((stage) => stage.stepNumber === 11);
+  const step11Critiques: CritiqueItem[] = (() => {
+    const draft = step11Stage?.metadata?.devilsAdvocateDraft;
+    if (!draft || !Array.isArray(draft.critiques)) return [];
+    return draft.critiques
+      .filter((c): c is { id: number; title: string; detail: string; isCustom?: boolean } =>
+        typeof c.id === "number" && typeof c.title === "string" && typeof c.detail === "string"
+      )
+      .map((c) => ({ id: c.id, title: c.title, detail: c.detail, isCustom: c.isCustom }));
+  })();
+  const step11SelectedIds: number[] = (() => {
+    const draft = step11Stage?.metadata?.devilsAdvocateDraft;
+    if (!draft || !Array.isArray(draft.selectedIds)) return [];
+    return draft.selectedIds.filter((v): v is number => typeof v === "number");
+  })();
+
   // Fetch selected cover image signed URL for the styled document preview
   let coverImageUrl: string | undefined;
   const latestStyleGuide = styleGuideRows[0];
@@ -162,6 +180,8 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       factCheckAppliedCorrections={factCheckAppliedCorrections}
       coverImageUrl={coverImageUrl}
       tokenUsageSummary={usageSummary}
+      step11Critiques={step11Critiques}
+      step11SelectedIds={step11SelectedIds}
     />
   );
 }

@@ -6,9 +6,9 @@ Generate up to 8 specific, numbered critiques. It is valid to return zero critiq
 If there are no meaningful critiques, return EXACTLY:
 NO_CRITIQUES
 
-If critiques exist, format each critique EXACTLY as follows:
-[N]. [Critique Title]
-[2–3 sentence explanation of the weakness or challenge, with specific reference to the memo's claims or omissions.]
+If critiques exist, format each critique EXACTLY as follows (N is the critique number, do NOT include square brackets):
+N. Critique Title
+2-3 sentence explanation of the weakness or challenge, with specific reference to the memo's claims or omissions.
 
 Be rigorous, direct, and specific. Avoid generic platitudes. Never use em dashes (—); use a comma, colon, or rewrite the sentence instead.`;
 }
@@ -31,8 +31,8 @@ export function parseCritiques(
   if (!content || content === "NO_CRITIQUES") return critiques;
 
   // Step 1: Find all numbered item headers at start of lines.
-  // Handles: "1. Title", "**1. Title**", "## 1. Title", "1) Title"
-  const headerRegex = /^\s*(?:\*{1,2}|#{1,3}\s*)?(\d+)[.)]\s+(.+)/gm;
+  // Handles: "1. Title", "[1]. Title", "**1. Title**", "## 1. Title", "1) Title"
+  const headerRegex = /^\s*(?:\*{1,2}|#{1,3}\s*)?\[?(\d+)\]?[.)]\s+(.+)/gm;
   const headers: Array<{ id: number; title: string; matchEnd: number; index: number }> = [];
   let match: RegExpExecArray | null;
 

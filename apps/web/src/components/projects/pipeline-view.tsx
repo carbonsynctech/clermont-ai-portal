@@ -12,13 +12,14 @@ import { ExportStep } from "./steps/export-step";
 import { StyleEditStep } from "./steps/style-edit-step";
 import { FinalStylePassStep } from "./steps/final-style-pass-step";
 import { IntegrateCritiquesStep } from "./steps/integrate-critiques-step";
+import { DevilsAdvocateStep } from "./steps/devils-advocate-step";
 import { MarkdownVersionPanel } from "./markdown-version-panel";
 import { MaterialUpload } from "@/components/sources/material-upload";
 import { StylePresetSelector } from "@/components/sources/style-preset-selector";
 import { StyleGuidePreview } from "@/components/sources/style-guide-preview";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 import { InlineEditor, type InlineEditorHandle } from "@/components/review/inline-editor";
-import { CritiqueSelector, type CritiqueItem } from "@/components/review/critique-selector";
+import type { CritiqueItem } from "@/components/review/critique-selector";
 import { FactCheckReviewStep } from "@/components/review/fact-check-review";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -73,54 +74,6 @@ const STEP_COMPLETION_MESSAGES: Record<number, string> = {
   13: "Export is ready.",
 };
 
-interface Step11DraftPayload {
-  critiques: CritiqueItem[];
-  selectedIds: number[];
-  selectedCritiques: string[];
-}
-
-function isCritiqueItemArray(value: unknown): value is CritiqueItem[] {
-  if (!Array.isArray(value)) return false;
-  return value.every((entry) => {
-    if (!entry || typeof entry !== "object") return false;
-    const record = entry as Record<string, unknown>;
-    return (
-      typeof record.id === "number"
-      && Number.isFinite(record.id)
-      && typeof record.title === "string"
-      && typeof record.detail === "string"
-      && (record.isCustom === undefined || typeof record.isCustom === "boolean")
-    );
-  });
-}
-
-function isNumberArray(value: unknown): value is number[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
-}
-
-function getStep11DraftFromMetadata(value: unknown): Step11DraftPayload | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  const draft = record.devilsAdvocateDraft;
-  if (!draft || typeof draft !== "object") return null;
-
-  const draftRecord = draft as Record<string, unknown>;
-  if (!isCritiqueItemArray(draftRecord.critiques)) return null;
-  if (!isNumberArray(draftRecord.selectedIds)) return null;
-
-  const selectedCritiquesRaw = draftRecord.selectedCritiques;
-  const selectedCritiques =
-    Array.isArray(selectedCritiquesRaw) && selectedCritiquesRaw.every((entry) => typeof entry === "string")
-      ? selectedCritiquesRaw
-      : [];
-
-  return {
-    critiques: draftRecord.critiques,
-    selectedIds: draftRecord.selectedIds,
-    selectedCritiques,
-  };
-}
-
 interface PipelineViewProps {
   project: Project;
   stages: Stage[];
@@ -135,6 +88,8 @@ interface PipelineViewProps {
   factCheckAppliedCorrections?: number | null;
   coverImageUrl?: string;
   tokenUsageSummary: TokenUsageSummary;
+  step11Critiques: CritiqueItem[];
+  step11SelectedIds: number[];
 }
 
 
@@ -152,6 +107,8 @@ export function PipelineView({
   factCheckAppliedCorrections,
   coverImageUrl,
   tokenUsageSummary,
+  step11Critiques,
+  step11SelectedIds,
 }: PipelineViewProps) {
   const router = useRouter();
   const [activeStep, setActiveStep] = useState(initialStep);
@@ -161,15 +118,10 @@ export function PipelineView({
   const [step5Running, setStep5Running] = useState(false);
   const [step8Running, setStep8Running] = useState(false);
   const [step9Running, setStep9Running] = useState(false);
-  const [step11Running, setStep11Running] = useState(false);
-  const [step11Submitting, setStep11Submitting] = useState(false);
-  const [step11SelectedCritiques, setStep11SelectedCritiques] = useState<string[]>([]);
-  const [step11Draft, setStep11Draft] = useState<Step11DraftPayload | null>(null);
   const [optionalStepCompleting, setOptionalStepCompleting] = useState<number | null>(null);
   const [step12Running, setStep12Running] = useState(false);
   const [step12Skipping, setStep12Skipping] = useState(false);
   const [step7FormatRunId, setStep7FormatRunId] = useState(0);
-  const step11DraftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Shared document styling state — set in step 6, consumed in step 7
   const [documentColors, setDocumentColors] = useState<DocumentColors>(DEFAULT_COLORS);
@@ -257,33 +209,6 @@ export function PipelineView({
   const factCheckVersion = versions.filter((v) => v.versionType === "fact_checked").at(-1);
   const finalStyledVersion = getLatestVersion("final_styled");
 
-  const persistStep11Draft = useCallback(
-    (draft: Step11DraftPayload) => {
-      if (step11DraftSaveTimeoutRef.current) {
-        clearTimeout(step11DraftSaveTimeoutRef.current);
-      }
-
-      step11DraftSaveTimeoutRef.current = setTimeout(() => {
-        void fetch(`/api/projects/${project.id}/critiques/draft`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(draft),
-        }).catch(() => {
-          // Silent failure: the final save still occurs on Step 11 continue.
-        });
-      }, 600);
-    },
-    [project.id],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (step11DraftSaveTimeoutRef.current) {
-        clearTimeout(step11DraftSaveTimeoutRef.current);
-      }
-    };
-  }, []);
-
   function handleStepClick(step: number) {
     // Prevent navigating to a step whose prerequisite isn't completed
     const prerequisiteStep: Record<number, number> = {
@@ -326,36 +251,6 @@ export function PipelineView({
     router.push(`/projects/${project.id}?step=${next}`);
     if (activeStep === 6 || activeStep === 7 || activeStep === 9) {
       router.refresh();
-    }
-  }
-
-  async function handleStep11Continue() {
-    setStep11Submitting(true);
-    try {
-      const res = await fetch(`/api/projects/${project.id}/critiques/select`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          selectedCritiques: step11SelectedCritiques,
-          critiques: step11Draft?.critiques ?? [],
-          selectedIds: step11Draft?.selectedIds ?? [],
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to save Step 11 selection");
-      }
-
-      const data = (await res.json()) as { nextStep?: number };
-      const next = data.nextStep === 13 ? 13 : 12;
-      setActiveStep(next);
-      router.push(`/projects/${project.id}?step=${next}`);
-      router.refresh();
-    } catch (error) {
-      console.error("Step 11 continue error:", error);
-      alert(error instanceof Error ? error.message : "Failed to continue to Step 12");
-    } finally {
-      setStep11Submitting(false);
     }
   }
 
@@ -581,52 +476,23 @@ export function PipelineView({
           </div>
         );
 
-      case 11: {
-        const canRunStep11 = stageMap[10]?.status === "completed";
-        const persistedDraft = getStep11DraftFromMetadata(stageMap[11]?.metadata);
-        const redReportContent = getLatestVersion("red_report")?.content ?? "";
-        const shouldShowSelector = status === "awaiting_human" || status === "completed" || Boolean(persistedDraft);
+      case 11:
         return (
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            <StepTrigger
-              projectId={project.id}
-              stepNumber={11}
-              label="Generate Devil's Advocate Critiques"
-              currentStatus={status}
-              disabled={!canRunStep11}
-              disabledReason="Complete Step 10 to run this step."
-              onRunningChange={setStep11Running}
-              hideOutput={shouldShowSelector && !step11Running}
-            />
-            {shouldShowSelector && (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Select the critiques you want integrated into the final document. Click a card to select or deselect it. You can also add custom critiques.
-                </p>
-                <CritiqueSelector
-                  projectId={project.id}
-                  redReport={redReportContent}
-                  step10Markdown={
-                    getLatestVersion("human_reviewed")?.content
-                    ?? getLatestVersion("final_styled")?.content
-                    ?? ""
-                  }
-                  onSelectedCritiquesChange={setStep11SelectedCritiques}
-                  initialCritiques={persistedDraft?.critiques}
-                  initialSelectedIds={persistedDraft?.selectedIds}
-                  onDraftChange={(draft) => {
-                    setStep11Draft(draft);
-                    persistStep11Draft(draft);
-                  }}
-                  onConfirm={() => void handleStep11Continue()}
-                  isConfirming={step11Submitting}
-                  isCompleted={status === "completed"}
-                />
-              </>
-            )}
-          </div>
+          <DevilsAdvocateStep
+            projectId={project.id}
+            stage10Status={stageMap[10]?.status ?? "pending"}
+            stage11Status={status}
+            redReportContent={getLatestVersion("red_report")?.content ?? ""}
+            step10Markdown={
+              getLatestVersion("human_reviewed")?.content
+              ?? getLatestVersion("final_styled")?.content
+              ?? ""
+            }
+            serverCritiques={step11Critiques}
+            serverSelectedIds={step11SelectedIds}
+            onNavigate={setActiveStep}
+          />
         );
-      }
 
       case 12:
         return (
@@ -697,7 +563,6 @@ export function PipelineView({
               ...(coverImagesGenerating ? { 6: "running" as const } : {}),
               ...(step8Running ? { 8: "running" as const } : {}),
               ...(step9Running ? { 9: "running" as const } : {}),
-              ...(step11Running ? { 11: "running" as const } : {}),
               ...(step12Running ? { 12: "running" as const } : {}),
             }}
           />
