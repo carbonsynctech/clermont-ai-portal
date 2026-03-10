@@ -239,9 +239,12 @@ export function PipelineView({
     };
   }, []);
 
-  useEffect(() => {
-    setActiveStep(initialStep);
-  }, [initialStep]);
+  // NOTE: We intentionally do NOT sync `initialStep` → `activeStep` via useEffect.
+  // `useState(initialStep)` handles the initial render. All explicit navigations
+  // (goToNextStep, handleStep11Continue, etc.) call setActiveStep directly.
+  // Syncing would cause the view to snap back to the server-computed step whenever
+  // router.refresh() fires (e.g. after a job completes), because replaceState
+  // doesn't update Next.js internal router state.
 
   const stageMap = Object.fromEntries(stages.map((s) => [s.stepNumber, s]));
   const brief = project.briefData as ProjectBriefData | null;
@@ -581,7 +584,7 @@ export function PipelineView({
       case 11: {
         const canRunStep11 = stageMap[10]?.status === "completed";
         const persistedDraft = getStep11DraftFromMetadata(stageMap[11]?.metadata);
-        const redReportContent = persistedDraft ? "" : (getLatestVersion("red_report")?.content ?? "");
+        const redReportContent = getLatestVersion("red_report")?.content ?? "";
         const shouldShowSelector = status === "awaiting_human" || status === "completed" || Boolean(persistedDraft);
         return (
           <div className="rounded-xl border bg-card p-6 space-y-4">

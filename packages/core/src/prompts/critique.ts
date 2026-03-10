@@ -27,15 +27,33 @@ export function parseCritiques(
   redReportContent: string
 ): Array<{ id: number; title: string; detail: string }> {
   const critiques: Array<{ id: number; title: string; detail: string }> = [];
-  const regex = /^(\d+)\.\s+(.+?)\n([\s\S]+?)(?=^\d+\.|$)/gm;
+  const content = redReportContent.trim();
+  if (!content || content === "NO_CRITIQUES") return critiques;
+
+  // Step 1: Find all numbered item headers at start of lines.
+  // Handles: "1. Title", "**1. Title**", "## 1. Title", "1) Title"
+  const headerRegex = /^\s*(?:\*{1,2}|#{1,3}\s*)?(\d+)[.)]\s+(.+)/gm;
+  const headers: Array<{ id: number; title: string; matchEnd: number; index: number }> = [];
   let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(redReportContent)) !== null) {
-    const id = parseInt(match[1] ?? "0", 10);
-    const title = (match[2] ?? "").trim();
-    const detail = (match[3] ?? "").trim();
-    if (title && detail) {
-      critiques.push({ id, title, detail });
+  while ((match = headerRegex.exec(content)) !== null) {
+    headers.push({
+      index: match.index,
+      id: parseInt(match[1] ?? "0", 10),
+      title: (match[2] ?? "").replace(/\*{1,2}/g, "").trim(),
+      matchEnd: match.index + match[0].length,
+    });
+  }
+
+  // Step 2: Extract detail as all text between this header and the next (or end of string).
+  // This avoids lazy quantifier + multiline $ issues that truncate multi-line details.
+  for (let i = 0; i < headers.length; i++) {
+    const current = headers[i]!;
+    const nextIndex = i + 1 < headers.length ? headers[i + 1]!.index : content.length;
+    const detail = content.slice(current.matchEnd, nextIndex).trim();
+
+    if (current.title && detail) {
+      critiques.push({ id: current.id, title: current.title, detail });
     }
   }
 

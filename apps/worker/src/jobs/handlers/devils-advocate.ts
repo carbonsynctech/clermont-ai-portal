@@ -69,7 +69,19 @@ export async function devilsAdvocate(
   }));
   const savedAt = new Date().toISOString();
 
-  // 5. Insert audit log
+  // 5. Store raw AI output as a red_report version (fallback for re-parsing)
+  await db.insert(versions).values({
+    projectId,
+    parentVersionId: humanReviewedVersion.id,
+    producedByStep: 11,
+    versionType: "red_report",
+    internalLabel: "Devil's Advocate Red Report",
+    content: result.content,
+    isClientVisible: false,
+    isSealed: true,
+  });
+
+  // 6. Insert audit log
   await db.insert(auditLogs).values({
     projectId,
     userId,
@@ -82,7 +94,7 @@ export async function devilsAdvocate(
     responseSnapshot: result.content,
   });
 
-  // 6. Update stage 11 to awaiting_human (critique selection checkpoint)
+  // 7. Update stage 11 to awaiting_human (critique selection checkpoint)
   await db
     .update(stages)
     .set({
@@ -104,7 +116,7 @@ export async function devilsAdvocate(
     })
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
 
-  // 7. Stay at currentStage = 11 (user must select critiques before advancing)
+  // 8. Stay at currentStage = 11 (user must select critiques before advancing)
   await db
     .update(projects)
     .set({ currentStage: 11, updatedAt: new Date() })

@@ -42,14 +42,54 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
     setIsUploading(true);
     setUploadError(null);
 
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("ndaAcknowledged", "true");
-
     try {
+      // 1. Get a signed upload URL from the API
+      const urlRes = await fetch(`/api/projects/${projectId}/materials/upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: selectedFile.name,
+          contentType: selectedFile.type || "application/octet-stream",
+        }),
+      });
+
+      if (!urlRes.ok) {
+        const body = (await urlRes.json()) as { error?: string };
+        setUploadError(body.error ?? "Failed to get upload URL");
+        return;
+      }
+
+      const { signedUrl, token, storagePath } = (await urlRes.json()) as {
+        signedUrl: string;
+        token: string;
+        storagePath: string;
+      };
+
+      // 2. Upload file directly to Supabase Storage (bypasses Vercel 4.5 MB limit)
+      const uploadRes = await fetch(signedUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": selectedFile.type || "application/octet-stream",
+          "x-upsert": "true",
+        },
+        body: selectedFile,
+      });
+
+      if (!uploadRes.ok) {
+        setUploadError("Failed to upload file to storage. Please try again.");
+        return;
+      }
+
+      // 3. Register the material metadata with the API (small JSON payload)
       const res = await fetch(`/api/projects/${projectId}/materials`, {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storagePath,
+          originalFilename: selectedFile.name,
+          mimeType: selectedFile.type || "application/octet-stream",
+          fileSizeBytes: selectedFile.size,
+        }),
       });
 
       if (!res.ok) {
