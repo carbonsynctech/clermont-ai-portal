@@ -17,6 +17,7 @@ interface SelectPersonasStepProps {
   stage1Status: string;
   stage2Status: string;
   projectPersonas: Persona[];
+  onNavigate?: (step: number) => void;
 }
 
 export function SelectPersonasStep({
@@ -24,6 +25,7 @@ export function SelectPersonasStep({
   stage1Status,
   stage2Status,
   projectPersonas,
+  onNavigate,
 }: SelectPersonasStepProps) {
   const router = useRouter();
   const stage1Done = stage1Status === "completed";
@@ -83,6 +85,7 @@ export function SelectPersonasStep({
         return;
       }
 
+      onNavigate?.(3);
       router.push(`/projects/${projectId}?step=3`);
     } catch {
       setConfirmError("Network error. Please try again.");

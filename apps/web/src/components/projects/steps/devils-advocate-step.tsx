@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { parseCritiques } from "@repo/core";
 import { Button } from "@/components/ui/button";
 import { StepTriggerOutput, useStepTrigger } from "@/components/projects/step-trigger";
 import { CritiqueSelector, type CritiqueItem } from "@/components/review/critique-selector";
+
+export interface DevilsAdvocateHandle {
+  confirm: () => Promise<void>;
+}
 
 interface DevilsAdvocateStepProps {
   projectId: string;
@@ -22,9 +26,11 @@ interface DevilsAdvocateStepProps {
   serverSelectedIds: number[];
   /** Called after confirm to navigate to the next step immediately */
   onNavigate?: (step: number) => void;
+  /** Reports selection count changes to the parent for the floating bar */
+  onSelectionChange?: (info: { selectedCount: number; totalCount: number }) => void;
 }
 
-export function DevilsAdvocateStep({
+export const DevilsAdvocateStep = forwardRef<DevilsAdvocateHandle, DevilsAdvocateStepProps>(function DevilsAdvocateStep({
   projectId,
   stage10Status,
   stage11Status,
@@ -33,11 +39,11 @@ export function DevilsAdvocateStep({
   serverCritiques,
   serverSelectedIds,
   onNavigate,
-}: DevilsAdvocateStepProps) {
+  onSelectionChange,
+}, ref) {
   const router = useRouter();
   const trigger = useStepTrigger(projectId, 11, stage11Status);
   const canRun = stage10Status === "completed";
-  const isCompleted = stage11Status === "completed";
 
   // Derive critiques from THREE sources (first non-empty wins):
   // 1. Server-extracted from stage metadata (like persona DB rows)
@@ -76,7 +82,6 @@ export function DevilsAdvocateStep({
     selectedIds: number[];
     selectedCritiques: string[];
   } | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -103,8 +108,22 @@ export function DevilsAdvocateStep({
     [projectId],
   );
 
+  // Report selection changes to parent for floating bar rendering
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => { onSelectionChangeRef.current = onSelectionChange; }, [onSelectionChange]);
+  useEffect(() => {
+    onSelectionChangeRef.current?.({
+      selectedCount: draft?.selectedIds.length ?? 0,
+      totalCount: critiques.length,
+    });
+  }, [draft?.selectedIds.length, critiques.length]);
+
+  // Expose confirm() to parent via ref (like InlineEditorHandle for Step 10)
+  useImperativeHandle(ref, () => ({
+    confirm: () => handleConfirm(),
+  }));
+
   async function handleConfirm() {
-    setIsSubmitting(true);
     try {
       const res = await fetch(`/api/projects/${projectId}/critiques/select`, {
         method: "POST",
@@ -128,8 +147,6 @@ export function DevilsAdvocateStep({
     } catch (error) {
       console.error("Step 11 continue error:", error);
       alert(error instanceof Error ? error.message : "Failed to continue to Step 12");
-    } finally {
-      setIsSubmitting(false);
     }
   }
 
@@ -184,12 +201,9 @@ export function DevilsAdvocateStep({
               setDraft(d);
               persistDraft(d);
             }}
-            onConfirm={() => void handleConfirm()}
-            isConfirming={isSubmitting}
-            isCompleted={isCompleted}
           />
         </>
       )}
     </div>
   );
-}
+});

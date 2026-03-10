@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2, FileText, Target, Users, MessageSquare,
-  Sparkles, Layers, Pencil, Eye,
+  Sparkles, Layers, Pencil, Eye, Loader2,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -268,6 +268,7 @@ interface DefineTaskStepProps {
   stage1Status: string;
   masterPrompt: string | null;
   onRunningChange?: (running: boolean) => void;
+  onNavigate?: (step: number) => void;
 }
 
 const CORE_BRIEF_KEYS = new Set([
@@ -282,6 +283,7 @@ export function DefineTaskStep({
   stage1Status,
   masterPrompt,
   onRunningChange,
+  onNavigate,
 }: DefineTaskStepProps) {
   const router = useRouter();
   const step1Trigger = useStepTrigger(projectId, 1, stage1Status);
@@ -737,6 +739,7 @@ export function DefineTaskStep({
                   });
                   if (!res.ok) throw new Error("Failed to save");
                   setIsEditingPrompt(false);
+                  onNavigate?.(2);
                   router.push(`/projects/${projectId}?step=2`);
                 } catch {
                   setPromptSaveError("Failed to save prompt. Please try again.");
@@ -745,7 +748,7 @@ export function DefineTaskStep({
                 }
               }}
             >
-              {isSavingPrompt ? "Saving…" : "Save & Continue to Step 2"}
+              {isSavingPrompt ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</> : "Save & Continue to Step 2"}
             </Button>
           )}
         </div>

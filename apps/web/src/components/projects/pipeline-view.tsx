@@ -12,7 +12,7 @@ import { ExportStep } from "./steps/export-step";
 import { StyleEditStep } from "./steps/style-edit-step";
 import { FinalStylePassStep } from "./steps/final-style-pass-step";
 import { IntegrateCritiquesStep } from "./steps/integrate-critiques-step";
-import { DevilsAdvocateStep } from "./steps/devils-advocate-step";
+import { DevilsAdvocateStep, type DevilsAdvocateHandle } from "./steps/devils-advocate-step";
 import { MarkdownVersionPanel } from "./markdown-version-panel";
 import { MaterialUpload } from "@/components/sources/material-upload";
 import { StylePresetSelector } from "@/components/sources/style-preset-selector";
@@ -23,7 +23,7 @@ import type { CritiqueItem } from "@/components/review/critique-selector";
 import { FactCheckReviewStep } from "@/components/review/fact-check-review";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangleIcon, CheckCircle2, Users, BookOpen, Eye, RefreshCw } from "lucide-react";
+import { AlertTriangleIcon, CheckCircle2, Users, BookOpen, Eye, RefreshCw, Loader2 } from "lucide-react";
 import type {
   Stage,
   Persona,
@@ -181,6 +181,20 @@ export function PipelineView({
     }
   }
 
+  // Step 11 ref + state (for floating bar actions, like Step 10's editorRef)
+  const step11Ref = useRef<DevilsAdvocateHandle | null>(null);
+  const [step11Selection, setStep11Selection] = useState({ selectedCount: 0, totalCount: 0 });
+  const [step11IsConfirming, setStep11IsConfirming] = useState(false);
+  async function handleStep11Confirm() {
+    if (!step11Ref.current) return;
+    setStep11IsConfirming(true);
+    try {
+      await step11Ref.current.confirm();
+    } finally {
+      setStep11IsConfirming(false);
+    }
+  }
+
   useEffect(() => {
     document.documentElement.classList.add("hide-page-scrollbar");
     document.body.classList.add("hide-page-scrollbar");
@@ -227,7 +241,8 @@ export function PipelineView({
   const isNewStep = activeStep >= project.currentStage;
 
   async function goToNextStep() {
-    if (activeStep === 6 || activeStep === 7 || activeStep === 9) {
+    const needsComplete = activeStep === 4 || activeStep === 6 || activeStep === 7 || activeStep === 9;
+    if (needsComplete) {
       setOptionalStepCompleting(activeStep);
       try {
         const res = await fetch(`/api/projects/${project.id}/stages/${activeStep}/complete`, {
@@ -249,7 +264,7 @@ export function PipelineView({
     const next = activeStep + 1;
     setActiveStep(next);
     router.push(`/projects/${project.id}?step=${next}`);
-    if (activeStep === 6 || activeStep === 7 || activeStep === 9) {
+    if (needsComplete) {
       router.refresh();
     }
   }
@@ -293,6 +308,7 @@ export function PipelineView({
             stage1Status={status}
             masterPrompt={project.masterPrompt ?? null}
             onRunningChange={setStep1Running}
+            onNavigate={setActiveStep}
           />
         );
 
@@ -305,6 +321,7 @@ export function PipelineView({
             stage1Status={stageMap[1]?.status ?? "pending"}
             stage2Status={s2Status}
             projectPersonas={personas}
+            onNavigate={setActiveStep}
           />
         );
       }
@@ -479,6 +496,7 @@ export function PipelineView({
       case 11:
         return (
           <DevilsAdvocateStep
+            ref={step11Ref}
             projectId={project.id}
             stage10Status={stageMap[10]?.status ?? "pending"}
             stage11Status={status}
@@ -491,6 +509,7 @@ export function PipelineView({
             serverCritiques={step11Critiques}
             serverSelectedIds={step11SelectedIds}
             onNavigate={setActiveStep}
+            onSelectionChange={setStep11Selection}
           />
         );
 
@@ -641,9 +660,24 @@ export function PipelineView({
                         onClick={() => void handleStep10Approve()}
                         disabled={step10IsApproving}
                       >
-                        {step10IsApproving ? "Saving…" : "Approve & Continue to Step 11"}
+                        {step10IsApproving ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</> : "Approve & Continue to Step 11"}
                       </Button>
                     </>
+                  )}
+                  {activeStep === 11 && step11Selection.totalCount > 0 && (
+                    <Button
+                      size="sm"
+                      disabled={step11IsConfirming}
+                      onClick={() => void handleStep11Confirm()}
+                    >
+                      {step11IsConfirming ? (
+                        <><Loader2 className="size-4 mr-2 animate-spin" />Confirming…</>
+                      ) : step11Selection.selectedCount === 0 ? (
+                        "Continue Without Critiques (Skip Step 12)"
+                      ) : (
+                        `Confirm ${step11Selection.selectedCount} Critique${step11Selection.selectedCount === 1 ? "" : "s"} & Continue to Step 12`
+                      )}
+                    </Button>
                   )}
                   {activeStep < 13 && activeStep !== 10 && activeStep !== 11 && (
                     isNewStep ? (
@@ -667,9 +701,9 @@ export function PipelineView({
                         }
                       >
                         {activeStep === 12 && step12Skipping
-                            ? "Saving…"
+                            ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</>
                           : (activeStep === 6 || activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
-                            ? "Saving…"
+                            ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</>
                           : activeStep === 8
                             ? "Continue to Step 9"
                             : `Save and continue to Step ${activeStep + 1}`}
@@ -685,7 +719,7 @@ export function PipelineView({
                           }
                         >
                           {(activeStep === 6 || activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
-                            ? "Saving…"
+                            ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</>
                             : activeStep === 8
                               ? "Continue to Step 9"
                               : `Save and continue to Step ${activeStep + 1}`}
