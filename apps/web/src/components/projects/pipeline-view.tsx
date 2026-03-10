@@ -14,8 +14,8 @@ import { FinalStylePassStep } from "./steps/final-style-pass-step";
 import { IntegrateCritiquesStep } from "./steps/integrate-critiques-step";
 import { MarkdownVersionPanel } from "./markdown-version-panel";
 import { MaterialUpload } from "@/components/sources/material-upload";
-import { StyleGuideUpload } from "@/components/sources/style-guide-upload";
-import { StyleGuidePreview, type ColorPaletteEntry } from "@/components/sources/style-guide-preview";
+import { StylePresetSelector } from "@/components/sources/style-preset-selector";
+import { StyleGuidePreview } from "@/components/sources/style-guide-preview";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 import { InlineEditor, type InlineEditorHandle } from "@/components/review/inline-editor";
 import { CritiqueSelector, type CritiqueItem } from "@/components/review/critique-selector";
@@ -33,7 +33,7 @@ import type {
   FactCheckFinding,
 } from "@repo/db";
 import type { ProjectBriefData } from "@repo/db";
-import { type DocumentColors, DEFAULT_COLORS } from "./steps/document-template";
+import { type DocumentColors, DEFAULT_COLORS, STYLE_PRESETS, type StylePreset } from "./steps/document-template";
 import type { TokenUsageSummary } from "@/lib/token-usage-cost";
 import { emitProjectCost } from "@/lib/project-save-events";
 
@@ -185,16 +185,31 @@ export function PipelineView({
     setLiveCoverImageUrl(coverImageUrl);
   }, [coverImageUrl]);
 
-  const handleColorsChange = useCallback((palette: ColorPaletteEntry[]) => {
-    const [primary, secondary, accent, neutral, muted, surface] = palette;
-    setDocumentColors({
-      primary:   primary?.hex   ?? DEFAULT_COLORS.primary,
-      secondary: secondary?.hex ?? DEFAULT_COLORS.secondary,
-      accent:    accent?.hex    ?? DEFAULT_COLORS.accent,
-      neutral:   neutral?.hex   ?? DEFAULT_COLORS.neutral,
-      muted:     muted?.hex     ?? DEFAULT_COLORS.muted,
-      surface:   surface?.hex   ?? DEFAULT_COLORS.surface,
-    });
+  // Resolve initial preset from style guide originalFilename (format: "preset:<id>")
+  const serverPresetId = (() => {
+    const filename = latestStyleGuide?.originalFilename;
+    if (filename?.startsWith("preset:")) {
+      return filename.slice("preset:".length);
+    }
+    return null;
+  })();
+
+  const [localPresetId, setLocalPresetId] = useState<string | null>(serverPresetId);
+  const resolvedPresetId = localPresetId ?? serverPresetId;
+
+  // Set initial colors from preset
+  useEffect(() => {
+    if (resolvedPresetId) {
+      const preset = STYLE_PRESETS.find((p) => p.id === resolvedPresetId);
+      if (preset) {
+        setDocumentColors(preset.colors);
+      }
+    }
+  }, [resolvedPresetId]);
+
+  const handlePresetSelect = useCallback((preset: StylePreset) => {
+    setLocalPresetId(preset.id);
+    setDocumentColors(preset.colors);
   }, []);
 
   // Step 10 editor ref + state (for floating bar actions)
@@ -267,6 +282,13 @@ export function PipelineView({
   }, []);
 
   function handleStepClick(step: number) {
+    // Prevent navigating to a step whose prerequisite isn't completed
+    const prerequisiteStep: Record<number, number> = {
+      2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 5, 8: 5, 9: 8, 10: 9, 11: 10, 12: 11, 13: 12,
+    };
+    const prereq = prerequisiteStep[step];
+    if (prereq && stageMap[prereq]?.status !== "completed") return;
+
     setActiveStep(step);
     window.history.replaceState(null, "", `/projects/${project.id}?step=${step}`);
   }
@@ -277,7 +299,7 @@ export function PipelineView({
   const isNewStep = activeStep >= project.currentStage;
 
   async function goToNextStep() {
-    if (activeStep === 7 || activeStep === 9) {
+    if (activeStep === 6 || activeStep === 7 || activeStep === 9) {
       setOptionalStepCompleting(activeStep);
       try {
         const res = await fetch(`/api/projects/${project.id}/stages/${activeStep}/complete`, {
@@ -299,7 +321,7 @@ export function PipelineView({
     const next = activeStep + 1;
     setActiveStep(next);
     router.push(`/projects/${project.id}?step=${next}`);
-    if (activeStep === 7 || activeStep === 9) {
+    if (activeStep === 6 || activeStep === 7 || activeStep === 9) {
       router.refresh();
     }
   }
@@ -433,35 +455,29 @@ export function PipelineView({
 
       case 6:
         return (
-          <div className="space-y-0">
-            <div className="rounded-xl border bg-card p-6">
-              {status === "completed" && latestStyleGuide ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 mb-3">
-                    <BookOpen className="size-4 text-muted-foreground" />
-                    <h3 className="font-medium text-base text-foreground">Uploaded Style Guide</h3>
-                  </div>
-                  <div className="flex items-center justify-between text-base">
-                    <span className="truncate text-foreground">{latestStyleGuide.originalFilename}</span>
-                    <span className="text-muted-foreground shrink-0 ml-2">
-                      {latestStyleGuide.isProcessed ? "Processed" : "Ready"}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <StyleGuideUpload projectId={project.id} existingStyleGuide={latestStyleGuide} />
-              )}
-            </div>
-            {status === "completed" && latestStyleGuide && (
-              <StyleGuidePreview
+          <div className="space-y-3">
+            <div className="rounded-xl border bg-card p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <BookOpen className="size-4 text-muted-foreground" />
+                <h3 className="font-medium text-base text-foreground">Document Style</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Choose a visual style for your investment memo. This sets the colour palette, typography, and writing tone.
+              </p>
+              <StylePresetSelector
                 projectId={project.id}
-                projectTitle={project.title}
-                companyName={brief?.companyName}
-                onGeneratingChange={setCoverImagesGenerating}
-                onColorsChange={handleColorsChange}
-                onCoverImageChange={setLiveCoverImageUrl}
+                selectedPresetId={resolvedPresetId}
+                onSelect={handlePresetSelect}
               />
-            )}
+            </div>
+
+            <StyleGuidePreview
+              projectId={project.id}
+              projectTitle={project.title}
+              companyName={brief?.companyName}
+              onGeneratingChange={setCoverImagesGenerating}
+              onCoverImageChange={setLiveCoverImageUrl}
+            />
           </div>
         );
 
@@ -577,6 +593,7 @@ export function PipelineView({
               disabled={!canRunStep11}
               disabledReason="Complete Step 10 to run this step."
               onRunningChange={setStep11Running}
+              hideOutput={shouldShowSelector}
             />
             {shouldShowSelector && (
               <>
@@ -715,6 +732,8 @@ export function PipelineView({
                   <span className="text-sm font-medium text-foreground truncate">
                     {((activeStep === 7 || activeStep === 9) && activeStatus !== "completed")
                       ? "Optional step — continue anytime or run it before moving on."
+                      : (activeStep === 6 && activeStatus !== "completed" && resolvedPresetId)
+                      ? "Style selected. Save and continue when ready."
                       : activeStatus === "completed"
                       ? STEP_COMPLETION_MESSAGES[activeStep]
                       : activeStatus === "running"
@@ -767,9 +786,11 @@ export function PipelineView({
                           ||
                           activeStep === 12
                               ? step12Skipping
-                              : activeStep === 7 || activeStep === 9
-                                ? false
-                                : activeStatus !== "completed"
+                              : activeStep === 6
+                                ? !resolvedPresetId
+                                : activeStep === 7 || activeStep === 9
+                                  ? false
+                                  : activeStatus !== "completed"
                         }
                         onClick={
                           activeStep === 12
@@ -779,20 +800,23 @@ export function PipelineView({
                       >
                         {activeStep === 12 && step12Skipping
                             ? "Saving…"
-                          : (activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
+                          : (activeStep === 6 || activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
                             ? "Saving…"
                           : activeStep === 8
                             ? "Continue to Step 9"
                             : `Save and continue to Step ${activeStep + 1}`}
                       </Button>
                     ) : (
-                      (activeStatus === "completed" || activeStep === 7 || activeStep === 9) && (
+                      (activeStatus === "completed" || activeStep === 6 || activeStep === 7 || activeStep === 9) && (
                         <Button
                           size="sm"
                           onClick={() => void goToNextStep()}
-                          disabled={(activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep}
+                          disabled={
+                            (activeStep === 6 && !resolvedPresetId)
+                            || ((activeStep === 6 || activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep)
+                          }
                         >
-                          {(activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
+                          {(activeStep === 6 || activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
                             ? "Saving…"
                             : activeStep === 8
                               ? "Continue to Step 9"

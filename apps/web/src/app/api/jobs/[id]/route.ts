@@ -21,7 +21,10 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   try {
     const job = await workerClient.getJobStatus(jobId);
     return NextResponse.json(job);
-  } catch {
-    return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error(`[GET /api/jobs/${jobId}] Worker fetch failed:`, message);
+    const status = message.includes("401") ? 502 : 404;
+    return NextResponse.json({ error: "Job not found", detail: message }, { status });
   }
 }

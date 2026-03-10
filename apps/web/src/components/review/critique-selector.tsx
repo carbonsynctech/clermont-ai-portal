@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronUp, Loader2, MoreHorizontal, Pencil, Sparkles, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, MoreHorizontal, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { parseCritiques } from "@repo/core";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -14,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 interface CritiqueSelectorProps {
   projectId: string;
@@ -341,52 +341,51 @@ export function CritiqueSelector({
           No structured critiques were generated. You can add custom critiques below, or confirm with none selected to skip Step 12.
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {critiques.map((critique) => {
             const selected = selectedIds.includes(critique.id);
             const expanded = expandedIds.includes(critique.id);
 
             return (
-              <Card
+              <div
                 key={critique.id}
-                className={`cursor-pointer transition-colors ${
-                  selected ? "border-primary ring-1 ring-primary" : "border-border"
-                } ${isCompleted ? "opacity-75 cursor-default" : ""}`}
+                role="button"
+                tabIndex={0}
                 onClick={() => toggleCritique(critique.id)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleCritique(critique.id); } }}
+                className={cn(
+                  "rounded-xl border bg-card p-4 space-y-3 transition-colors cursor-pointer select-none",
+                  selected ? "border-primary bg-primary/5" : "hover:border-muted-foreground/30 hover:bg-muted/30",
+                  isCompleted && "opacity-75 cursor-default"
+                )}
               >
-                <CardHeader className="pb-2">
+                <div className="space-y-0.5">
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-sm leading-snug">
+                    <p className="text-base font-semibold leading-snug">
                       {stripNumericPrefix(critique.title)}
-                    </CardTitle>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    </p>
+                    <div className="flex items-center gap-1">
                       {critique.isCustom && (
-                        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] shrink-0">
                           Custom
-                        </Badge>
-                      )}
-                      {selected && (
-                        <Badge className="shrink-0 h-5 px-1.5 text-[10px]">
-                          <Check className="h-3 w-3 mr-0.5" />
-                          Selected
                         </Badge>
                       )}
                       {!isCompleted && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
-                              type="button"
-                              variant="ghost"
                               size="icon"
-                              className="size-7"
+                              variant="ghost"
+                              className="h-7 w-7"
                               onClick={(event) => event.stopPropagation()}
                             >
                               <MoreHorizontal className="size-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
                             <DropdownMenuItem
-                              onClick={(event) => {
+                              onSelect={(event) => {
+                                event.preventDefault();
                                 event.stopPropagation();
                                 startEditCritique(critique.id);
                               }}
@@ -396,7 +395,8 @@ export function CritiqueSelector({
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               variant="destructive"
-                              onClick={(event) => {
+                              onSelect={(event) => {
+                                event.preventDefault();
                                 event.stopPropagation();
                                 deleteCritique(critique.id);
                               }}
@@ -409,44 +409,57 @@ export function CritiqueSelector({
                       )}
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {editingId === critique.id ? (
-                    <div className="space-y-2" onClick={(event) => event.stopPropagation()}>
-                      <Input
-                        value={editTitle}
-                        onChange={(event) => setEditTitle(event.target.value)}
-                        placeholder="Critique title"
-                      />
-                      <Textarea
-                        value={editDetail}
-                        onChange={(event) => setEditDetail(event.target.value)}
-                        className="min-h-[96px]"
-                        placeholder="Critique details"
-                      />
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={saveEditCritique}
-                          disabled={!editTitle.trim() || !editDetail.trim()}
-                        >
-                          Save
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={cancelEditCritique}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <p className={`text-xs text-muted-foreground ${expanded ? "" : "line-clamp-3"}`}>
-                        {critique.detail}
-                      </p>
+                </div>
+
+                {editingId === critique.id ? (
+                  <div className="space-y-2" onClick={(event) => event.stopPropagation()}>
+                    <Input
+                      value={editTitle}
+                      onChange={(event) => setEditTitle(event.target.value)}
+                      placeholder="Critique title"
+                    />
+                    <Textarea
+                      value={editDetail}
+                      onChange={(event) => setEditDetail(event.target.value)}
+                      className="min-h-[96px]"
+                      placeholder="Critique details"
+                    />
+                    <div className="flex items-center gap-2">
                       <Button
-                        variant="ghost"
+                        type="button"
                         size="sm"
-                        className="h-6 px-2 text-xs text-muted-foreground"
+                        onClick={saveEditCritique}
+                        disabled={!editTitle.trim() || !editDetail.trim()}
+                      >
+                        Save
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={cancelEditCritique}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className={cn(
+                      "text-sm text-muted-foreground/70 leading-relaxed",
+                      expanded ? "" : "line-clamp-2"
+                    )}>
+                      {critique.detail}
+                    </p>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant={selected ? "default" : "outline"}
+                        className="h-8 text-sm flex-1"
+                        onClick={(event) => { event.stopPropagation(); toggleCritique(critique.id); }}
+                      >
+                        {selected ? "Deselect" : "Select"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 text-sm flex-1"
                         onClick={(event) => {
                           event.stopPropagation();
                           toggleExpanded(critique.id);
@@ -464,10 +477,10 @@ export function CritiqueSelector({
                           </>
                         )}
                       </Button>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
+                    </div>
+                  </>
+                )}
+              </div>
             );
           })}
         </div>

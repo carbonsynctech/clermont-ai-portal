@@ -291,6 +291,7 @@ interface StepTriggerProps {
   disabledReason?: string;
   onRunningChange?: (running: boolean) => void;
   hideButton?: boolean;
+  hideOutput?: boolean;
 }
 
 export function StepTrigger({
@@ -302,6 +303,7 @@ export function StepTrigger({
   disabledReason,
   onRunningChange,
   hideButton = false,
+  hideOutput = false,
 }: StepTriggerProps) {
   const trigger = useStepTrigger(projectId, stepNumber, currentStatus);
 
@@ -314,7 +316,7 @@ export function StepTrigger({
       {!hideButton && (
         <StepTriggerButton trigger={trigger} label={label} disabled={disabled} disabledReason={disabledReason} />
       )}
-      <StepTriggerOutput trigger={trigger} />
+      {!hideOutput && <StepTriggerOutput trigger={trigger} />}
     </div>
   );
 }

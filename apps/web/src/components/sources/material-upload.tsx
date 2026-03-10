@@ -134,7 +134,10 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm text-muted-foreground">File (PDF, DOCX, TXT, CSV)</label>
+          <div className="flex items-baseline justify-between">
+            <label className="text-sm text-muted-foreground">File (PDF, DOCX, TXT, CSV)</label>
+            <span className="text-xs text-muted-foreground/60">Max 20 MB per file</span>
+          </div>
           <FileUpload
             className="w-full"
             value={selectedFiles}
@@ -147,6 +150,7 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
             onFileReject={(_, message) => setUploadError(message)}
             accept=".pdf,.txt,.docx,.doc,.csv"
             maxFiles={1}
+            maxSize={20 * 1024 * 1024}
           >
             <FileUploadDropzone>
               <div className="flex flex-col items-center gap-1 text-center">
@@ -154,8 +158,8 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
                   <Upload className="size-5 text-muted-foreground" />
                 </div>
                 <p className="font-medium text-sm">Drag & drop file here</p>
-                <p className="text-muted-foreground text-sm">
-                  Or click to browse (max 1 file)
+                <p className="text-muted-foreground text-xs">
+                  PDF, DOCX, TXT, or CSV — up to 20 MB
                 </p>
               </div>
               <FileUploadTrigger asChild>

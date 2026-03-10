@@ -6,6 +6,8 @@ import { workerClient } from "@/lib/worker-client";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
@@ -49,6 +51,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "file is required" }, { status: 400 });
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json({ error: "File exceeds the 20 MB size limit" }, { status: 413 });
   }
 
   const materialType =
