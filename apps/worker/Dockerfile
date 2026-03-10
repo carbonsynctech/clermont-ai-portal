@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
     libxfixes3 libxrandr2 libgbm1 libasound2 libx11-6 libxcb1 \
     libxext6 fonts-liberation \
+    # Puppeteer Chrome dependencies (cairo, pango, etc.)
+    libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
+    libffi-dev shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Python: install linkedin_scraper + Playwright's Chromium ────────────────
