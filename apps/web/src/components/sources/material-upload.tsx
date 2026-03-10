@@ -31,7 +31,6 @@ export function MaterialUpload({ projectId, materials, onNavigate }: MaterialUpl
   const [isUploading, setIsUploading] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [lastUploaded, setLastUploaded] = useState<string | null>(null);
   const [visibleMaterials, setVisibleMaterials] = useState<SourceMaterial[]>(materials);
 
   // Sync visible materials when props change (e.g., new file uploaded)
@@ -128,7 +127,6 @@ export function MaterialUpload({ projectId, materials, onNavigate }: MaterialUpl
         },
       ]);
 
-      setLastUploaded(selectedFile.name);
       setSelectedFiles([]);
       setNdaAcknowledged(false);
       router.refresh();
@@ -316,9 +314,6 @@ export function MaterialUpload({ projectId, materials, onNavigate }: MaterialUpl
         </label>
 
         {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
-        {lastUploaded && (
-          <p className="text-sm text-green-600">Uploaded: {lastUploaded}</p>
-        )}
 
         <Button
           size="sm"
