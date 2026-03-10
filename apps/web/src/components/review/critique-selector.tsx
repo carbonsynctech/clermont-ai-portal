@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MoreHorizontal, Pencil, Sparkles, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Loader2, MoreHorizontal, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { parseCritiques } from "@repo/core";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -27,6 +27,9 @@ interface CritiqueSelectorProps {
     selectedIds: number[];
     selectedCritiques: string[];
   }) => void;
+  onConfirm?: () => void;
+  isConfirming?: boolean;
+  isCompleted?: boolean;
 }
 
 export interface CritiqueItem {
@@ -56,6 +59,9 @@ export function CritiqueSelector({
   initialSelectedIds,
   onSelectedCritiquesChange,
   onDraftChange,
+  onConfirm,
+  isConfirming,
+  isCompleted,
 }: CritiqueSelectorProps) {
   const parsedCritiques = parseCritiques(redReport);
   const [critiques, setCritiques] = useState<CritiqueItem[]>(() => {
@@ -100,6 +106,7 @@ export function CritiqueSelector({
   }
 
   function toggleCritique(id: number) {
+    if (isCompleted) return;
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id],
     );
@@ -112,6 +119,7 @@ export function CritiqueSelector({
   }
 
   function toggleAll() {
+    if (isCompleted) return;
     setSelectedIds(allSelected ? [] : critiques.map((item) => item.id));
   }
 
@@ -312,183 +320,233 @@ export function CritiqueSelector({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      {/* Header with count and select all */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium">Select critiques to integrate</p>
         <div className="flex items-center gap-2">
-          <h3 className="font-medium text-base">Devil&apos;s Advocate Report</h3>
-          <Badge variant="outline">
-            {selectedIds.length} selected / {critiques.length} total
+          <Badge variant={selectedIds.length > 0 ? "default" : "outline"}>
+            {selectedIds.length} / {critiques.length} selected
           </Badge>
+          {critiques.length > 0 && !isCompleted && (
+            <Button variant="ghost" size="sm" onClick={toggleAll}>
+              {allSelected ? "Deselect All" : "Select All"}
+            </Button>
+          )}
         </div>
-        <Button variant="ghost" size="sm" onClick={toggleAll} disabled={critiques.length === 0}>
-          {allSelected ? "Deselect All" : "Select All"}
-        </Button>
       </div>
 
+      {/* Critique cards grid */}
       {critiques.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No structured critiques were generated. You can add custom critiques, or continue with none selected to skip Step 12.
+          No structured critiques were generated. You can add custom critiques below, or confirm with none selected to skip Step 12.
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {critiques.map((critique) => {
             const selected = selectedIds.includes(critique.id);
             const expanded = expandedIds.includes(critique.id);
 
             return (
-              <div
+              <Card
                 key={critique.id}
+                className={`cursor-pointer transition-colors ${
+                  selected ? "border-primary ring-1 ring-primary" : "border-border"
+                } ${isCompleted ? "opacity-75 cursor-default" : ""}`}
                 onClick={() => toggleCritique(critique.id)}
-                className={`rounded-xl border p-4 cursor-pointer transition-colors space-y-3 ${
-                  selected ? "border-primary bg-primary/5" : "hover:bg-muted/40"
-                }`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Checkbox
-                      checked={selected}
-                      onCheckedChange={() => toggleCritique(critique.id)}
-                      onClick={(event) => event.stopPropagation()}
-                    />
-                    <p className="text-sm font-medium truncate">{stripNumericPrefix(critique.title)}</p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {critique.isCustom && <Badge variant="destructive">Custom</Badge>}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <MoreHorizontal className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            startEditCritique(critique.id);
-                          }}
-                        >
-                          <Pencil className="size-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            deleteCritique(critique.id);
-                          }}
-                        >
-                          <Trash2 className="size-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-
-                {editingId === critique.id ? (
-                  <div className="space-y-2" onClick={(event) => event.stopPropagation()}>
-                    <Input
-                      value={editTitle}
-                      onChange={(event) => setEditTitle(event.target.value)}
-                      placeholder="Critique title"
-                    />
-                    <Textarea
-                      value={editDetail}
-                      onChange={(event) => setEditDetail(event.target.value)}
-                      className="min-h-[96px]"
-                      placeholder="Critique details"
-                    />
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={saveEditCritique}
-                        disabled={!editTitle.trim() || !editDetail.trim()}
-                      >
-                        Save
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={cancelEditCritique}>
-                        Cancel
-                      </Button>
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-sm leading-snug">
+                      {stripNumericPrefix(critique.title)}
+                    </CardTitle>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {critique.isCustom && (
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                          Custom
+                        </Badge>
+                      )}
+                      {selected && (
+                        <Badge className="shrink-0 h-5 px-1.5 text-[10px]">
+                          <Check className="h-3 w-3 mr-0.5" />
+                          Selected
+                        </Badge>
+                      )}
+                      {!isCompleted && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-7"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                startEditCritique(critique.id);
+                              }}
+                            >
+                              <Pencil className="size-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                deleteCritique(critique.id);
+                              }}
+                            >
+                              <Trash2 className="size-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleExpanded(critique.id);
-                    }}
-                    className={`w-full text-left text-sm text-muted-foreground ${
-                      expanded ? "" : "line-clamp-3"
-                    }`}
-                  >
-                    {critique.detail}
-                  </button>
-                )}
-              </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {editingId === critique.id ? (
+                    <div className="space-y-2" onClick={(event) => event.stopPropagation()}>
+                      <Input
+                        value={editTitle}
+                        onChange={(event) => setEditTitle(event.target.value)}
+                        placeholder="Critique title"
+                      />
+                      <Textarea
+                        value={editDetail}
+                        onChange={(event) => setEditDetail(event.target.value)}
+                        className="min-h-[96px]"
+                        placeholder="Critique details"
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={saveEditCritique}
+                          disabled={!editTitle.trim() || !editDetail.trim()}
+                        >
+                          Save
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={cancelEditCritique}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className={`text-xs text-muted-foreground ${expanded ? "" : "line-clamp-3"}`}>
+                        {critique.detail}
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-muted-foreground"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleExpanded(critique.id);
+                        }}
+                      >
+                        {expanded ? (
+                          <>
+                            <ChevronUp className="h-3 w-3 mr-1" />
+                            Show less
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="h-3 w-3 mr-1" />
+                            Read more
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
             );
           })}
         </div>
       )}
 
-      <div className="space-y-2 rounded-xl border p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void generateRandomCritique()}
-            disabled={isGenerating}
-          >
-            <Sparkles className="size-4" />
-            {isGenerating ? "Generating…" : "Generate Random Critique"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setCustomPanelOpen((open) => !open)}>
-            + Generate Custom Critique
-          </Button>
-        </div>
-
-        {customPanelOpen && (
-          <div className="space-y-2">
-            <Input
-              value={customTitle}
-              onChange={(event) => setCustomTitle(event.target.value)}
-              placeholder="Write custom critique title"
-            />
-            <Textarea
-              value={customDescription}
-              onChange={(event) => setCustomDescription(event.target.value)}
-              className="min-h-[100px]"
-              placeholder="Write custom critique description"
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                onClick={() => void generateCustomCritique()}
-                disabled={isGenerating || (!customTitle.trim() && !customDescription.trim())}
-              >
-                {isGenerating ? "Generating…" : "Generate"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={addWrittenCustomCritique}
-                disabled={isGenerating || !customTitle.trim() || !customDescription.trim()}
-              >
-                Add Written Critique
-              </Button>
-            </div>
+      {/* Add / generate custom critiques */}
+      {!isCompleted && (
+        <div className="space-y-2 rounded-xl border p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void generateRandomCritique()}
+              disabled={isGenerating}
+            >
+              <Sparkles className="size-4" />
+              {isGenerating ? "Generating..." : "Generate Random Critique"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setCustomPanelOpen((open) => !open)}>
+              + Custom Critique
+            </Button>
           </div>
-        )}
 
-        {generationError && <p className="text-sm text-destructive">{generationError}</p>}
-      </div>
+          {customPanelOpen && (
+            <div className="space-y-2">
+              <Input
+                value={customTitle}
+                onChange={(event) => setCustomTitle(event.target.value)}
+                placeholder="Write custom critique title"
+              />
+              <Textarea
+                value={customDescription}
+                onChange={(event) => setCustomDescription(event.target.value)}
+                className="min-h-[100px]"
+                placeholder="Write custom critique description"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => void generateCustomCritique()}
+                  disabled={isGenerating || (!customTitle.trim() && !customDescription.trim())}
+                >
+                  {isGenerating ? "Generating..." : "Generate with AI"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={addWrittenCustomCritique}
+                  disabled={isGenerating || !customTitle.trim() || !customDescription.trim()}
+                >
+                  Add as Written
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {generationError && <p className="text-sm text-destructive">{generationError}</p>}
+        </div>
+      )}
+
+      {/* Confirm Selection button */}
+      {onConfirm && !isCompleted && (
+        <Button
+          className="w-full"
+          disabled={isConfirming}
+          onClick={onConfirm}
+        >
+          {isConfirming ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Confirming...
+            </>
+          ) : selectedIds.length === 0 ? (
+            "Continue Without Critiques (Skip Step 12)"
+          ) : (
+            `Confirm ${selectedIds.length} Critique${selectedIds.length === 1 ? "" : "s"} & Continue to Step 12`
+          )}
+        </Button>
+      )}
     </div>
   );
 }

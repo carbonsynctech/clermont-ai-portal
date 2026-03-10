@@ -41,6 +41,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const personaIds = body.personaIds as string[];
 
+  // Clear any previously selected personas for this project
+  await db
+    .update(personas)
+    .set({ isSelected: false, selectionOrder: null })
+    .where(eq(personas.projectId, projectId));
+
   // Mark selected personas with selectionOrder
   await Promise.all(
     personaIds.map((personaId, index) =>

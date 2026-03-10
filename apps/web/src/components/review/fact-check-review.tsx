@@ -2,10 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldCheck } from "lucide-react";
+import { ArrowRight, ExternalLink, Info, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { MarkdownVersionPanel } from "@/components/projects/markdown-version-panel";
@@ -168,6 +175,11 @@ export function FactCheckReviewStep({
     issuesApproved: string[];
     findingIds: string[];
   } | null>(null);
+  const [detailFindingId, setDetailFindingId] = useState<string | null>(null);
+  const detailFinding = useMemo(
+    () => (detailFindingId ? factCheckFindings.find((f) => f.id === detailFindingId) ?? null : null),
+    [detailFindingId, factCheckFindings],
+  );
 
   const issueCount = factCheckFindings.length;
   const acceptedCount = selectedFindingIds.length;
@@ -385,6 +397,7 @@ export function FactCheckReviewStep({
               {factCheckFindings.map((finding) => {
                 const selected = selectedSet.has(finding.id);
                 const hasSources = Array.isArray(finding.sources) && finding.sources.length > 0;
+                const hasClaimData = finding.incorrectText || finding.correctedText;
                 return (
                   <div
                     key={finding.id}
@@ -408,8 +421,23 @@ export function FactCheckReviewStep({
                         onClick={(e) => e.stopPropagation()}
                         className="mt-0.5"
                       />
-                      <div className="space-y-2">
-                        <p className="text-sm leading-relaxed text-foreground/90">{finding.issue}</p>
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-start justify-between gap-1">
+                          <p className="text-sm leading-relaxed text-foreground/90">{finding.issue}</p>
+                          {(hasClaimData || hasSources) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDetailFindingId(finding.id);
+                              }}
+                              className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                              title="View claim vs fact-check details"
+                            >
+                              <Info className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
                         <div className="rounded-md border bg-background/60 p-2 space-y-1.5">
                           <p className="text-xs font-medium text-muted-foreground">Sources</p>
                           {hasSources ? (
@@ -461,6 +489,85 @@ export function FactCheckReviewStep({
 
         </div>
       </div>
+
+      {/* Claim vs Fact-Check Detail Dialog */}
+      <Dialog open={detailFindingId !== null} onOpenChange={(open) => { if (!open) setDetailFindingId(null); }}>
+        <DialogContent className="max-w-xl">
+          {detailFinding && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  <ShieldCheck className="size-4 text-primary" />
+                  Fact-Check Detail
+                </DialogTitle>
+                <DialogDescription className="text-sm">{detailFinding.issue}</DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                {/* Claim vs Correction comparison */}
+                {(detailFinding.incorrectText || detailFinding.correctedText) && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-red-600 dark:text-red-400">Claim (Original)</p>
+                      <div className="rounded-lg border border-red-200 bg-red-50/50 p-3 text-sm leading-relaxed dark:border-red-900/40 dark:bg-red-950/20">
+                        {detailFinding.incorrectText || <span className="italic text-muted-foreground">Not specified</span>}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <ArrowRight className="size-3 text-green-600 dark:text-green-400 hidden sm:block" />
+                        <p className="text-xs font-semibold uppercase tracking-wider text-green-600 dark:text-green-400">Fact-Checked</p>
+                      </div>
+                      <div className="rounded-lg border border-green-200 bg-green-50/50 p-3 text-sm leading-relaxed dark:border-green-900/40 dark:bg-green-950/20">
+                        {detailFinding.correctedText || <span className="italic text-muted-foreground">No correction provided</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sources with clickable links */}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sources</p>
+                  {Array.isArray(detailFinding.sources) && detailFinding.sources.length > 0 ? (
+                    <ul className="space-y-2">
+                      {detailFinding.sources.map((source, index) => (
+                        <li
+                          key={`detail-source-${index}`}
+                          className="rounded-lg border bg-muted/30 p-3 space-y-1"
+                        >
+                          <p className="text-sm font-medium text-foreground">
+                            {formatSourceLabel(source)}
+                          </p>
+                          {source.evidence && (
+                            <p className="text-xs text-muted-foreground leading-relaxed italic">
+                              &ldquo;{source.evidence}&rdquo;
+                            </p>
+                          )}
+                          {source.url && (
+                            <a
+                              href={source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                            >
+                              <ExternalLink className="size-3" />
+                              {source.url.length > 60 ? `${source.url.slice(0, 60)}…` : source.url}
+                            </a>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground rounded-lg border bg-muted/30 p-3">
+                      No sources available for this finding.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

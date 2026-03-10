@@ -53,7 +53,9 @@ Your task:
 - Do NOT simply append a rebuttal section — weave improvements throughout the document
 - Return the complete, improved investment memo
 
-Use extended reasoning to ensure each critique is thoughtfully addressed. Never use em dashes (—); use a comma, colon, or rewrite the sentence instead.`;
+Use extended reasoning to ensure each critique is thoughtfully addressed. Never use em dashes (—); use a comma, colon, or rewrite the sentence instead.
+
+IMPORTANT: Any tabular data MUST use HTML table markup (<table>, <thead>, <tbody>, <tr>, <th>, <td>). Never use markdown pipe tables (| col | col |) as they render as raw text.`;
 }
 
 export function buildCritiqueIntegrationUserMessage(

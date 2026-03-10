@@ -25,7 +25,6 @@ export function useStepTrigger(
   projectId: string,
   stepNumber: number,
   currentStatus: string,
-  autoRun = false,
 ): StepTriggerState {
   const router = useRouter();
 
@@ -55,7 +54,6 @@ export function useStepTrigger(
   const { status, isPolling, error: pollError, elapsedSeconds, partialOutput } =
     useJobStatus(jobId);
   const outputRef = useRef<HTMLPreElement | null>(null);
-  const autoRunFiredRef = useRef(false);
 
   const isFailed = status === "failed";
   const isDone = status === "completed" || isFailed;
@@ -155,13 +153,6 @@ export function useStepTrigger(
       setIsDispatching(false);
     }
   }, [projectId, stepNumber, jobKey, outputKey]);
-
-  useEffect(() => {
-    if (!autoRun || autoRunFiredRef.current) return;
-    if (currentStatus === "completed" || currentStatus === "running") return;
-    autoRunFiredRef.current = true;
-    void handleRun();
-  }, [autoRun, currentStatus, handleRun]);
 
   return { isRunning, isDispatching, phase, showError, elapsedSeconds, partialOutput: effectiveOutput, outputRef, handleRun, handleReset };
 }
@@ -298,7 +289,6 @@ interface StepTriggerProps {
   currentStatus: string;
   disabled?: boolean;
   disabledReason?: string;
-  autoRun?: boolean;
   onRunningChange?: (running: boolean) => void;
   hideButton?: boolean;
 }
@@ -310,11 +300,10 @@ export function StepTrigger({
   currentStatus,
   disabled = false,
   disabledReason,
-  autoRun = false,
   onRunningChange,
   hideButton = false,
 }: StepTriggerProps) {
-  const trigger = useStepTrigger(projectId, stepNumber, currentStatus, autoRun);
+  const trigger = useStepTrigger(projectId, stepNumber, currentStatus);
 
   useEffect(() => {
     onRunningChange?.(trigger.isRunning);

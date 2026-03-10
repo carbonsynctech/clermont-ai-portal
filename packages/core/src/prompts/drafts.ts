@@ -12,7 +12,8 @@ Output format requirements:
 - Include specific analysis, data points, and reasoning that reflect your expert perspective
 - Aim for 1,500–2,500 words
 - Do not add meta-commentary about your role; write as if producing the final document section
-- Never use em dashes (—); replace them with a comma, colon, or rewrite the sentence instead`;
+- Never use em dashes (—); replace them with a comma, colon, or rewrite the sentence instead
+- IMPORTANT: If you include any tabular data, use proper HTML table markup (<table>, <thead>, <tbody>, <tr>, <th>, <td>). Do NOT use markdown pipe tables (| col | col |) as they will not render correctly`;
 }
 
 export function buildPersonaDraftUserMessage(

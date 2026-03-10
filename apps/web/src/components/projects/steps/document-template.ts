@@ -304,6 +304,44 @@ export function getDocumentCSS(colors: DocumentColors = DEFAULT_COLORS): string 
   color: #3f3f3f;
 }
 
+/* Tables in content pages */
+.page-content .content-columns table,
+.page-content .flow-columns table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: ${colors.neutral};
+  margin: 8px 0 12px;
+  break-inside: avoid;
+}
+.page-content .content-columns th,
+.page-content .flow-columns th {
+  background: ${colors.primary};
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 2px solid ${colors.accent};
+}
+.page-content .content-columns td,
+.page-content .flow-columns td {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+.page-content .content-columns tr:last-child td,
+.page-content .flow-columns tr:last-child td {
+  border-bottom: none;
+}
+.page-content .content-columns tr:nth-child(even) td,
+.page-content .flow-columns tr:nth-child(even) td {
+  background: rgba(0,0,0,0.02);
+}
+
 /* Page number */
 .page-number {
   position: absolute; bottom: 26px; left: 0; right: 0;

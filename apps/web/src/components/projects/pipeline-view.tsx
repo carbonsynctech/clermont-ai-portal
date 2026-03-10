@@ -413,7 +413,6 @@ export function PipelineView({
                 currentStatus={status}
                 disabled={!canRunStep4}
                 disabledReason="Complete Step 3 to run this step."
-                autoRun={canRunStep4}
                 onRunningChange={setStep4Running}
               />
             </div>
@@ -515,7 +514,6 @@ export function PipelineView({
                 currentStatus={status}
                 disabled={!canRunStep8}
                 disabledReason="Complete Step 5 to run this step."
-                autoRun={canRunStep8}
                 onRunningChange={setStep8Running}
               />
             </div>
@@ -578,14 +576,12 @@ export function PipelineView({
               currentStatus={status}
               disabled={!canRunStep11}
               disabledReason="Complete Step 10 to run this step."
-              autoRun={canRunStep11}
               onRunningChange={setStep11Running}
-              hideButton
             />
             {shouldShowSelector && (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Select critiques to integrate into Step 12. You can continue with none selected, and Step 12 will be skipped automatically.
+                  Select the critiques you want integrated into the final document. Click a card to select or deselect it. You can also add custom critiques.
                 </p>
                 <CritiqueSelector
                   projectId={project.id}
@@ -602,6 +598,9 @@ export function PipelineView({
                     setStep11Draft(draft);
                     persistStep11Draft(draft);
                   }}
+                  onConfirm={() => void handleStep11Continue()}
+                  isConfirming={step11Submitting}
+                  isCompleted={status === "completed"}
                 />
               </>
             )}
@@ -759,32 +758,26 @@ export function PipelineView({
                       </Button>
                     </>
                   )}
-                  {activeStep < 13 && activeStep !== 10 && (
+                  {activeStep < 13 && activeStep !== 10 && activeStep !== 11 && (
                     isNewStep ? (
                       <Button
                         size="sm"
                         disabled={
                           optionalStepCompleting !== null
                           ||
-                          activeStep === 11
-                            ? !["completed", "awaiting_human"].includes(activeStatus) || step11Submitting
-                            : activeStep === 12
+                          activeStep === 12
                               ? step12Skipping
                               : activeStep === 7 || activeStep === 9
                                 ? false
                                 : activeStatus !== "completed"
                         }
                         onClick={
-                          activeStep === 11
-                            ? () => void handleStep11Continue()
-                            : activeStep === 12
+                          activeStep === 12
                               ? () => void handleStep12SkipContinue()
                               : () => void goToNextStep()
                         }
                       >
-                        {activeStep === 11 && step11Submitting
-                          ? "Saving…"
-                          : activeStep === 12 && step12Skipping
+                        {activeStep === 12 && step12Skipping
                             ? "Saving…"
                           : (activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
                             ? "Saving…"

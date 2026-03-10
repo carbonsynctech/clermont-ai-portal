@@ -211,7 +211,6 @@ export function SynthesisStep({
             currentStatus={stage5Status}
             disabled={!canRun}
             disabledReason="Complete Step 4 to run this step."
-            autoRun={canRun}
             onRunningChange={onRunningChange}
           />
         </div>

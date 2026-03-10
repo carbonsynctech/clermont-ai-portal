@@ -58,14 +58,74 @@ function mdToHtml(md: string): string {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 }
 
-/** Convert a block of markdown text to HTML paragraphs + lists. */
+/** Detect whether a line is a markdown table row (starts and ends with |). */
+function isTableRow(line: string): boolean {
+  return /^\|.+\|$/.test(line.trim());
+}
+
+/** Detect whether a line is a markdown table separator (e.g. |---|---|). */
+function isTableSeparator(line: string): boolean {
+  return /^\|[\s:?-]+\|$/.test(line.trim().replace(/\|[\s:?-]+(?=\|)/g, "|---"));
+}
+
+/** Parse a contiguous block of markdown table lines into an HTML <table>. */
+function tableLinesToHtml(tableLines: string[]): string {
+  const rows = tableLines.filter((l) => !isTableSeparator(l));
+  if (rows.length === 0) return "";
+
+  let html = '<table class="md-table">';
+
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i]!
+      .trim()
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((c) => c.trim());
+
+    const tag = i === 0 ? "th" : "td";
+    const rowHtml = cells.map((c) => `<${tag}>${mdToHtml(c)}</${tag}>`).join("");
+
+    if (i === 0) {
+      html += `<thead><tr>${rowHtml}</tr></thead><tbody>`;
+    } else {
+      html += `<tr>${rowHtml}</tr>`;
+    }
+  }
+
+  html += "</tbody></table>";
+  return html;
+}
+
+/** Convert a block of markdown text to HTML paragraphs + lists + tables. */
 function blockToHtml(text: string): string {
   const lines = text.split("\n");
   let html = "";
   let inList: "ul" | "ol" | null = null;
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  let i = 0;
+  while (i < lines.length) {
+    const trimmed = lines[i]!.trim();
+
+    // Pass through HTML table tags directly (from LLM outputting HTML tables)
+    if (/^<\/?(table|thead|tbody|tfoot|tr|th|td)\b/i.test(trimmed)) {
+      if (inList) { html += `</${inList}>`; inList = null; }
+      html += lines[i]!;
+      i++;
+      continue;
+    }
+
+    // Detect markdown table: collect consecutive table rows
+    if (isTableRow(trimmed)) {
+      if (inList) { html += `</${inList}>`; inList = null; }
+      const tableLines: string[] = [];
+      while (i < lines.length && (isTableRow(lines[i]!.trim()) || isTableSeparator(lines[i]!.trim()))) {
+        tableLines.push(lines[i]!);
+        i++;
+      }
+      html += tableLinesToHtml(tableLines);
+      continue;
+    }
 
     if (/^[-*+]\s/.test(trimmed)) {
       if (inList !== "ul") {
@@ -74,6 +134,7 @@ function blockToHtml(text: string): string {
         inList = "ul";
       }
       html += `<li>${mdToHtml(trimmed.replace(/^[-*+]\s/, ""))}</li>`;
+      i++;
       continue;
     }
 
@@ -84,17 +145,20 @@ function blockToHtml(text: string): string {
         inList = "ol";
       }
       html += `<li>${mdToHtml(trimmed.replace(/^\d+\.\s/, ""))}</li>`;
+      i++;
       continue;
     }
 
     if (trimmed.startsWith(">")) {
       if (inList) { html += `</${inList}>`; inList = null; }
       html += `<blockquote>${mdToHtml(trimmed.replace(/^>\s?/, ""))}</blockquote>`;
+      i++;
       continue;
     }
 
     if (!trimmed) {
       if (inList) { html += `</${inList}>`; inList = null; }
+      i++;
       continue;
     }
 
@@ -105,23 +169,27 @@ function blockToHtml(text: string): string {
         .replace(/\*\*:?$/, "")
         .trim();
       html += `<h3>${mdToHtml(headingText)}</h3>`;
+      i++;
       continue;
     }
 
     if (/^[A-Z][^.!?]{4,140}:$/.test(trimmed)) {
       if (inList) { html += `</${inList}>`; inList = null; }
       html += `<h3>${mdToHtml(trimmed.slice(0, -1))}</h3>`;
+      i++;
       continue;
     }
 
     // Skip markdown horizontal rules (---, ***, ___)
     if (/^[-*_]{3,}$/.test(trimmed)) {
       if (inList) { html += `</${inList}>`; inList = null; }
+      i++;
       continue;
     }
 
     if (inList) { html += `</${inList}>`; inList = null; }
     html += `<p>${mdToHtml(trimmed)}</p>`;
+    i++;
   }
 
   if (inList) html += `</${inList}>`;
@@ -133,7 +201,7 @@ function blockToHtml(text: string): string {
  * between paragraphs/headings/lists instead of clipping one giant block.
  */
 function splitFlowHtmlBlocks(html: string): string[] {
-  const matches = html.match(/<(h2|h3|p|ul|ol|blockquote)\b[^>]*>[\s\S]*?<\/\1>/gi);
+  const matches = html.match(/<(h2|h3|p|ul|ol|blockquote|table)\b[^>]*>[\s\S]*?<\/\1>/gi);
   if (!matches) return html.trim() ? [html.trim()] : [];
   return matches.map((block) => block.trim()).filter((block) => block.length > 0);
 }
@@ -384,8 +452,9 @@ function sanitizeMarkdownForPreview(markdown: string): string {
       const normalized = normalizeForComparison(trimmed);
       if (!trimmed) return true;
 
-      // Drop XML-like control tags and injected meta wrappers
-      if (/^<\/?[a-zA-Z][^>]*>/.test(trimmed)) return false;
+      // Drop XML-like control tags and injected meta wrappers, but preserve HTML table tags
+      const HTML_TABLE_TAG_RE = /^<\/?(table|thead|tbody|tfoot|tr|th|td)\b/i;
+      if (/^<\/?[a-zA-Z][^>]*>/.test(trimmed) && !HTML_TABLE_TAG_RE.test(trimmed)) return false;
 
       // Drop common noise lines seen in draft/system outputs
       if (/^contents$/i.test(trimmed)) return false;
@@ -669,6 +738,12 @@ function buildContentPages(
     if (isHeadingBlock(block)) {
       const headingLines = Math.ceil(textOnly.length / (CHARS_PER_LINE * 0.8)); // headings are wider font
       return headingLines + HEADING_MARGIN_LINES;
+    }
+
+    // Tables: count rows + header + spacing
+    const trMatches = block.match(/<tr>/g);
+    if (trMatches && /^<table\b/i.test(block.trim())) {
+      return trMatches.length + 2; // rows + header border + margin
     }
 
     // Count list items — each gets its own line(s) plus spacing

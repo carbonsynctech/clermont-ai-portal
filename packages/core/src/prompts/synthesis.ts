@@ -10,7 +10,13 @@ Your task is to synthesize multiple expert drafts into a single, authoritative i
 5. Eliminate redundancy while retaining depth
 6. Maintain an authoritative, professional tone appropriate for institutional investors
 
-The output should be a complete, polished investment memo. Write as if producing the definitive document. Never use em dashes (—); replace them with a comma, colon, or rewrite the sentence instead.`;
+The output should be a complete, polished investment memo. Write as if producing the definitive document. Never use em dashes (—); replace them with a comma, colon, or rewrite the sentence instead.
+
+CRITICAL TABLE FORMATTING RULE: When including any tabular data, you MUST use proper HTML table markup (<table>, <thead>, <tbody>, <tr>, <th>, <td>). NEVER use markdown pipe tables (| col1 | col2 |). This is essential because the output is rendered as HTML, and markdown pipe tables will display as raw text. Example of correct format:
+<table>
+<thead><tr><th>Metric</th><th>Value</th></tr></thead>
+<tbody><tr><td>Revenue</td><td>$10M</td></tr></tbody>
+</table>`;
 }
 
 export function buildSynthesisUserMessage(
