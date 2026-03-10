@@ -593,7 +593,7 @@ export function PipelineView({
               disabled={!canRunStep11}
               disabledReason="Complete Step 10 to run this step."
               onRunningChange={setStep11Running}
-              hideOutput={shouldShowSelector}
+              hideOutput={shouldShowSelector && !step11Running}
             />
             {shouldShowSelector && (
               <>

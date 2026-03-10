@@ -65,7 +65,11 @@ function isTableRow(line: string): boolean {
 
 /** Detect whether a line is a markdown table separator (e.g. |---|---|). */
 function isTableSeparator(line: string): boolean {
-  return /^\|[\s:?-]+\|$/.test(line.trim().replace(/\|[\s:?-]+(?=\|)/g, "|---"));
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return false;
+  // Strip outer pipes, split by |, and check every cell is only dashes/colons/spaces
+  const cells = trimmed.slice(1, -1).split("|");
+  return cells.length > 0 && cells.every((c) => /^[\s:?-]+$/.test(c));
 }
 
 /** Parse a contiguous block of markdown table lines into an HTML <table>. */

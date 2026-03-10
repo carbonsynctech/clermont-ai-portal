@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, MoreHorizontal, Pencil, Sparkles, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { parseCritiques } from "@repo/core";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,15 +38,6 @@ export interface CritiqueItem {
   detail: string;
   isCustom?: boolean;
 }
-
-const RANDOM_CRITIQUE_ANGLES = [
-  "Revenue quality and forecast reliability",
-  "Competitive moat durability",
-  "Customer concentration and churn dynamics",
-  "Execution and hiring risk",
-  "Unit economics under downside assumptions",
-  "Valuation, return path, and exit realism",
-] as const;
 
 const ASK_AI_PROMPT_MAX_LENGTH = 20000;
 const ASK_AI_PROMPT_TARGET_LENGTH = 19000;
@@ -217,22 +208,6 @@ export function CritiqueSelector({
     } finally {
       setIsGenerating(false);
     }
-  }
-
-  async function generateRandomCritique() {
-    const angle =
-      RANDOM_CRITIQUE_ANGLES[Math.floor(Math.random() * RANDOM_CRITIQUE_ANGLES.length)] ??
-      RANDOM_CRITIQUE_ANGLES[0];
-    const prompt = buildPromptWithMemo([
-      "Create ONE devil's-advocate critique for the investment memo below.",
-      `Focus area: ${angle}`,
-      "The critique must be grounded in this memo content and must be long and specific (at least 180 words).",
-      "Return ONLY in this exact format:",
-      "TITLE: <short title without numbering>",
-      "DESCRIPTION: <detailed critique paragraph(s), concrete and actionable>",
-    ], step10Markdown);
-
-    await generateCritique(prompt);
   }
 
   function addWrittenCustomCritique() {
@@ -490,15 +465,6 @@ export function CritiqueSelector({
       {!isCompleted && (
         <div className="space-y-2 rounded-xl border p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void generateRandomCritique()}
-              disabled={isGenerating}
-            >
-              <Sparkles className="size-4" />
-              {isGenerating ? "Generating..." : "Generate Random Critique"}
-            </Button>
             <Button variant="outline" size="sm" onClick={() => setCustomPanelOpen((open) => !open)}>
               + Custom Critique
             </Button>

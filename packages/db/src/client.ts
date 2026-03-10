@@ -7,12 +7,22 @@ if (!connectionString) throw new Error("DATABASE_URL is not set");
 
 const isServerless = !!process.env["VERCEL"];
 
-const client = postgres(connectionString, {
-  max: isServerless ? 1 : 10,
-  idle_timeout: 20,
-  connect_timeout: 10,
-  prepare: isServerless ? false : true,
-});
+const globalForDb = globalThis as unknown as {
+  pgClient: ReturnType<typeof postgres> | undefined;
+};
+
+const client =
+  globalForDb.pgClient ??
+  postgres(connectionString, {
+    max: isServerless ? 1 : 10,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    prepare: isServerless ? false : true,
+  });
+
+if (process.env["NODE_ENV"] !== "production") {
+  globalForDb.pgClient = client;
+}
 
 export const db = drizzle(client, { schema });
 export type DB = typeof db;
