@@ -117,8 +117,10 @@ export function PipelineView({
   const [step4Running, setStep4Running] = useState(false);
   const [step5Running, setStep5Running] = useState(false);
   const [step8Running, setStep8Running] = useState(false);
+  const [step8Approved, setStep8Approved] = useState(false);
   const [step9Running, setStep9Running] = useState(false);
   const [optionalStepCompleting, setOptionalStepCompleting] = useState<number | null>(null);
+  const [goingToNextStep, setGoingToNextStep] = useState(false);
   const [step12Running, setStep12Running] = useState(false);
   const [step12Skipping, setStep12Skipping] = useState(false);
   const [step7FormatRunId, setStep7FormatRunId] = useState(0);
@@ -237,11 +239,13 @@ export function PipelineView({
 
   const prerequisiteMessage = getPrerequisiteMessage(activeStep, stageMap);
   const isLockedStep = prerequisiteMessage !== null;
-  const activeStatus = stageMap[activeStep]?.status ?? "pending";
+  const rawActiveStatus = stageMap[activeStep]?.status ?? "pending";
+  const activeStatus = (activeStep === 8 && step8Approved) ? "completed" : rawActiveStatus;
   const isNewStep = activeStep >= project.currentStage;
 
   async function goToNextStep() {
-    const needsComplete = activeStep === 4 || activeStep === 6 || activeStep === 7 || activeStep === 9;
+    setGoingToNextStep(true);
+    const needsComplete = activeStep === 6 || activeStep === 7 || activeStep === 9;
     if (needsComplete) {
       setOptionalStepCompleting(activeStep);
       try {
@@ -255,6 +259,7 @@ export function PipelineView({
       } catch (error) {
         console.error(`Step ${activeStep} completion error:`, error);
         alert(error instanceof Error ? error.message : `Failed to complete Step ${activeStep}`);
+        setGoingToNextStep(false);
         return;
       } finally {
         setOptionalStepCompleting(null);
@@ -263,6 +268,7 @@ export function PipelineView({
 
     const next = activeStep + 1;
     setActiveStep(next);
+    setGoingToNextStep(false);
     router.push(`/projects/${project.id}?step=${next}`);
     if (needsComplete) {
       router.refresh();
@@ -327,7 +333,7 @@ export function PipelineView({
       }
 
       case 3:
-        return <MaterialUpload projectId={project.id} materials={materials} />;
+        return <MaterialUpload projectId={project.id} materials={materials} onNavigate={setActiveStep} />;
 
       case 4: {
         const canRunStep4 = stageMap[3]?.status === "completed";
@@ -426,6 +432,7 @@ export function PipelineView({
               approvedIssues={factCheckApprovedIssues ?? undefined}
               appliedCorrections={factCheckAppliedCorrections ?? undefined}
               isStepApproved={status === "completed"}
+              onApproveSuccess={() => setStep8Approved(true)}
             />
           );
         }
@@ -684,15 +691,14 @@ export function PipelineView({
                       <Button
                         size="sm"
                         disabled={
-                          optionalStepCompleting !== null
-                          ||
-                          activeStep === 12
+                          goingToNextStep
+                          || (activeStep === 12
                               ? step12Skipping
                               : activeStep === 6
                                 ? !resolvedPresetId
-                                : activeStep === 7 || activeStep === 9
+                                : (activeStep === 7 || activeStep === 9)
                                   ? false
-                                  : activeStatus !== "completed"
+                                  : activeStatus !== "completed")
                         }
                         onClick={
                           activeStep === 12
@@ -702,7 +708,7 @@ export function PipelineView({
                       >
                         {activeStep === 12 && step12Skipping
                             ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</>
-                          : (activeStep === 6 || activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
+                          : goingToNextStep
                             ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</>
                           : activeStep === 8
                             ? "Continue to Step 9"
@@ -714,11 +720,11 @@ export function PipelineView({
                           size="sm"
                           onClick={() => void goToNextStep()}
                           disabled={
-                            (activeStep === 6 && !resolvedPresetId)
-                            || ((activeStep === 6 || activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep)
+                            goingToNextStep
+                            || (activeStep === 6 && !resolvedPresetId)
                           }
                         >
-                          {(activeStep === 6 || activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
+                          {goingToNextStep
                             ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</>
                             : activeStep === 8
                               ? "Continue to Step 9"
@@ -768,18 +774,23 @@ export function PipelineView({
                 {isNewStep ? (
                   <Button
                     size="sm"
-                    disabled={activeStatus !== "completed"}
+                    disabled={activeStatus !== "completed" || goingToNextStep}
                     onClick={() => void goToNextStep()}
                   >
-                    Save and continue to Step {activeStep + 1}
+                    {goingToNextStep
+                      ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</>
+                      : `Save and continue to Step ${activeStep + 1}`}
                   </Button>
                 ) : (
                   activeStatus === "completed" && (
                     <Button
                       size="sm"
+                      disabled={goingToNextStep}
                       onClick={() => void goToNextStep()}
                     >
-                      Save and continue to Step {activeStep + 1}
+                      {goingToNextStep
+                        ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</>
+                        : `Save and continue to Step ${activeStep + 1}`}
                     </Button>
                   )
                 )}

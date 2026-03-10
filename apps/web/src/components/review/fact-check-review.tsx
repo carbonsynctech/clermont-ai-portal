@@ -147,6 +147,7 @@ interface FactCheckReviewStepProps {
   approvedIssues?: string[];
   appliedCorrections?: number;
   isStepApproved?: boolean;
+  onApproveSuccess?: () => void;
 }
 
 export function FactCheckReviewStep({
@@ -158,6 +159,7 @@ export function FactCheckReviewStep({
   approvedIssues,
   appliedCorrections,
   isStepApproved = false,
+  onApproveSuccess,
 }: FactCheckReviewStepProps) {
   const router = useRouter();
   const findingIds = useMemo(
@@ -305,6 +307,7 @@ export function FactCheckReviewStep({
         issuesApproved,
         findingIds: selectedFindingIds,
       });
+      onApproveSuccess?.();
       router.refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to apply accepted corrections");
@@ -462,31 +465,29 @@ export function FactCheckReviewStep({
         )}
 
         <div className="mt-auto space-y-2 pt-1">
+          <Button
+            className="w-full"
+            variant={isApproved ? "secondary" : "default"}
+            onClick={() => void handleAcceptCorrections()}
+            disabled={
+              isApproved
+              || isApplyingCorrections
+              || isStartingOver
+              || issueCount === 0
+              || acceptedCount === 0
+            }
+          >
+            {isApplyingCorrections ? "Applying…" : isApproved ? `${acceptedCount}/${issueCount} accepted` : `Accept ${acceptedCount} Correction${acceptedCount === 1 ? "" : "s"}`}
+          </Button>
+
           <div className="flex items-center justify-between gap-2">
-            <Button variant="outline" onClick={() => void handleStartOver()} disabled={isStartingOver || isApplyingCorrections}>
-              {isStartingOver ? "Restarting…" : "Start Over Fact Check"}
-            </Button>
-            <Button
-              variant={isApproved ? "secondary" : "default"}
-              className={isApproved ? "text-muted-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90"}
-              onClick={() => void handleAcceptCorrections()}
-              disabled={
-                isApproved
-                ||
-                isApplyingCorrections
-                || isStartingOver
-                || issueCount === 0
-                || acceptedCount === 0
-              }
-            >
-              {isApplyingCorrections ? "Applying…" : isApproved ? `${acceptedCount}/${issueCount} accepted` : "Accept Corrections"}
+            <p className="text-sm text-muted-foreground">
+              {acceptedCount} of {issueCount} corrections selected
+            </p>
+            <Button variant="ghost" size="sm" onClick={() => void handleStartOver()} disabled={isStartingOver || isApplyingCorrections}>
+              {isStartingOver ? "Restarting…" : "Start Over"}
             </Button>
           </div>
-
-          <p className="text-sm text-muted-foreground">
-            {acceptedCount} of {issueCount} corrections accepted
-          </p>
-
         </div>
       </div>
 

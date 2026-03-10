@@ -20,9 +20,10 @@ import type { SourceMaterial } from "@repo/db";
 interface MaterialUploadProps {
   projectId: string;
   materials: SourceMaterial[];
+  onNavigate?: (step: number) => void;
 }
 
-export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
+export function MaterialUpload({ projectId, materials, onNavigate }: MaterialUploadProps) {
   const router = useRouter();
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -123,7 +124,14 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         return;
       }
 
-      router.push(`/projects/${projectId}?step=4`);
+      if (onNavigate) {
+        onNavigate(4);
+        window.history.replaceState(null, "", `/projects/${projectId}?step=4`);
+        router.refresh();
+      } else {
+        router.push(`/projects/${projectId}?step=4`);
+        router.refresh();
+      }
     } catch {
       setUploadError("Network error. Please try again.");
     } finally {
@@ -132,11 +140,6 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
   }
 
   async function handlePrimaryAction() {
-    if (hasMaterials) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
     await handleFinalize();
   }
 
