@@ -11,6 +11,8 @@ import {
   AlignmentType,
   Packer,
 } from "docx";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { buildStyledExportHtml } from "@/lib/export-html";
 
 /* ------------------------------------------------------------------ */
@@ -31,7 +33,10 @@ function guessMime(url: string): string {
   return "application/octet-stream";
 }
 
-async function inlineHtmlAssets(html: string): Promise<string> {
+async function inlineHtmlAssets(
+  html: string,
+  origin?: string
+): Promise<string> {
   const urlSet = new Set<string>();
 
   // Collect src="https://..." URLs
@@ -54,6 +59,20 @@ async function inlineHtmlAssets(html: string): Promise<string> {
   await Promise.all(
     [...urlSet].map(async (url) => {
       try {
+        // Same-origin assets → read from public/ directory (no HTTP needed)
+        if (origin && url.startsWith(origin + "/")) {
+          const relativePath = url.slice(origin.length); // e.g. "/clermont-logo.png"
+          const filePath = join(process.cwd(), "public", relativePath);
+          const buf = readFileSync(filePath);
+          const ct = guessMime(url);
+          replacements.set(
+            url,
+            `data:${ct};base64,${buf.toString("base64")}`
+          );
+          return;
+        }
+
+        // External assets → fetch with timeout
         const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) return;
         const buf = Buffer.from(await res.arrayBuffer());
@@ -267,7 +286,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
     // Inline all external images/fonts as base64 so the worker's Puppeteer
     // doesn't need to fetch anything over the network.
-    const inlinedHtml = await inlineHtmlAssets(styledHtml);
+    const inlinedHtml = await inlineHtmlAssets(styledHtml, req.nextUrl.origin);
 
     const workerRes = await fetch(`${workerUrl}/export/pdf`, {
       method: "POST",
