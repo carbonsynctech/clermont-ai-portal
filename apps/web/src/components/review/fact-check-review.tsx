@@ -307,7 +307,12 @@ export function FactCheckReviewStep({
         issuesApproved,
         findingIds: selectedFindingIds,
       });
+
+      // Call parent callback first, then refresh to ensure state is updated
       onApproveSuccess?.();
+
+      // Small delay to ensure parent component state updates before refresh
+      await new Promise((resolve) => setTimeout(resolve, 100));
       router.refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to apply accepted corrections");

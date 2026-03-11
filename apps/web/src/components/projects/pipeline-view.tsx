@@ -225,6 +225,13 @@ export function PipelineView({
   const factCheckVersion = versions.filter((v) => v.versionType === "fact_checked").at(-1);
   const finalStyledVersion = getLatestVersion("final_styled");
 
+  // Sync step8Approved state with server stage status
+  useEffect(() => {
+    if (activeStep === 8 && stageMap[8]?.status === "completed") {
+      setStep8Approved(true);
+    }
+  }, [activeStep, stageMap]);
+
   function handleStepClick(step: number) {
     // Prevent navigating to a step whose prerequisite isn't completed
     const prerequisiteStep: Record<number, number> = {
