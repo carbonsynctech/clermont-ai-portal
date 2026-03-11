@@ -125,6 +125,12 @@ export function PipelineView({
   const [step12Skipping, setStep12Skipping] = useState(false);
   const [step7FormatRunId, setStep7FormatRunId] = useState(0);
 
+  // Optimistic overrides: mark steps as completed before server data arrives
+  const [completedStepOverrides, setCompletedStepOverrides] = useState<Set<number>>(new Set());
+  const markStepCompleted = useCallback((step: number) => {
+    setCompletedStepOverrides((prev) => new Set(prev).add(step));
+  }, []);
+
   // Shared document styling state — set in step 6, consumed in step 7
   const [documentColors, setDocumentColors] = useState<DocumentColors>(DEFAULT_COLORS);
   const [liveCoverImageUrl, setLiveCoverImageUrl] = useState<string | undefined>(coverImageUrl);
@@ -170,6 +176,7 @@ export function PipelineView({
   const editorRef = useRef<InlineEditorHandle | null>(null);
   const [step10IsDirty, setStep10IsDirty] = useState(false);
   const [step10IsApproving, setStep10IsApproving] = useState(false);
+  const [step10Reopened, setStep10Reopened] = useState(false);
   const handleStep10ContentChange = useCallback((isDirty: boolean) => {
     setStep10IsDirty(isDirty);
   }, []);
@@ -182,6 +189,12 @@ export function PipelineView({
       setStep10IsApproving(false);
     }
   }
+  // Reset step10Reopened when navigating away from step 10
+  useEffect(() => {
+    if (activeStep !== 10) {
+      setStep10Reopened(false);
+    }
+  }, [activeStep]);
 
   // Step 11 ref + state (for floating bar actions, like Step 10's editorRef)
   const step11Ref = useRef<DevilsAdvocateHandle | null>(null);
@@ -214,6 +227,10 @@ export function PipelineView({
   // router.refresh() fires (e.g. after a job completes), because replaceState
   // doesn't update Next.js internal router state.
 
+  // Clear optimistic overrides when stages prop delivers fresh data
+  const stagesKey = stages.map((s) => `${s.stepNumber}:${s.status}`).join(",");
+  useEffect(() => { setCompletedStepOverrides(new Set()); }, [stagesKey]);
+
   const stageMap = Object.fromEntries(stages.map((s) => [s.stepNumber, s]));
   const brief = project.briefData as ProjectBriefData | null;
   const getLatestVersion = useCallback(
@@ -238,13 +255,13 @@ export function PipelineView({
       2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 5, 8: 5, 9: 8, 10: 9, 11: 10, 12: 11, 13: 12,
     };
     const prereq = prerequisiteStep[step];
-    if (prereq && stageMap[prereq]?.status !== "completed") return;
+    if (prereq && stageMap[prereq]?.status !== "completed" && !completedStepOverrides.has(prereq)) return;
 
     setActiveStep(step);
     window.history.replaceState(null, "", `/projects/${project.id}?step=${step}`);
   }
 
-  const prerequisiteMessage = getPrerequisiteMessage(activeStep, stageMap);
+  const prerequisiteMessage = getPrerequisiteMessage(activeStep, stageMap, completedStepOverrides);
   const isLockedStep = prerequisiteMessage !== null;
   const rawActiveStatus = stageMap[activeStep]?.status ?? "pending";
   const activeStatus = (activeStep === 8 && step8Approved) ? "completed" : rawActiveStatus;
@@ -273,13 +290,12 @@ export function PipelineView({
       }
     }
 
+    markStepCompleted(activeStep);
     const next = activeStep + 1;
     setActiveStep(next);
     setGoingToNextStep(false);
     router.push(`/projects/${project.id}?step=${next}`);
-    if (needsComplete) {
-      router.refresh();
-    }
+    router.refresh();
   }
 
   async function handleStep12SkipContinue() {
@@ -293,6 +309,7 @@ export function PipelineView({
         throw new Error("Failed to skip Step 12");
       }
 
+      markStepCompleted(12);
       const next = 13;
       setActiveStep(next);
       router.push(`/projects/${project.id}?step=${next}`);
@@ -502,7 +519,7 @@ export function PipelineView({
               versionLabel="Final Styled V4"
               hideActions
               onContentChange={handleStep10ContentChange}
-              onApproveSuccess={() => setActiveStep(11)}
+              onApproveSuccess={() => { markStepCompleted(10); setActiveStep(11); }}
             />
           </div>
         );
@@ -522,7 +539,11 @@ export function PipelineView({
             }
             serverCritiques={step11Critiques}
             serverSelectedIds={step11SelectedIds}
-            onNavigate={setActiveStep}
+            onNavigate={(step: number) => {
+              markStepCompleted(11);
+              if (step === 13) markStepCompleted(12);
+              setActiveStep(step);
+            }}
             onSelectionChange={setStep11Selection}
           />
         );
@@ -589,6 +610,7 @@ export function PipelineView({
             activeStep={activeStep}
             currentStep={project.currentStage}
             onStepClick={handleStepClick}
+            completedStepOverrides={completedStepOverrides}
             stepStatusOverrides={{
               ...(step1Running ? { 1: "running" as const } : {}),
               ...(step4Running ? { 4: "running" as const } : {}),
@@ -659,7 +681,12 @@ export function PipelineView({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  {activeStep === 10 && activeStatus !== "completed" && (
+                  {activeStep === 10 && activeStatus === "completed" && !step10Reopened && (
+                    <Button variant="outline" size="sm" onClick={() => setStep10Reopened(true)}>
+                      Re-edit Review
+                    </Button>
+                  )}
+                  {activeStep === 10 && (activeStatus !== "completed" || step10Reopened) && (
                     <>
                       <Button
                         variant="ghost"
@@ -674,7 +701,13 @@ export function PipelineView({
                         onClick={() => void handleStep10Approve()}
                         disabled={step10IsApproving}
                       >
-                        {step10IsApproving ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</> : "Approve & Continue to Step 11"}
+                        {step10IsApproving ? (
+                          <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</>
+                        ) : activeStatus === "completed" ? (
+                          "Save Updated Review"
+                        ) : (
+                          "Approve & Continue to Step 11"
+                        )}
                       </Button>
                     </>
                   )}
@@ -813,6 +846,7 @@ export function PipelineView({
 function getPrerequisiteMessage(
   step: number,
   stageMap: Record<number, Stage | undefined>,
+  overrides: Set<number>,
 ): string | null {
   if (step <= 1) {
     return null;
@@ -835,6 +869,10 @@ function getPrerequisiteMessage(
 
   const requiredStep = prerequisiteStep[step];
   if (!requiredStep) {
+    return null;
+  }
+
+  if (overrides.has(requiredStep)) {
     return null;
   }
 

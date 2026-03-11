@@ -42,6 +42,7 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(
     const [isDraftSaving, setIsDraftSaving] = useState(false);
     const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
     const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isApprovingRef = useRef(false);
     const lastSavedContentRef = useRef(initialContent);
     const failedContentRef = useRef<string | null>(null);
     const leftScrollRef = useRef<HTMLDivElement | null>(null);
@@ -95,7 +96,7 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(
     }
 
     useEffect(() => {
-      if (isApproving || isDraftSaving) return;
+      if (isApprovingRef.current || isDraftSaving) return;
       if (content === lastSavedContentRef.current) return;
       if (content === failedContentRef.current) return;
 
@@ -111,10 +112,16 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(
           saveDebounceRef.current = null;
         }
       };
-    }, [content, isApproving, isDraftSaving]);
+    }, [content, isDraftSaving]);
 
     async function handleApprove() {
+      // Cancel any pending debounce first
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+        saveDebounceRef.current = null;
+      }
       setIsApproving(true);
+      isApprovingRef.current = true;
       try {
         if (content !== lastSavedContentRef.current) {
           await saveDraft(content);
@@ -136,6 +143,7 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(
         alert(err instanceof Error ? err.message : "Failed to save review. Please try again.");
       } finally {
         setIsApproving(false);
+        isApprovingRef.current = false;
       }
     }
 

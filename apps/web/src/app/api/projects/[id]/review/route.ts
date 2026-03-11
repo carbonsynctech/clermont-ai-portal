@@ -89,10 +89,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     })
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 10)));
 
-  // Advance project to stage 11
+  // Advance project to stage 11 only if currently behind
   await db
     .update(projects)
-    .set({ currentStage: 11, updatedAt: new Date() })
+    .set({
+      currentStage: project.currentStage < 11 ? 11 : project.currentStage,
+      updatedAt: new Date()
+    })
     .where(eq(projects.id, projectId));
 
   return NextResponse.json({ ok: true });

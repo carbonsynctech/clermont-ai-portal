@@ -181,6 +181,14 @@ export function StyleGuidePreview({ projectId, projectTitle, companyName, onGene
           </div>
         )}
 
+        {/* Loading state — initial fetch in progress */}
+        {!isGenerating && !hasFetched && (
+          <div className="flex flex-col items-center gap-3 py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Loading cover design…</p>
+          </div>
+        )}
+
         {/* No images yet — show generate button */}
         {!isGenerating && hasFetched && coverImages.length === 0 && (
           <div className="flex flex-col items-center gap-4 py-6">

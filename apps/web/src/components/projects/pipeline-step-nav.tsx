@@ -94,6 +94,8 @@ interface PipelineStepNavProps {
   onStepClick: (step: number) => void;
   /** Override the displayed status for specific steps (e.g. background jobs not tied to stage status) */
   stepStatusOverrides?: Partial<Record<number, StageStatus>>;
+  /** Steps optimistically marked as completed during transitions (before server data arrives) */
+  completedStepOverrides?: Set<number>;
 }
 
 export function PipelineStepNav({
@@ -102,6 +104,7 @@ export function PipelineStepNav({
   activeStep,
   onStepClick,
   stepStatusOverrides,
+  completedStepOverrides,
 }: PipelineStepNavProps) {
   const stageMap = new Map(stages.map((s) => [s.stepNumber, s]));
 
@@ -124,7 +127,7 @@ export function PipelineStepNav({
                 // A step is locked if its prerequisite step is not completed
                 const prereq = PREREQUISITE_STEP[step];
                 const prereqStatus = prereq ? (stageMap.get(prereq)?.status as StageStatus | undefined) ?? "pending" : "completed";
-                const isLocked = prereqStatus !== "completed";
+                const isLocked = prereqStatus !== "completed" && !(prereq !== undefined && completedStepOverrides?.has(prereq));
 
                 if (isLocked) {
                   return (

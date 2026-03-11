@@ -744,10 +744,20 @@ function buildContentPages(
       return headingLines + HEADING_MARGIN_LINES;
     }
 
-    // Tables: count rows + header + spacing
-    const trMatches = block.match(/<tr>/g);
+    // Tables: span both columns via column-span:all, so vertical space
+    // costs 2× in the dual-column line budget.
+    // Each row ≈ 27px (11.5px font * 1.45 line-height + 10px padding),
+    // table margins ≈ 28px (12px top + 16px bottom),
+    // one text line ≈ 20px (13px * 1.55).
+    const trMatches = block.match(/<tr>/gi);
     if (trMatches && /^<table\b/i.test(block.trim())) {
-      return trMatches.length + 2; // rows + header border + margin
+      const rowCount = trMatches.length;
+      const ROW_HEIGHT_PX = 27;
+      const TABLE_MARGIN_PX = 28;
+      const LINE_HEIGHT_PX = 20;
+      const tablePixelHeight = rowCount * ROW_HEIGHT_PX + TABLE_MARGIN_PX;
+      // column-span:all removes height from both columns → 2× cost
+      return (tablePixelHeight / LINE_HEIGHT_PX) * 2;
     }
 
     // Count list items — each gets its own line(s) plus spacing
