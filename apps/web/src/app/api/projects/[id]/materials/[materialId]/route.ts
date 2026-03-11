@@ -50,22 +50,25 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
       // Continue with DB deletion even if storage deletion fails
     }
 
-    // Delete from database
+    // Delete from database (do this first — it's the critical operation)
     await db.delete(sourceMaterials).where(eq(sourceMaterials.id, materialId));
 
-    // Audit log
-    await db.insert(auditLogs).values({
-      projectId,
-      userId: user.id,
-      action: "source_deleted",
-      payload: { materialId, filename: material.originalFilename },
-    });
+    // Audit log + timestamp update (non-critical — don't fail the response if these error)
+    try {
+      await db.insert(auditLogs).values({
+        projectId,
+        userId: user.id,
+        action: "source_deleted",
+        payload: { materialId, filename: material.originalFilename },
+      });
 
-    // Update project timestamp
-    await db
-      .update(projects)
-      .set({ updatedAt: new Date() })
-      .where(eq(projects.id, projectId));
+      await db
+        .update(projects)
+        .set({ updatedAt: new Date() })
+        .where(eq(projects.id, projectId));
+    } catch (auditError) {
+      console.error("Failed to write audit log for source deletion:", auditError);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
