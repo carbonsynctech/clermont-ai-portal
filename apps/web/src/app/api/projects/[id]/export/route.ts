@@ -13,7 +13,7 @@ import {
 } from "docx";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { buildStyledExportHtml } from "@/lib/export-html";
+import { buildStyledExportHtml, buildFlowingPdfHtml } from "@/lib/export-html";
 
 /* ------------------------------------------------------------------ */
 /*  Inline external assets as base64 data URIs so Puppeteer on the    */
@@ -284,9 +284,19 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const workerSecret = process.env["WORKER_SECRET"] ?? "";
 
   try {
+    // Build flowing CSS-layout HTML for PDF (no fixed-height pages = no clipping)
+    const flowingPdfHtml = buildFlowingPdfHtml({
+      content: finalVersion.content,
+      projectTitle: title,
+      companyName: project.title,
+      dealType: undefined,
+      coverImageUrl,
+      assetBaseUrl: req.nextUrl.origin,
+    });
+
     // Inline all external images/fonts as base64 so the worker's Puppeteer
     // doesn't need to fetch anything over the network.
-    const inlinedHtml = await inlineHtmlAssets(styledHtml, req.nextUrl.origin);
+    const inlinedHtml = await inlineHtmlAssets(flowingPdfHtml, req.nextUrl.origin);
 
     const workerRes = await fetch(`${workerUrl}/export/pdf`, {
       method: "POST",

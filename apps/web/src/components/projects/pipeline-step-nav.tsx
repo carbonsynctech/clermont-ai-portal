@@ -13,7 +13,7 @@ const STEP_NAMES: Record<number, string> = {
   1: "Define Task",
   2: "Select Personas",
   3: "Source Material",
-  4: "Generate Drafts",
+  4: "Generate Opinions",
   5: "Synthesize",
   6: "Style Guide",
   7: "Edit for Style",

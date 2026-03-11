@@ -1,13 +1,13 @@
-import { db, projects, stages, versions, personas, auditLogs } from "@repo/db";
+import { db, projects, stages, versions, personas, sourceChunks, sourceMaterials, auditLogs } from "@repo/db";
 import {
   claude,
   buildSynthesisSystemPrompt,
   buildSynthesisUserMessage,
   estimateTokens,
+  selectChunksForBudget,
+  getAvailableContextTokens,
 } from "@repo/core";
 import { eq, and } from "drizzle-orm";
-
-const MAX_DRAFT_TOKENS = 120000;
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).length;
@@ -36,8 +36,19 @@ export async function synthesize(
 
   const startedAt = Date.now();
 
-  // 3. Fetch persona draft versions with persona names
-  const draftVersions = await db.query.versions.findMany({
+  // 3. Clear any existing synthesis versions so re-runs produce a fresh memo
+  const existingSynthesis = await db.query.versions.findMany({
+    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "synthesis")),
+  });
+  if (existingSynthesis.length > 0) {
+    await db
+      .delete(versions)
+      .where(and(eq(versions.projectId, projectId), eq(versions.versionType, "synthesis")));
+    onChunk?.(`Cleared ${existingSynthesis.length} previous synthesis version(s).\n`);
+  }
+
+  // 4. Fetch persona opinion versions with persona names
+  const opinionVersions = await db.query.versions.findMany({
     where: and(
       eq(versions.projectId, projectId),
       eq(versions.versionType, "persona_draft")
@@ -45,11 +56,11 @@ export async function synthesize(
     orderBy: (v, { asc }) => [asc(v.createdAt)],
   });
 
-  if (draftVersions.length === 0) {
-    throw new Error(`Project ${projectId} has no persona draft versions`);
+  if (opinionVersions.length === 0) {
+    throw new Error(`Project ${projectId} has no persona opinion versions`);
   }
 
-  onChunk?.(`Loaded ${draftVersions.length} persona drafts.\n`);
+  onChunk?.(`Loaded ${opinionVersions.length} persona opinions.\n`);
 
   // Fetch persona names
   const personaRows = await db.query.personas.findMany({
@@ -57,42 +68,64 @@ export async function synthesize(
   });
   const personaMap = Object.fromEntries(personaRows.map((p) => [p.id, p.name]));
 
-  // 4. Build drafts array, truncate proportionally if total tokens exceed limit
-  let drafts = draftVersions.map((v) => ({
+  // 4. Build opinions array
+  const opinions = opinionVersions.map((v) => ({
     personaName: v.personaId ? (personaMap[v.personaId] ?? v.internalLabel) : v.internalLabel,
     content: v.content,
   }));
 
-  const totalTokens = drafts.reduce((sum, d) => sum + estimateTokens(d.content), 0);
-  if (totalTokens > MAX_DRAFT_TOKENS) {
-    const ratio = MAX_DRAFT_TOKENS / totalTokens;
-    onChunk?.(
-      `Drafts exceed context budget (${totalTokens} tokens). Truncating to ${MAX_DRAFT_TOKENS} tokens...\n`,
-    );
-    drafts = drafts.map((d) => ({
-      ...d,
-      content: d.content.slice(0, Math.floor(d.content.length * ratio)),
+  // 5. Load source chunks for direct inclusion
+  const materials = await db.query.sourceMaterials.findMany({
+    where: eq(sourceMaterials.projectId, projectId),
+  });
+
+  const materialIds = materials.map((m) => m.id);
+
+  let allChunks: Array<{ id: string; content: string; estimatedTokens: number; chunkIndex: number; summary?: string | null }> = [];
+
+  if (materialIds.length > 0) {
+    const chunkRows = await db.query.sourceChunks.findMany({
+      where: (c, { inArray }) => inArray(c.materialId, materialIds),
+      orderBy: (c, { asc }) => [asc(c.chunkIndex)],
+    });
+    allChunks = chunkRows.map((c) => ({
+      id: c.id,
+      content: c.content,
+      estimatedTokens: c.estimatedTokens,
+      chunkIndex: c.chunkIndex,
+      summary: c.summary,
     }));
   }
 
-  onChunk?.("Running synthesis with Claude extended thinking...\n");
+  // 6. Calculate token budget for source chunks
+  const opinionsTokens = opinions.reduce((sum, o) => sum + estimateTokens(o.content), 0);
+  const masterPromptTokens = estimateTokens(project.masterPrompt);
+  const availableTokens = getAvailableContextTokens("claude-sonnet-4-6");
+  const chunkBudget = availableTokens - masterPromptTokens - opinionsTokens - 4000;
+  const selectedChunks = selectChunksForBudget(allChunks, chunkBudget);
 
-  // 5. Call Claude with extended thinking
+  onChunk?.(
+    `Selected ${selectedChunks.length} source chunks (${Math.max(chunkBudget, 0)} token budget).\n`,
+  );
+
+  onChunk?.("Writing investment memo with Claude extended thinking...\n");
+
+  // 7. Call Claude with extended thinking
   const result = await claude.callWithThinking({
     system: buildSynthesisSystemPrompt(),
     messages: [
       {
         role: "user",
-        content: buildSynthesisUserMessage(project.masterPrompt, drafts),
+        content: buildSynthesisUserMessage(project.masterPrompt, opinions, selectedChunks),
       },
     ],
     maxTokens: 18192, // 8192 output + 10000 thinking budget
   });
 
   const durationMs = Date.now() - startedAt;
-  onChunk?.(`Synthesis completed in ${Math.round(durationMs / 1000)}s. Saving version...\n`);
+  onChunk?.(`Memo written in ${Math.round(durationMs / 1000)}s. Saving version...\n`);
 
-  // 6. Insert synthesis version
+  // 8. Insert synthesis version
   const [newVersion] = await db
     .insert(versions)
     .values({
@@ -110,13 +143,13 @@ export async function synthesize(
 
   onChunk?.("Synthesis version saved. Finalizing stage...\n");
 
-  // 7. Update activeVersionId
+  // 9. Update activeVersionId
   await db
     .update(projects)
     .set({ activeVersionId: newVersion.id, updatedAt: new Date() })
     .where(eq(projects.id, projectId));
 
-  // 8. Audit log
+  // 10. Audit log
   await db.insert(auditLogs).values({
     projectId,
     userId,
@@ -128,7 +161,7 @@ export async function synthesize(
     payload: { durationMs, thinkingLength: result.thinking.length },
   });
 
-  // 9. Update stage to completed
+  // 11. Update stage to completed
   await db
     .update(stages)
     .set({
@@ -144,7 +177,7 @@ export async function synthesize(
     })
     .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 5)));
 
-  // 10. Advance project to stage 6
+  // 12. Advance project to stage 6
   await db
     .update(projects)
     .set({ currentStage: 6, updatedAt: new Date() })

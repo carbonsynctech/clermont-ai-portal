@@ -1,0 +1,1 @@
+ALTER TYPE "public"."audit_action" ADD VALUE 'master_prompt_edited' BEFORE 'persona_selected';

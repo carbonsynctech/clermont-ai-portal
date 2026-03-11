@@ -302,6 +302,7 @@ export function DefineTaskStep({
   useEffect(() => {
     if (masterPrompt) setPromptText(masterPrompt);
   }, [masterPrompt]);
+
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(briefData !== null);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -737,12 +738,15 @@ export function DefineTaskStep({
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ masterPrompt: promptText }),
                   });
-                  if (!res.ok) throw new Error("Failed to save");
+                  if (!res.ok) {
+                    const body = (await res.json()) as { error?: string };
+                    throw new Error(body.error ?? "Failed to save");
+                  }
                   setIsEditingPrompt(false);
                   onNavigate?.(2);
                   router.push(`/projects/${projectId}?step=2`);
-                } catch {
-                  setPromptSaveError("Failed to save prompt. Please try again.");
+                } catch (err) {
+                  setPromptSaveError(err instanceof Error ? err.message : "Failed to save prompt. Please try again.");
                 } finally {
                   setIsSavingPrompt(false);
                 }

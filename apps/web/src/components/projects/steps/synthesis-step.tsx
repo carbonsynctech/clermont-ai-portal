@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ArrowUp, ArrowRight, Loader2, Wand2 } from "lucide-react";
+import { ArrowUp, ArrowRight, Loader2, Wand2, RefreshCw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { StepTrigger } from "@/components/projects/step-trigger";
+import { StepTrigger, useStepTrigger, StepTriggerButton, StepTriggerOutput } from "@/components/projects/step-trigger";
 import { useJobStatus } from "@/hooks/use-job-status";
 import { cn } from "@/lib/utils";
 import {
@@ -28,6 +28,7 @@ interface SynthesisStepProps {
   stage4Status: string;
   stage5Status: string;
   synthesisVersion: Version | undefined;
+  hasNewerOpinions?: boolean;
   onContinue?: () => void;
   onRunningChange?: (running: boolean) => void;
 }
@@ -37,6 +38,7 @@ export function SynthesisStep({
   stage4Status,
   stage5Status,
   synthesisVersion,
+  hasNewerOpinions = false,
   onContinue,
   onRunningChange,
 }: SynthesisStepProps) {
@@ -102,6 +104,13 @@ export function SynthesisStep({
     setDisplayContent(synthesisVersion?.content ?? "");
     setMessages([]);
   }, [synthesisVersion?.id, synthesisVersion?.content, chatKey, contentKey]);
+
+  // ── Re-synthesize trigger (for when opinions are regenerated) ────────────
+  const resynthTrigger = useStepTrigger(projectId, 5, stage5Status);
+
+  useEffect(() => {
+    onRunningChange?.(resynthTrigger.isRunning);
+  }, [resynthTrigger.isRunning, onRunningChange]);
 
   // Uncontrolled ref — reading value on send avoids re-rendering ReactMarkdown on every keystroke
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -199,15 +208,16 @@ export function SynthesisStep({
     return (
       <div className="space-y-4">
         <div className="rounded-xl border bg-card p-6 space-y-4">
-          <h3 className="font-medium text-base text-foreground">Synthesis</h3>
+          <h3 className="font-medium text-base text-foreground">Write Investment Memo</h3>
           <p className="text-base text-muted-foreground">
-            Claude synthesises all 5 persona drafts into a single unified document using extended
-            thinking. This becomes Version 1 of the memo.
+            Claude acts as the primary author, reading persona opinions and source material directly
+            to write the full investment memo in one consistent voice using extended thinking.
+            This becomes Version 1 of the memo.
           </p>
           <StepTrigger
             projectId={projectId}
             stepNumber={5}
-            label="Synthesise Drafts"
+            label="Write Investment Memo"
             currentStatus={stage5Status}
             disabled={!canRun}
             disabledReason="Complete Step 4 to run this step."
@@ -229,8 +239,27 @@ export function SynthesisStep({
         wordCount={synthesisVersion.wordCount ?? undefined}
       />
 
-      {/* Right – chat panel (sticky) */}
-      <div className="sticky top-4">
+      {/* Right – re-synth banner + chat panel (sticky) */}
+      <div className="sticky top-4 space-y-3">
+        {hasNewerOpinions && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="size-4 text-amber-600 dark:text-amber-400" />
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                Persona opinions have been regenerated
+              </p>
+            </div>
+            <p className="text-xs text-amber-700/80 dark:text-amber-400/80">
+              The current memo was written from older opinions. Re-synthesize to write a new memo based on the latest expert input.
+            </p>
+            <StepTriggerButton
+              trigger={resynthTrigger}
+              label="Re-write Investment Memo"
+            />
+            <StepTriggerOutput trigger={resynthTrigger} />
+          </div>
+        )}
+
         <div className="rounded-xl border bg-card flex flex-col max-h-[calc(100vh-6rem)] min-h-[400px] overflow-hidden">
 
           {/* Header */}

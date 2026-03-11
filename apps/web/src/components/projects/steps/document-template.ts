@@ -425,6 +425,25 @@ export function getDocumentCSS(colors: DocumentColors = DEFAULT_COLORS): string 
   color: #3f3f3f;
 }
 
+/* Table groups: heading + optional intro paragraph + table kept together,
+   all spanning full width so the heading is always on the left. */
+.page-content .content-columns .table-group,
+.page-content .flow-columns .table-group {
+  column-span: all;
+  break-inside: avoid;
+}
+.page-content .flow-columns .table-group h2,
+.page-content .flow-columns .table-group h3 {
+  margin-top: 0;
+}
+.page-content .flow-columns .table-group p {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #4a4a4a;
+  margin-bottom: 6px;
+}
+
 /* Tables in content pages — span full width across both columns */
 .page-content .content-columns table,
 .page-content .flow-columns table {

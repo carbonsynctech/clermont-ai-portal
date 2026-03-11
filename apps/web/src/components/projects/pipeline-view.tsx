@@ -42,7 +42,7 @@ const STEP_TITLES: Record<number, string> = {
   1: "Define Task",
   2: "Select Personas",
   3: "Source Material",
-  4: "Generate Drafts",
+  4: "Generate Opinions",
   5: "Synthesize",
   6: "Style Guide",
   7: "Edit for Style",
@@ -62,7 +62,7 @@ const STEP_PHASES: Record<number, string> = {
 };
 
 const STEP_COMPLETION_MESSAGES: Record<number, string> = {
-  4: "Persona drafts generated.",
+  4: "Persona opinions generated.",
   5: "Synthesis V1 completed.",
   6: "Style guide is ready.",
   7: "Style edit V2 completed.",
@@ -366,17 +366,17 @@ export function PipelineView({
             <div className="rounded-xl border bg-card p-6 space-y-4">
               <div className="flex items-center gap-2">
                 <Users className="size-4 text-muted-foreground" />
-                <h3 className="font-medium text-base text-foreground">Persona Drafts</h3>
+                <h3 className="font-medium text-base text-foreground">Persona Opinions</h3>
               </div>
               <p className="text-base text-muted-foreground">
                 Each of the 5 selected personas will independently analyse the source material and
-                produce a full draft document from their unique perspective. All 5 drafts run in
-                parallel, then get synthesised in Step 5.
+                produce structured opinion points (key arguments, evidence, risks, recommendations)
+                from their unique perspective. All 5 run in parallel, then inform the primary author in Step 5.
               </p>
               <StepTrigger
                 projectId={project.id}
                 stepNumber={4}
-                label="Generate Persona Drafts (×5 parallel)"
+                label="Generate Persona Opinions (×5 parallel)"
                 currentStatus={status}
                 disabled={!canRunStep4}
                 disabledReason="Complete Step 3 to run this step."
@@ -388,12 +388,19 @@ export function PipelineView({
       }
 
       case 5:
+        const latestOpinion = versions.filter((v) => v.versionType === "persona_draft").at(-1);
+        const latestSynthesis = getLatestVersion("synthesis");
+        const opinionsAreNewer = !!(
+          latestOpinion && latestSynthesis &&
+          new Date(latestOpinion.createdAt).getTime() > new Date(latestSynthesis.createdAt).getTime()
+        );
         return (
           <SynthesisStep
             projectId={project.id}
             stage4Status={stageMap[4]?.status ?? "pending"}
             stage5Status={status}
-            synthesisVersion={getLatestVersion("synthesis")}
+            synthesisVersion={latestSynthesis}
+            hasNewerOpinions={opinionsAreNewer}
             onRunningChange={setStep5Running}
           />
         );
@@ -645,7 +652,7 @@ export function PipelineView({
 
           <div className="relative">
             {renderStepContent()}
-            {showFloatingStepBar && activeStep < 13 && !(activeStep === 4 && versions.length > 0) && (
+            {showFloatingStepBar && activeStep < 13 && !(activeStep === 4 && versions.filter((v) => v.versionType === "persona_draft").length > 0) && (
               <div className="sticky bottom-4 z-30 mt-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 px-5 py-3.5 shadow-lg backdrop-blur">
                 <div className="flex items-center gap-2.5 min-w-0">
                   {activeStatus === "completed" && (
@@ -784,15 +791,15 @@ export function PipelineView({
             )}
           </div>
 
-          {/* Versions panel (Step 4 only) */}
-          {activeStep === 4 && versions.length > 0 && (
+          {/* Versions panel (Step 4 only — persona drafts/opinions only) */}
+          {activeStep === 4 && versions.filter((v) => v.versionType === "persona_draft").length > 0 && (
             <div className="mt-6 rounded-xl border bg-card p-6">
-              <VersionsPanel versions={versions} />
+              <VersionsPanel versions={versions.filter((v) => v.versionType === "persona_draft")} />
             </div>
           )}
 
           {/* Floating step bar for Step 4 (after versions) */}
-          {showFloatingStepBar && activeStep === 4 && versions.length > 0 && (
+          {showFloatingStepBar && activeStep === 4 && versions.filter((v) => v.versionType === "persona_draft").length > 0 && (
             <div className="sticky bottom-4 z-30 mt-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 px-5 py-3.5 shadow-lg backdrop-blur">
               <div className="flex items-center gap-2.5 min-w-0">
                 {activeStatus === "completed" && (

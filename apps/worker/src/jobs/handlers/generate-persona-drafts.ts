@@ -36,17 +36,16 @@ export async function generatePersonaDrafts(
 
   const startedAt = Date.now();
 
-  // 3. Idempotency guard – skip if persona_draft versions already exist
+  // 3. Clear any existing persona_draft versions so re-runs produce fresh opinions
   const existingDrafts = await db.query.versions.findMany({
     where: and(eq(versions.projectId, projectId), eq(versions.versionType, "persona_draft")),
   });
 
   if (existingDrafts.length > 0) {
     await db
-      .update(stages)
-      .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 4)));
-    return;
+      .delete(versions)
+      .where(and(eq(versions.projectId, projectId), eq(versions.versionType, "persona_draft")));
+    onChunk?.(`Cleared ${existingDrafts.length} previous persona drafts.\n`);
   }
 
   // 4. Fetch selected personas ordered by selectionOrder
@@ -101,7 +100,7 @@ export async function generatePersonaDrafts(
   const results = await Promise.all(
     selectedPersonas.map((persona) =>
       (async () => {
-        onChunk?.(`\n[${persona.name}] Generating draft...\n`);
+        onChunk?.(`\n[${persona.name}] Generating opinion points...\n`);
         const result = await claude.call({
           system: buildPersonaDraftSystemPrompt(persona.name, persona.systemPrompt),
           messages: [
@@ -110,7 +109,7 @@ export async function generatePersonaDrafts(
               content: buildPersonaDraftUserMessage(project.masterPrompt!, selectedChunks),
             },
           ],
-          maxTokens: 4096,
+          maxTokens: 1024,
         });
         onChunk?.(
           `[${persona.name}] Completed (${result.outputTokens} output tokens).\n`,
@@ -121,7 +120,7 @@ export async function generatePersonaDrafts(
   );
 
   const durationMs = Date.now() - startedAt;
-  onChunk?.(`\nAll persona drafts completed in ${Math.round(durationMs / 1000)}s.\n`);
+  onChunk?.(`\nAll persona opinions completed in ${Math.round(durationMs / 1000)}s.\n`);
 
   // 7. Insert a version row for each persona draft
   for (let i = 0; i < selectedPersonas.length; i++) {
@@ -133,7 +132,7 @@ export async function generatePersonaDrafts(
       producedByStep: 4,
       versionType: "persona_draft",
       personaId: persona.id,
-      internalLabel: `Draft – ${persona.name}`,
+      internalLabel: `Opinions – ${persona.name}`,
       content: result.content,
       wordCount: countWords(result.content),
       isClientVisible: false,

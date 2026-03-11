@@ -38,7 +38,7 @@ export interface DocPage {
   pageNumber?: number;
 }
 
-interface ContentSection {
+export interface ContentSection {
   heading: string;
   subSections: { subHeading?: string; body: string }[];
 }
@@ -102,7 +102,7 @@ function tableLinesToHtml(tableLines: string[]): string {
 }
 
 /** Convert a block of markdown text to HTML paragraphs + lists + tables. */
-function blockToHtml(text: string): string {
+export function blockToHtml(text: string): string {
   const lines = text.split("\n");
   let html = "";
   let inList: "ul" | "ol" | null = null;
@@ -177,7 +177,10 @@ function blockToHtml(text: string): string {
       continue;
     }
 
-    if (/^[A-Z][^.!?]{4,140}:$/.test(trimmed)) {
+    // Title-case line ending with colon → h3, but only if it's short and
+    // title-like (≤ 8 words, ≤ 80 chars). Longer lines are sentences that
+    // happen to end with ":" (e.g. "we frame the opportunity across three levels:").
+    if (/^[A-Z][^.!?]{4,80}:$/.test(trimmed) && trimmed.split(/\s+/).length <= 8) {
       if (inList) { html += `</${inList}>`; inList = null; }
       html += `<h3>${mdToHtml(trimmed.slice(0, -1))}</h3>`;
       i++;
@@ -213,7 +216,7 @@ function splitFlowHtmlBlocks(html: string): string[] {
 //  Content parser 
 
 /** Parse markdown content into sections split on ## headings. */
-function parseContentSections(markdown: string): ContentSection[] {
+export function parseContentSections(markdown: string): ContentSection[] {
   const lines = markdown.split("\n");
   const sections: ContentSection[] = [];
   let currentSection: ContentSection | null = null;
@@ -426,7 +429,7 @@ function stripBoilerplateBlocks(text: string): string {
   return kept.join("\n\n");
 }
 
-function sanitizeMarkdownForPreview(markdown: string): string {
+export function sanitizeMarkdownForPreview(markdown: string): string {
   // 1. Extract <edited_draft> content if present
   const editedDraftMatch = markdown.match(/<edited_draft\b[^>]*>([\s\S]*?)<\/edited_draft>/i);
   let source = editedDraftMatch?.[1]?.trim() ? editedDraftMatch[1].trim() : markdown;
@@ -744,20 +747,59 @@ function buildContentPages(
       return headingLines + HEADING_MARGIN_LINES;
     }
 
-    // Tables: span both columns via column-span:all, so vertical space
-    // costs 2× in the dual-column line budget.
-    // Each row ≈ 27px (11.5px font * 1.45 line-height + 10px padding),
-    // table margins ≈ 28px (12px top + 16px bottom),
-    // one text line ≈ 20px (13px * 1.55).
+    // Table groups: span both columns via column-span:all, so all content
+    // in the group (heading, intro paragraph, table) costs 2× in the
+    // dual-column line budget.  A block may be a .table-group wrapper
+    // containing heading + paragraph + table from the merging step.
     const trMatches = block.match(/<tr>/gi);
-    if (trMatches && /^<table\b/i.test(block.trim())) {
-      const rowCount = trMatches.length;
-      const ROW_HEIGHT_PX = 27;
-      const TABLE_MARGIN_PX = 28;
+    const hasTable = trMatches && /<table\b/i.test(block);
+    if (hasTable) {
       const LINE_HEIGHT_PX = 20;
-      const tablePixelHeight = rowCount * ROW_HEIGHT_PX + TABLE_MARGIN_PX;
-      // column-span:all removes height from both columns → 2× cost
-      return (tablePixelHeight / LINE_HEIGHT_PX) * 2;
+      const TABLE_MARGIN_PX = 28;
+      const FULL_WIDTH_CHARS = 86; // ~650px / ~7.5px per char (Georgia 13px)
+      let totalPixelHeight = 0;
+
+      // Heading prefix (if merged heading+table block)
+      const headingPrefix = block.match(/<h([23])[^>]*>([\s\S]*?)<\/h\1>/i);
+      if (headingPrefix) {
+        const headingText = headingPrefix[2]!.replace(/<[^>]*>/g, "").trim();
+        const isH2 = headingPrefix[1] === "2";
+        const charsPerLine = isH2 ? 50 : 54;
+        const lineHeightPx = isH2 ? 23 : 20;
+        const headingLines = Math.max(1, Math.ceil(headingText.length / charsPerLine));
+        totalPixelHeight += headingLines * lineHeightPx + 18; // +margins
+      }
+
+      // Intro paragraph(s) between heading and table (full-width)
+      const paraMatches = block.match(/<p>([\s\S]*?)<\/p>/gi);
+      if (paraMatches) {
+        for (const para of paraMatches) {
+          const paraText = para.replace(/<[^>]*>/g, "").trim();
+          const paraLines = Math.max(1, Math.ceil(paraText.length / FULL_WIDTH_CHARS));
+          totalPixelHeight += paraLines * LINE_HEIGHT_PX + 9; // +margin
+        }
+      }
+
+      // Table rows — estimate from actual cell content
+      const thMatches = block.match(/<th>/gi);
+      const numCols = Math.max(1, thMatches?.length ?? 3);
+      const cellWidthChars = Math.max(8, Math.floor(((650 / numCols) - 16) / 6.5));
+
+      const rowSegments = block.split(/<tr>/i).slice(1);
+      let tableRowsPx = 0;
+      for (const seg of rowSegments) {
+        const cellTexts = seg.split(/<t[hd]>/i).slice(1);
+        let maxCellLines = 1;
+        for (const cell of cellTexts) {
+          const cellText = cell.replace(/<[^>]*>/g, "").trim();
+          maxCellLines = Math.max(maxCellLines, Math.ceil(cellText.length / cellWidthChars));
+        }
+        tableRowsPx += maxCellLines * 16.7 + 12;
+      }
+      totalPixelHeight += tableRowsPx + TABLE_MARGIN_PX;
+
+      // Everything spans both columns → 2× cost in dual-column budget
+      return (totalPixelHeight / LINE_HEIGHT_PX) * 2;
     }
 
     // Count list items — each gets its own line(s) plus spacing
@@ -815,11 +857,46 @@ function buildContentPages(
     }
   }
 
-  const contentBlocks = allBlocks.filter((block) => block.replace(/<[^>]*>/g, "").trim().length > 0);
-  if (contentBlocks.length === 0) return pages;
+  const filteredBlocks = allBlocks.filter((block) => block.replace(/<[^>]*>/g, "").trim().length > 0);
+  if (filteredBlocks.length === 0) return pages;
+
+  // Merge heading (+ optional intro paragraph) + table into a single
+  // .table-group block.  This ensures:
+  //   1. heading + table are never split across pages
+  //   2. heading + description span full width (column-span:all) so the
+  //      heading is always on the left, not in the right column
+  const contentBlocks: string[] = [];
+  for (let bi = 0; bi < filteredBlocks.length; bi++) {
+    const block = filteredBlocks[bi]!;
+    const nextBlock = filteredBlocks[bi + 1];
+    const afterNext = filteredBlocks[bi + 2];
+
+    if (isHeadingBlock(block)) {
+      // Pattern: heading → table
+      if (nextBlock && /^<table\b/i.test(nextBlock.trim())) {
+        contentBlocks.push(`<div class="table-group">${block}${nextBlock}</div>`);
+        bi++;
+        continue;
+      }
+      // Pattern: heading → short intro paragraph → table
+      if (
+        nextBlock && /^<p\b/i.test(nextBlock.trim()) &&
+        afterNext && /^<table\b/i.test(afterNext.trim())
+      ) {
+        const paraText = nextBlock.replace(/<[^>]*>/g, "").trim();
+        if (paraText.length <= 250) {
+          contentBlocks.push(`<div class="table-group">${block}${nextBlock}${afterNext}</div>`);
+          bi += 2;
+          continue;
+        }
+      }
+    }
+
+    contentBlocks.push(block);
+  }
 
   const firstPageLines = 84;
-  const subsequentPageLines = 96;
+  const subsequentPageLines = 92;
 
   const pageChunkBlocks: string[][] = [];
   let currentBlocks: string[] = [];

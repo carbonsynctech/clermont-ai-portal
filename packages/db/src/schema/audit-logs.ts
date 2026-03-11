@@ -15,6 +15,7 @@ export const auditActionEnum = pgEnum("audit_action", [
   "project_restored",
   "project_purged",
   "brief_submitted",
+  "master_prompt_edited",
   "persona_selected",
   "source_uploaded",
   "source_deleted",
