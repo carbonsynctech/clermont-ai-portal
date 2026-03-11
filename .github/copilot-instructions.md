@@ -1,6 +1,6 @@
-# Copilot Instructions for AI Content Portal
+# Copilot Instructions for Clermont AI Portal
 
-This guide enables AI coding agents to work productively in the AI Content Portal monorepo. Follow these conventions and rules to ensure code quality and architectural consistency.
+This guide enables AI coding agents to work productively in the Clermont AI Portal monorepo. Follow these conventions and rules to ensure code quality and architectural consistency.
 
 ## Big Picture Architecture
 - **Monorepo**: Turborepo + pnpm. Four main packages:

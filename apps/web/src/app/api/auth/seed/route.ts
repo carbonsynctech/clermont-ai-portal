@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 
-export async function POST() {
+export async function POST(request: Request) {
   const admin = createAdminClient();
 
-  const email = "admin@test.com";
-  const password = "test123";
+  const body = await request.json().catch(() => ({}));
+  const email = (body as { email?: string }).email ?? "admin@test.com";
+  const password = (body as { password?: string }).password ?? "test123";
 
   // Check if user already exists
   const { data: existingUsers } = await admin.auth.admin.listUsers();

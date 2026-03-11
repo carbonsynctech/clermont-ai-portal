@@ -1,4 +1,4 @@
-# CLAUDE.md – AI Content Portal
+# CLAUDE.md – Clermont AI Portal
 
 Read this fully before making any changes.
 

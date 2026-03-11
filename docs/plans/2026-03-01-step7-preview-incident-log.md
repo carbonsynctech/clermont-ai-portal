@@ -1,7 +1,7 @@
 # Step 7 Preview Incident Log (Step 5 Parity + Pagination)
 
 Date: 2026-03-01  
-Project: AI Content Portal  
+Project: Clermont AI Portal  
 Area: Step 7 Styled Document Preview
 
 ## Goal

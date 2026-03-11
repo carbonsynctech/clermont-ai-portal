@@ -51,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase,
-    title: "Clermont Group | AI Content Portal 2026",
+    title: "Clermont Group | Clermont AI Portal 2026",
     description:
       "Create high-quality investment memos faster with an AI-assisted, auditable workflow for research, drafting, review, and export.",
     alternates: {
@@ -66,7 +66,7 @@ export async function generateMetadata(): Promise<Metadata> {
       apple: [{ url: "/site-icon.png", type: "image/png" }],
     },
     openGraph: {
-      title: "Clermont Group | AI Content Portal 2026",
+      title: "Clermont Group | Clermont AI Portal 2026",
       description:
         "Turn source material into investor-ready memos with a structured AI workflow, human review checkpoints, and polished exports.",
       url: requestOrigin,
@@ -75,7 +75,7 @@ export async function generateMetadata(): Promise<Metadata> {
           url: socialPreviewImage,
           width: 1200,
           height: 630,
-          alt: "AI Content Portal social preview",
+          alt: "Clermont AI Portal social preview",
         },
       ],
       type: "website",

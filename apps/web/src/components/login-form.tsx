@@ -132,7 +132,7 @@ export function LoginForm({
                   height={36}
                   className="h-12 w-10 object-contain"
                 />
-                <h1 className="text-2xl font-bold">AI Content Portal</h1>
+                <h1 className="text-2xl font-bold">Clermont AI Portal</h1>
                 <p className="text-muted-foreground text-balance">
                   {mode === "magic"
                     ? sent
