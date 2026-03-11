@@ -417,16 +417,16 @@ export function FactCheckReviewStep({
                       selected ? "border-primary bg-primary/5" : "hover:bg-muted/40"
                     }`}
                   >
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-2 min-w-0">
                       <Checkbox
                         checked={selected}
                         onCheckedChange={() => toggleFinding(finding.id)}
                         onClick={(e) => e.stopPropagation()}
                         className="mt-0.5"
                       />
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-start justify-between gap-1">
-                          <p className="text-sm leading-relaxed text-foreground/90">{finding.issue}</p>
+                      <div className="flex-1 space-y-2 min-w-0">
+                        <div className="flex items-start justify-between gap-1 min-w-0">
+                          <p className="text-sm leading-relaxed text-foreground/90 break-words">{finding.issue}</p>
                           {(hasClaimData || hasSources) && (
                             <button
                               type="button"
@@ -441,12 +441,12 @@ export function FactCheckReviewStep({
                             </button>
                           )}
                         </div>
-                        <div className="rounded-md border bg-background/60 p-2 space-y-1.5">
+                        <div className="rounded-md border bg-background/60 p-2 space-y-1.5 min-w-0">
                           <p className="text-xs font-medium text-muted-foreground">Sources</p>
                           {hasSources ? (
-                            <ul className="space-y-1">
+                            <ul className="space-y-1 min-w-0">
                               {finding.sources?.map((source, index) => (
-                                <li key={`${finding.id}-source-${index}`} className="text-xs text-foreground/80">
+                                <li key={`${finding.id}-source-${index}`} className="text-xs text-foreground/80 break-words">
                                   {formatSourceLabel(source)}
                                 </li>
                               ))}
