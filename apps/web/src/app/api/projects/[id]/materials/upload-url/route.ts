@@ -48,7 +48,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     .replace(/_{2,}/g, "_")                          // collapse consecutive underscores
     .replace(/^_|_(?=\.\w+$)/g, "");                 // trim leading _ and _ before extension
 
-  const storagePath = `${user.id}/${projectId}/${randomUUID()}-${safeFilename}`;
+  const storagePath = `${user.id}/${projectId}/${randomUUID()}-${safeFilename || "file"}`;
   const adminSupabase = createAdminClient();
 
   const { data, error } = await adminSupabase.storage
