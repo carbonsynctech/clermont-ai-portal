@@ -44,15 +44,50 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     console.log(`[confirm-personas] Starting for project ${projectId} with ${personaIds.length} personas`);
 
     // Clear any previously selected personas for this project
-    const clearResult = await db
+    await db
       .update(personas)
       .set({ isSelected: false, selectionOrder: null })
       .where(eq(personas.projectId, projectId));
     console.log(`[confirm-personas] Cleared previous selections`);
 
+    // Fetch the selected personas to check which ones belong to this project
+    const selectedPersonaRows = await db.query.personas.findMany({
+      where: inArray(personas.id, personaIds),
+    });
+
+    // Clone any personas that don't belong to this project (library/global personas)
+    const idMapping = new Map<string, string>(); // old id -> new id (for cloned)
+    for (const persona of selectedPersonaRows) {
+      if (persona.projectId === projectId) {
+        idMapping.set(persona.id, persona.id);
+      } else {
+        // Clone into this project
+        const [cloned] = await db
+          .insert(personas)
+          .values({
+            projectId,
+            name: persona.name,
+            description: persona.description,
+            systemPrompt: persona.systemPrompt,
+            sourceUrls: persona.sourceUrls,
+            tags: persona.tags,
+            isSelected: false,
+            selectionOrder: null,
+          })
+          .returning({ id: personas.id });
+        if (cloned) {
+          idMapping.set(persona.id, cloned.id);
+          console.log(`[confirm-personas] Cloned library persona ${persona.id} -> ${cloned.id}`);
+        }
+      }
+    }
+
+    // Resolve final persona IDs (using cloned IDs where applicable)
+    const resolvedIds = personaIds.map((id) => idMapping.get(id) ?? id);
+
     // Mark selected personas with selectionOrder
     const updateResults = await Promise.all(
-      personaIds.map((personaId, index) =>
+      resolvedIds.map((personaId, index) =>
         db
           .update(personas)
           .set({ isSelected: true, selectionOrder: index })
@@ -83,7 +118,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       userId: user.id,
       action: "persona_selected",
       stepNumber: 2,
-      payload: { count: 5, personaIds },
+      payload: { count: 5, personaIds: resolvedIds },
     });
     console.log(`[confirm-personas] Audit log created`);
 
