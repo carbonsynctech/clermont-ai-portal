@@ -317,8 +317,8 @@ export function FactCheckReviewStep({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-      <div className="space-y-4">
+    <div className="grid gap-4 grid-cols-1 lg:grid-cols-[1fr_300px] overflow-hidden">
+      <div className="space-y-4 min-w-0">
         <MarkdownVersionPanel
           title="Fact-Checked Content (Text)"
           content={inlineHighlightedContent}
@@ -381,7 +381,7 @@ export function FactCheckReviewStep({
         )}
       </div>
 
-      <div className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)] h-fit flex flex-col gap-4">
+      <div className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)] h-fit flex flex-col gap-4 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="size-4 text-primary" />
