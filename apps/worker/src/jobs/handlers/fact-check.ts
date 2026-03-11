@@ -50,20 +50,34 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
 
   // 4. Extract factual claims via Claude
   const claimsResult = await claude.call({
-    system: "Extract all specific factual claims (numbers, dates, names, statistics, percentages, financial figures) from the provided content. Return a JSON array of strings — one claim per item. Return ONLY the JSON array, no other text.",
+    system: 'You are an expert at extracting specific factual claims from investment content. Extract all specific factual claims (numbers, dates, names, statistics, percentages, financial figures) from the provided content. Return ONLY a valid JSON array of strings — one claim per item. Example: ["Company X generated $50M revenue in 2024", "Industry growth rate is 15% annually"]. Do not include any other text, preamble, or explanation.',
     messages: [{ role: "user", content: synthesisContent }],
     maxTokens: 2048,
   });
 
   let claims: string[] = [];
   try {
-    const jsonMatch = claimsResult.content.match(/\[[\s\S]*\]/);
+    const responseText = claimsResult.content.trim();
+    // Try to extract JSON array — handles cases where Claude adds preamble
+    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
-      claims = JSON.parse(jsonMatch[0]) as string[];
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (Array.isArray(parsed)) {
+        claims = parsed.filter((c) => typeof c === "string" && c.trim().length > 0);
+      }
     }
-  } catch {
-    // If parsing fails, proceed with an empty claims list — Gemini will still review the full text
-    claims = [];
+    // If still no claims found, create fallback claims from key sentences
+    if (claims.length === 0) {
+      const sentences = synthesisContent
+        .split(/[.!?]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 20 && /\d|percent|revenue|growth|market/.test(s.toLowerCase()))
+        .slice(0, 5);
+      claims = sentences;
+    }
+  } catch (err) {
+    // If parsing fails, proceed with fallback claims — Gemini will still review the full text
+    console.error("[fact-check] Failed to parse claims extraction:", err);
   }
 
   onChunk?.(`Found ${claims.length} claim${claims.length !== 1 ? "s" : ""} to verify.\n`);
