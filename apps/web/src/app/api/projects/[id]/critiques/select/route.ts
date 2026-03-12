@@ -107,13 +107,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const critiques = (body.critiques as CritiqueDraftItem[] | undefined) ?? [];
   const selectedIds = (body.selectedIds as number[] | undefined) ?? [];
 
-  const stage11 = await db.query.stages.findFirst({
-    where: and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)),
+  const stage8 = await db.query.stages.findFirst({
+    where: and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)),
   });
 
   const existingMetadata =
-    stage11?.metadata && typeof stage11.metadata === "object" && !Array.isArray(stage11.metadata)
-      ? stage11.metadata
+    stage8?.metadata && typeof stage8.metadata === "object" && !Array.isArray(stage8.metadata)
+      ? stage8.metadata
       : {};
 
   // Insert audit log with selected critiques in payload
@@ -121,11 +121,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     projectId,
     userId: user.id,
     action: "critique_selected",
-    stepNumber: 11,
+    stepNumber: 8,
     payload: { selectedCritiques, count: selectedCritiques.length },
   });
 
-  // Update stage 11 to completed
+  // Update stage 8 to completed
   await db
     .update(stages)
     .set({
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         },
       },
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
 
   if (selectedCritiques.length === 0) {
     const carryForwardVersion = await db.query.versions.findFirst({
@@ -165,7 +165,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       .insert(versions)
       .values({
         projectId,
-        producedByStep: 12,
+        producedByStep: 9,
         versionType: "final",
         internalLabel: "Final V6 (No Critiques Selected)",
         content: carryForwardVersion.content,
@@ -176,32 +176,32 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     if (!finalVersion) {
       return NextResponse.json(
-        { error: "Failed to create final version for skipped Step 12." },
+        { error: "Failed to create final version for skipped Step 9." },
         { status: 500 }
       );
     }
 
-    // Skip step 12 entirely when no critiques are selected
+    // Skip step 9 entirely when no critiques are selected
     await db
       .update(stages)
       .set({
         status: "completed",
         completedAt: new Date(),
         updatedAt: new Date(),
-        metadata: { reviewNotes: "Skipped Step 12 because no critiques were selected." },
+        metadata: { reviewNotes: "Skipped Step 9 because no critiques were selected." },
       })
-      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 12)));
+      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 9)));
 
     await db
       .update(projects)
-      .set({ currentStage: 13, activeVersionId: finalVersion.id, updatedAt: new Date() })
+      .set({ currentStage: 10, activeVersionId: finalVersion.id, updatedAt: new Date() })
       .where(eq(projects.id, projectId));
 
     await db.insert(auditLogs).values({
       projectId,
       userId: user.id,
       action: "stage_completed",
-      stepNumber: 12,
+      stepNumber: 9,
       payload: {
         skipped: true,
         reason: "No critiques selected",
@@ -211,14 +211,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       },
     });
 
-    return NextResponse.json({ ok: true, nextStep: 13, skippedStep12: true });
+    return NextResponse.json({ ok: true, nextStep: 12, skippedStep9: true });
   }
 
-  // Advance project to stage 12
+  // Advance project to stage 9
   await db
     .update(projects)
-    .set({ currentStage: 12, updatedAt: new Date() })
+    .set({ currentStage: 9, updatedAt: new Date() })
     .where(eq(projects.id, projectId));
 
-  return NextResponse.json({ ok: true, nextStep: 12, skippedStep12: false });
+  return NextResponse.json({ ok: true, nextStep: 9, skippedStep9: false });
 }

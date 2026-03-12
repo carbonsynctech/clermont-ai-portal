@@ -36,12 +36,12 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
       completedAt: now,
       updatedAt: now,
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 9)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
 
   await db
     .update(projects)
     .set({
-      currentStage: project.currentStage < 10 ? 10 : project.currentStage,
+      currentStage: project.currentStage < 12 ? 12 : project.currentStage,
       updatedAt: now,
     })
     .where(eq(projects.id, projectId));
@@ -50,13 +50,13 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
     projectId,
     userId: user.id,
     action: "stage_completed",
-    stepNumber: 9,
+    stepNumber: 11,
     payload: {
       source: "manual_continue",
-      fromStep: 9,
-      toStep: 10,
+      fromStep: 11,
+      toStep: 12,
     },
   });
 
-  return NextResponse.json({ ok: true, nextStep: 10 });
+  return NextResponse.json({ ok: true, nextStep: 12 });
 }

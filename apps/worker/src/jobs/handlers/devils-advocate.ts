@@ -33,11 +33,11 @@ export async function devilsAdvocate(
     throw new Error(`Project ${projectId} has no human-reviewed version`);
   }
 
-  // 3. Update stage 11 to running
+  // 3. Update stage 8 to running
   await db
     .update(stages)
     .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
 
   const startedAt = Date.now();
 
@@ -69,24 +69,12 @@ export async function devilsAdvocate(
   }));
   const savedAt = new Date().toISOString();
 
-  // 5. Store raw AI output as a red_report version (fallback for re-parsing)
-  await db.insert(versions).values({
-    projectId,
-    parentVersionId: humanReviewedVersion.id,
-    producedByStep: 11,
-    versionType: "red_report",
-    internalLabel: "Devil's Advocate Red Report",
-    content: result.content,
-    isClientVisible: false,
-    isSealed: true,
-  });
-
-  // 6. Insert audit log
+  // 5. Insert audit log
   await db.insert(auditLogs).values({
     projectId,
     userId,
     action: "agent_response_received",
-    stepNumber: 11,
+    stepNumber: 8,
     modelId: result.model,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
@@ -94,7 +82,7 @@ export async function devilsAdvocate(
     responseSnapshot: result.content,
   });
 
-  // 7. Update stage 11 to awaiting_human (critique selection checkpoint)
+  // 6. Update stage 8 to awaiting_human (critique selection checkpoint)
   await db
     .update(stages)
     .set({
@@ -114,11 +102,11 @@ export async function devilsAdvocate(
         },
       },
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
 
-  // 8. Stay at currentStage = 11 (user must select critiques before advancing)
+  // 7. Stay at currentStage = 8 (user must select critiques before advancing)
   await db
     .update(projects)
-    .set({ currentStage: 11, updatedAt: new Date() })
+    .set({ currentStage: 8, updatedAt: new Date() })
     .where(eq(projects.id, projectId));
 }

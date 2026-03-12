@@ -15,21 +15,20 @@ const STEP_NAMES: Record<number, string> = {
   3: "Source Material",
   4: "Generate Opinions",
   5: "Synthesize",
-  6: "Style Guide",
-  7: "Edit for Style",
-  8: "Fact-Check",
-  9: "Final Polish",
-  10: "Human Review",
-  11: "Devil's Advocate",
-  12: "Integrate Critiques",
-  13: "Export",
+  6: "Fact-Check",
+  7: "Human Review",
+  8: "Devil's Advocate",
+  9: "Integrate Critiques",
+  10: "Style Guide",
+  11: "Edit for Style",
+  12: "Export",
 };
 
 const GROUPS = [
   { label: "SETUP", steps: [1, 2, 3] },
   { label: "GENERATE", steps: [4, 5] },
-  { label: "POLISH", steps: [6, 7, 8, 9] },
-  { label: "REVIEW", steps: [10, 11, 12, 13] },
+  { label: "REVIEW", steps: [6, 7, 8, 9] },
+  { label: "POLISH", steps: [10, 11, 12] },
 ];
 
 type StageStatus = "pending" | "running" | "awaiting_human" | "completed" | "failed" | "skipped";

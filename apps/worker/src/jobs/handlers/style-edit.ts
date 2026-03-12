@@ -17,11 +17,11 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
 
   if (!project) throw new Error(`Project ${projectId} not found`);
 
-  // 2. Update stage 7 to running
+  // 2. Update stage 11 to running
   await db
     .update(stages)
     .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 7)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
 
   const startedAt = Date.now();
 
@@ -133,14 +133,14 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
     projectId,
     userId,
     action: "agent_response_received",
-    stepNumber: 7,
+    stepNumber: 11,
     modelId: result.model,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
     payload: { durationMs },
   });
 
-  // 12. Update stage 7 to completed
+  // 12. Update stage 11 to completed
   await db
     .update(stages)
     .set({
@@ -154,11 +154,11 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
         durationMs,
       },
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 7)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
 
-  // 13. Advance project to stage 8
+  // 13. Advance project to stage 12
   await db
     .update(projects)
-    .set({ currentStage: 8, updatedAt: new Date() })
+    .set({ currentStage: 12, updatedAt: new Date() })
     .where(eq(projects.id, projectId));
 }

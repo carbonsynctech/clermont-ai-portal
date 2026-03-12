@@ -10,7 +10,7 @@ stagesRoute.use("*", workerAuth);
 
 const runStageSchema = z.object({
   projectId: z.string().uuid(),
-  stepNumber: z.number().int().min(1).max(13),
+  stepNumber: z.number().int().min(1).max(12),
   userId: z.string().uuid(),
 });
 

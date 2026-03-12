@@ -216,7 +216,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     assetBaseUrl: req.nextUrl.origin,
   });
 
-  async function markStep13Completed(exportFormat: string) {
+  async function markStep12Completed(exportFormat: string) {
     const now = new Date();
 
     await db
@@ -227,25 +227,25 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         updatedAt: now,
         errorMessage: null,
       })
-      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 13)));
+      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 12)));
 
     await db
       .update(projects)
-      .set({ status: "completed", currentStage: 13, updatedAt: now })
+      .set({ status: "completed", currentStage: 12, updatedAt: now })
       .where(eq(projects.id, projectId));
 
     await db.insert(auditLogs).values({
       projectId,
       userId,
       action: "export_requested",
-      stepNumber: 13,
+      stepNumber: 12,
       payload: { format: exportFormat },
     });
   }
 
   /* ---------- HTML ---------- */
   if (format === "html") {
-    await markStep13Completed("html");
+    await markStep12Completed("html");
     return new NextResponse(styledHtml, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
@@ -256,7 +256,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   /* ---------- Markdown ---------- */
   if (format === "md") {
-    await markStep13Completed("md");
+    await markStep12Completed("md");
     return new NextResponse(finalVersion.content, {
       headers: {
         "Content-Type": "text/markdown; charset=utf-8",
@@ -269,7 +269,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (format === "docx") {
     const doc = markdownToDocx(finalVersion.content);
     const buffer = await Packer.toBuffer(doc);
-    await markStep13Completed("docx");
+    await markStep12Completed("docx");
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type":
@@ -318,7 +318,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     }
 
     const pdfBuffer = new Uint8Array(await workerRes.arrayBuffer());
-    await markStep13Completed("pdf");
+    await markStep12Completed("pdf");
 
     return new NextResponse(pdfBuffer, {
       headers: {

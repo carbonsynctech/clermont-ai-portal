@@ -2,17 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ExternalLink, Info, ShieldCheck } from "lucide-react";
+import { ShieldCheck, SkipForward } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { MarkdownVersionPanel } from "@/components/projects/markdown-version-panel";
@@ -147,7 +140,6 @@ interface FactCheckReviewStepProps {
   approvedIssues?: string[];
   appliedCorrections?: number;
   isStepApproved?: boolean;
-  onApproveSuccess?: () => void;
 }
 
 export function FactCheckReviewStep({
@@ -159,7 +151,6 @@ export function FactCheckReviewStep({
   approvedIssues,
   appliedCorrections,
   isStepApproved = false,
-  onApproveSuccess,
 }: FactCheckReviewStepProps) {
   const router = useRouter();
   const findingIds = useMemo(
@@ -169,6 +160,7 @@ export function FactCheckReviewStep({
   const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>(approvedFindingIds ?? findingIds);
   const [isStartingOver, setIsStartingOver] = useState(false);
   const [isApplyingCorrections, setIsApplyingCorrections] = useState(false);
+  const [isSkipping, setIsSkipping] = useState(false);
   const [isApproved, setIsApproved] = useState(false);
   const [displayedContent, setDisplayedContent] = useState(factCheckedVersion.content);
   const [appliedDiff, setAppliedDiff] = useState<ReturnType<typeof computeWordDiff> | null>(null);
@@ -177,11 +169,6 @@ export function FactCheckReviewStep({
     issuesApproved: string[];
     findingIds: string[];
   } | null>(null);
-  const [detailFindingId, setDetailFindingId] = useState<string | null>(null);
-  const detailFinding = useMemo(
-    () => (detailFindingId ? factCheckFindings.find((f) => f.id === detailFindingId) ?? null : null),
-    [detailFindingId, factCheckFindings],
-  );
 
   const issueCount = factCheckFindings.length;
   const acceptedCount = selectedFindingIds.length;
@@ -307,12 +294,6 @@ export function FactCheckReviewStep({
         issuesApproved,
         findingIds: selectedFindingIds,
       });
-
-      // Call parent callback first, then refresh to ensure state is updated
-      onApproveSuccess?.();
-
-      // Small delay to ensure parent component state updates before refresh
-      await new Promise((resolve) => setTimeout(resolve, 100));
       router.refresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to apply accepted corrections");
@@ -321,9 +302,43 @@ export function FactCheckReviewStep({
     }
   }
 
+  async function handleSkip() {
+    setIsSkipping(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/fact-check/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseContent: displayedContent,
+          findingIds: [],
+        }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to skip fact-check");
+      }
+
+      setIsApproved(true);
+      setLastApiOutput({
+        appliedCorrections: 0,
+        issuesApproved: [],
+        findingIds: [],
+      });
+      router.refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to skip fact-check");
+    } finally {
+      setIsSkipping(false);
+    }
+  }
+
   return (
-    <div className="grid gap-4 grid-cols-1 lg:grid-cols-[1fr_300px] overflow-hidden">
-      <div className="space-y-4 min-w-0">
+    <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+      <div className="space-y-4">
         <MarkdownVersionPanel
           title="Fact-Checked Content (Text)"
           content={inlineHighlightedContent}
@@ -386,7 +401,7 @@ export function FactCheckReviewStep({
         )}
       </div>
 
-      <div className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)] h-fit flex flex-col gap-4 min-w-0">
+      <div className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)] h-fit flex flex-col gap-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="size-4 text-primary" />
@@ -405,7 +420,6 @@ export function FactCheckReviewStep({
               {factCheckFindings.map((finding) => {
                 const selected = selectedSet.has(finding.id);
                 const hasSources = Array.isArray(finding.sources) && finding.sources.length > 0;
-                const hasClaimData = finding.incorrectText || finding.correctedText;
                 return (
                   <div
                     key={finding.id}
@@ -422,36 +436,19 @@ export function FactCheckReviewStep({
                       selected ? "border-primary bg-primary/5" : "hover:bg-muted/40"
                     }`}
                   >
-                    <div className="flex items-start gap-2 min-w-0">
+                    <div className="flex items-start gap-2">
                       <Checkbox
                         checked={selected}
-                        onCheckedChange={() => toggleFinding(finding.id)}
-                        onClick={(e) => e.stopPropagation()}
                         className="mt-0.5"
                       />
-                      <div className="flex-1 space-y-2 min-w-0">
-                        <div className="flex items-start justify-between gap-1 min-w-0">
-                          <p className="text-sm leading-relaxed text-foreground/90 break-words">{finding.issue}</p>
-                          {(hasClaimData || hasSources) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDetailFindingId(finding.id);
-                              }}
-                              className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                              title="View claim vs fact-check details"
-                            >
-                              <Info className="size-3.5" />
-                            </button>
-                          )}
-                        </div>
-                        <div className="rounded-md border bg-background/60 p-2 space-y-1.5 min-w-0">
+                      <div className="space-y-2">
+                        <p className="text-sm leading-relaxed text-foreground/90">{finding.issue}</p>
+                        <div className="rounded-md border bg-background/60 p-2 space-y-1.5">
                           <p className="text-xs font-medium text-muted-foreground">Sources</p>
                           {hasSources ? (
-                            <ul className="space-y-1 min-w-0">
+                            <ul className="space-y-1">
                               {finding.sources?.map((source, index) => (
-                                <li key={`${finding.id}-source-${index}`} className="text-xs text-foreground/80 break-words">
+                                <li key={`${finding.id}-source-${index}`} className="text-xs text-foreground/80">
                                   {formatSourceLabel(source)}
                                 </li>
                               ))}
@@ -470,110 +467,44 @@ export function FactCheckReviewStep({
         )}
 
         <div className="mt-auto space-y-2 pt-1">
-          <Button
-            className="w-full"
-            variant={isApproved ? "secondary" : "default"}
-            onClick={() => void handleAcceptCorrections()}
-            disabled={
-              isApproved
-              || isApplyingCorrections
-              || isStartingOver
-              || issueCount === 0
-              || acceptedCount === 0
-            }
-          >
-            {isApplyingCorrections ? "Applying…" : isApproved ? `${acceptedCount}/${issueCount} accepted` : `Accept ${acceptedCount} Correction${acceptedCount === 1 ? "" : "s"}`}
-          </Button>
-
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm text-muted-foreground">
-              {acceptedCount} of {issueCount} corrections selected
-            </p>
-            <Button variant="ghost" size="sm" onClick={() => void handleStartOver()} disabled={isStartingOver || isApplyingCorrections}>
-              {isStartingOver ? "Restarting…" : "Start Over"}
+            <Button variant="outline" onClick={() => void handleStartOver()} disabled={isStartingOver || isApplyingCorrections || isSkipping}>
+              {isStartingOver ? "Restarting…" : "Start Over Fact Check"}
             </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => void handleSkip()}
+                disabled={isApproved || isSkipping || isApplyingCorrections || isStartingOver}
+              >
+                <SkipForward className="size-4 mr-1" />
+                {isSkipping ? "Skipping…" : "Skip"}
+              </Button>
+              <Button
+                variant={isApproved ? "secondary" : "default"}
+                className={isApproved ? "text-muted-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90"}
+                onClick={() => void handleAcceptCorrections()}
+                disabled={
+                  isApproved
+                  ||
+                  isApplyingCorrections
+                  || isStartingOver
+                  || isSkipping
+                  || issueCount === 0
+                  || acceptedCount === 0
+                }
+              >
+                {isApplyingCorrections ? "Applying…" : isApproved ? `${acceptedCount}/${issueCount} accepted` : "Accept Corrections"}
+              </Button>
+            </div>
           </div>
+
+          <p className="text-sm text-muted-foreground">
+            {acceptedCount} of {issueCount} corrections accepted
+          </p>
+
         </div>
       </div>
-
-      {/* Claim vs Fact-Check Detail Dialog */}
-      <Dialog open={detailFindingId !== null} onOpenChange={(open) => { if (!open) setDetailFindingId(null); }}>
-        <DialogContent className="max-w-xl">
-          {detailFinding && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-base">
-                  <ShieldCheck className="size-4 text-primary" />
-                  Fact-Check Detail
-                </DialogTitle>
-                <DialogDescription className="text-sm">{detailFinding.issue}</DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4">
-                {/* Claim vs Correction comparison */}
-                {(detailFinding.incorrectText || detailFinding.correctedText) && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-red-600 dark:text-red-400">Claim (Original)</p>
-                      <div className="rounded-lg border border-red-200 bg-red-50/50 p-3 text-sm leading-relaxed dark:border-red-900/40 dark:bg-red-950/20">
-                        {detailFinding.incorrectText || <span className="italic text-muted-foreground">Not specified</span>}
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <ArrowRight className="size-3 text-green-600 dark:text-green-400 hidden sm:block" />
-                        <p className="text-xs font-semibold uppercase tracking-wider text-green-600 dark:text-green-400">Fact-Checked</p>
-                      </div>
-                      <div className="rounded-lg border border-green-200 bg-green-50/50 p-3 text-sm leading-relaxed dark:border-green-900/40 dark:bg-green-950/20">
-                        {detailFinding.correctedText || <span className="italic text-muted-foreground">No correction provided</span>}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Sources with clickable links */}
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sources</p>
-                  {Array.isArray(detailFinding.sources) && detailFinding.sources.length > 0 ? (
-                    <ul className="space-y-2">
-                      {detailFinding.sources.map((source, index) => (
-                        <li
-                          key={`detail-source-${index}`}
-                          className="rounded-lg border bg-muted/30 p-3 space-y-1"
-                        >
-                          <p className="text-sm font-medium text-foreground">
-                            {formatSourceLabel(source)}
-                          </p>
-                          {source.evidence && (
-                            <p className="text-xs text-muted-foreground leading-relaxed italic">
-                              &ldquo;{source.evidence}&rdquo;
-                            </p>
-                          )}
-                          {source.url && (
-                            <a
-                              href={source.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-                            >
-                              <ExternalLink className="size-3" />
-                              {source.url.length > 60 ? `${source.url.slice(0, 60)}…` : source.url}
-                            </a>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground rounded-lg border bg-muted/30 p-3">
-                      No sources available for this finding.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

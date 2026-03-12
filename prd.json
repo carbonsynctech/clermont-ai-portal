@@ -1,0 +1,99 @@
+{
+  "project": "ai-content-portal",
+  "branchName": "fix/pipeline-1773308839279",
+  "description": "Restructure 13-step pipeline to 12 steps, reorder stages, and fix fact-check UI bugs",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Remove Final Polish step and reorder pipeline stages",
+      "description": "Remove step 9 (Final Polish) entirely and reorder steps 6-13 to the new 12-step sequence: Fact-Check(6), Human Review(7), Devils Advocate(8), Integrate Critiques(9), Style Guide(10), Edit for Style(11), Export(12). Update all step number references in pipeline types, nav, progress, and view components.",
+      "acceptanceCriteria": [
+        "Pipeline has exactly 12 steps in the correct order: steps 1-5 unchanged, then Fact-Check(6), Human Review(7), Devils Advocate(8), Integrate Critiques(9), Style Guide(10), Edit for Style(11), Export(12)",
+        "Final Polish step is completely removed from UI and worker",
+        "Typecheck passes"
+      ],
+      "scopeFiles": [
+        "packages/core/src/types/pipeline.ts",
+        "apps/web/src/app/api/projects/[id]/",
+        "apps/web/src/components/pipeline-step-nav.tsx",
+        "apps/web/src/components/pipeline-progress.tsx",
+        "apps/web/src/components/pipeline-view.tsx"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "This is the foundational change - all other stories depend on correct numbering"
+    },
+    {
+      "id": "US-002",
+      "title": "Update worker handlers for new step numbers",
+      "description": "Move the combined style-edit handler (style-edit.ts) from steps 6+7 to steps 10+11. Remove final-style-pass.ts handler. Update all handler step-number references and stage route mappings to match the new 12-step sequence.",
+      "acceptanceCriteria": [
+        "style-edit.ts handler fires at steps 10 and 11 instead of 6 and 7",
+        "final-style-pass.ts handler is deleted",
+        "All worker handlers reference correct new step numbers",
+        "Stage routes return correct step mappings",
+        "Typecheck passes"
+      ],
+      "scopeFiles": [
+        "apps/worker/src/jobs/handlers/style-edit.ts",
+        "apps/worker/src/jobs/handlers/final-style-pass.ts",
+        "apps/worker/src/routes/stages.ts",
+        "apps/worker/src/jobs/handlers/"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Write Drizzle DB migration to renumber stages",
+      "description": "Create a Drizzle migration that renumbers stage rows on existing projects from the old 13-step sequence to the new 12-step sequence, removes Final Polish stage rows, and updates project creation code to pre-create 12 stages instead of 13.",
+      "acceptanceCriteria": [
+        "Migration renumbers existing stage rows to match new 12-step order",
+        "Final Polish stage rows are removed from existing projects",
+        "New project creation pre-creates 12 stages instead of 13",
+        "Typecheck passes"
+      ],
+      "scopeFiles": [
+        "packages/db/src/schema.ts",
+        "packages/db/drizzle/"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Migration must handle existing projects with in-progress pipelines"
+    },
+    {
+      "id": "US-004",
+      "title": "Fix fact-check double-toggle bug",
+      "description": "In fact-check-review.tsx, the parent div onClick AND Checkbox onCheckedChange both call toggleFinding, causing a double-toggle. Fix so only one event fires per click.",
+      "acceptanceCriteria": [
+        "Clicking a fact-check checkbox toggles the finding exactly once",
+        "No double-toggle occurs from parent div onClick propagation",
+        "Typecheck passes"
+      ],
+      "scopeFiles": [
+        "apps/web/src/components/fact-check-review.tsx"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Likely fix is stopPropagation on the checkbox or removing the parent onClick"
+    },
+    {
+      "id": "US-005",
+      "title": "Add Skip button to fact-check stage",
+      "description": "Add a Skip button to fact-check-review.tsx that completes the fact-check stage with 0 corrections without requiring any selections.",
+      "acceptanceCriteria": [
+        "Skip button is visible on the fact-check review UI",
+        "Clicking Skip completes the stage with 0 corrections",
+        "No selections are required to skip",
+        "Typecheck passes"
+      ],
+      "scopeFiles": [
+        "apps/web/src/components/fact-check-review.tsx"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

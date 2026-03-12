@@ -68,8 +68,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to create project" }, { status: 500 });
   }
 
-  // Create all 13 stage rows
-  const stageRows = Array.from({ length: 13 }, (_, i) => ({
+  // Create all 12 stage rows
+  const stageRows = Array.from({ length: 12 }, (_, i) => ({
     projectId: project.id,
     stepNumber: i + 1,
     stepName: SOP_STEP_NAMES[(i + 1) as keyof typeof SOP_STEP_NAMES],

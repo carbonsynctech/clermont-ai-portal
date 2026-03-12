@@ -6,7 +6,6 @@ import { synthesize } from "./handlers/synthesize";
 import { styleEdit } from "./handlers/style-edit";
 import { factCheck } from "./handlers/fact-check";
 import { extractAndChunk } from "./handlers/extract-and-chunk";
-import { finalStylePass } from "./handlers/final-style-pass";
 import { devilsAdvocate } from "./handlers/devils-advocate";
 import { integrateCritiques } from "./handlers/integrate-critiques";
 import { askAi } from "./handlers/ask-ai";
@@ -63,20 +62,17 @@ export async function runJob(jobId: string): Promise<void> {
         case 5:
           await synthesize(projectId, userId, onChunk);
           break;
-        case 7:
-          await styleEdit(projectId, userId, onChunk);
-          break;
-        case 8:
+        case 6:
           await factCheck(projectId, userId, onChunk);
           break;
-        case 9:
-          await finalStylePass(projectId, userId, onChunk);
-          break;
-        case 11:
+        case 8:
           await devilsAdvocate(projectId, userId, onChunk);
           break;
-        case 12:
+        case 9:
           await integrateCritiques(projectId, userId, onChunk);
+          break;
+        case 11:
+          await styleEdit(projectId, userId, onChunk);
           break;
         default:
           throw new Error(`Step ${stepNumber} handler not implemented yet`);

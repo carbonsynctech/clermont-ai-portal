@@ -51,11 +51,11 @@ export async function integrateCritiques(
   const logPayload = critiqueLog.payload as { selectedCritiques: string[] } | null;
   const selectedCritiques = logPayload?.selectedCritiques ?? [];
 
-  // 4. Update stage 12 to running
+  // 4. Update stage 9 to running
   await db
     .update(stages)
     .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 12)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 9)));
 
   const startedAt = Date.now();
 
@@ -64,7 +64,7 @@ export async function integrateCritiques(
   // 5. Integrate critiques (if any). For zero critiques, carry forward V5 as V6.
   const hasSelectedCritiques = selectedCritiques.length > 0;
   if (!hasSelectedCritiques) {
-    onChunk?.("No critiques selected, carrying forward Step 10 output as Final V6.\n");
+    onChunk?.("No critiques selected, carrying forward Step 7 output as Final V6.\n");
   }
   const result = hasSelectedCritiques
     ? await (onChunk
@@ -107,7 +107,7 @@ export async function integrateCritiques(
     .insert(versions)
     .values({
       projectId,
-      producedByStep: 12,
+      producedByStep: 9,
       versionType: "final",
       internalLabel: hasSelectedCritiques ? "Final V6" : "Final V6 (No Critiques Selected)",
       content: finalContent,
@@ -130,7 +130,7 @@ export async function integrateCritiques(
       projectId,
       userId,
       action: "agent_response_received",
-      stepNumber: 12,
+      stepNumber: 9,
       modelId: result.model,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
@@ -141,7 +141,7 @@ export async function integrateCritiques(
       projectId,
       userId,
       action: "stage_completed",
-      stepNumber: 12,
+      stepNumber: 9,
       payload: {
         durationMs,
         selectedCritiquesCount: 0,
@@ -150,7 +150,7 @@ export async function integrateCritiques(
     });
   }
 
-  // 9. Update stage 12 to completed
+  // 9. Update stage 9 to completed
   await db
     .update(stages)
     .set({
@@ -165,11 +165,11 @@ export async function integrateCritiques(
         selectedCritiquesCount: selectedCritiques.length,
       },
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 12)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 9)));
 
-  // 10. Advance project to stage 13
+  // 10. Advance project to stage 10
   await db
     .update(projects)
-    .set({ currentStage: 13, updatedAt: new Date() })
+    .set({ currentStage: 10, updatedAt: new Date() })
     .where(eq(projects.id, projectId));
 }
