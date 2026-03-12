@@ -18,18 +18,6 @@ AI-powered investment memo creation portal automating a 13-step SOP using Claude
 - `packages/db/` – Drizzle ORM schema + Supabase PostgreSQL
 - `packages/core/` – Claude/Gemini wrappers, prompt templates, pipeline types
 
-## Implementation Status
-All 3 phases are complete. The full 13-step pipeline is implemented end-to-end.
-
-### Phase 1 – Foundation (complete)
-Monorepo scaffold, 9-table DB schema, Supabase auth, app shell, brief wizard (Steps 1–2), Step 1 master prompt AI job.
-
-### Phase 2 – Core Pipeline (complete)
-File upload + chunking (Step 3), 5 parallel persona drafts (Step 4), synthesis (Step 5), combined style guide + editor (Steps 6+7), Gemini fact-check (Step 8), version diff views.
-
-### Phase 3 – Polish + Export (complete)
-Final style pass (Step 9), human review UI with inline editor (Step 10), devil's advocate (Step 11), critique integration (Step 12), HTML→PDF export via Puppeteer (Step 13), audit log viewer.
-
 ## Critical Architecture Rules
 
 ### 1. Context Window Management (NON-NEGOTIABLE)
@@ -70,39 +58,30 @@ All 13 stage rows are created when a project is created. Always use `db.update(s
 - `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`
 - No `any`. Use `unknown` and narrow.
 - Server-only code (DB, service role) never imported in client components.
-- Module resolution: `bundler` for all non-Next.js packages (db, core, worker)
-- No `.js` extensions in imports for packages using bundler resolution
-
-## Module Resolution Notes
-- `packages/db` and `packages/core` and `apps/worker` use `moduleResolution: "bundler"` — drizzle-kit requires this
-- `apps/web` uses Next.js default resolution (no `.js` extensions needed)
+- Module resolution: `bundler` for all non-Next.js packages (db, core, worker) — drizzle-kit requires this
+- `apps/web` uses Next.js default resolution; no `.js` extensions needed anywhere
 - Do NOT add `"type": "module"` to `packages/db/package.json` — drizzle-kit bundles as CJS
 
-## Key File Locations
+## Codemap
+```
+apps/worker/src/
+├── routes/          → stages.ts, jobs.ts, export.ts, health.ts
+└── jobs/handlers/   → generate-master-prompt, suggest-personas,
+                       extract-and-chunk, generate-persona-drafts,
+                       synthesize, style-edit, fact-check,
+                       final-style-pass, devils-advocate,
+                       integrate-critiques, export-html
 
-### Worker job handlers (`apps/worker/src/jobs/handlers/`)
-`generate-master-prompt.ts`, `suggest-personas.ts`, `extract-and-chunk.ts`, `generate-persona-drafts.ts`, `synthesize.ts`, `style-edit.ts`, `fact-check.ts`, `final-style-pass.ts`, `devils-advocate.ts`, `integrate-critiques.ts`, `export-html.ts`
+apps/web/src/app/
+├── (app)/           → dashboard/, projects/, projects/[id]/, projects/[id]/audit/
+├── api/projects/[id]/ → materials/, personas/, stages/, style-guide/,
+                         versions/, review/, critiques/, export/
+└── components/      → brief/, layout/, personas/, projects/,
+                       review/, sources/, versions/
 
-### Worker routes (`apps/worker/src/routes/`)
-`stages.ts`, `jobs.ts`, `export.ts`, `health.ts`
-
-### Web API routes (`apps/web/src/app/api/projects/[id]/`)
-`materials/`, `personas/`, `stages/`, `style-guide/`, `versions/`, `review/`, `critiques/`, `export/`
-
-### Web app pages (`apps/web/src/app/(app)/`)
-`dashboard/`, `projects/` (list + new), `projects/[id]/` (pipeline view), `projects/[id]/audit/` (audit log viewer)
-
-### Web components
-- `components/brief/` – 3-step BriefWizard
-- `components/layout/` – AppSidebar, Header, UserMenu
-- `components/personas/` – PersonaCard, PersonaSelector
-- `components/projects/` – ProjectCard, ProjectList, PipelineProgress, StepTrigger
-- `components/review/` – InlineEditor, CritiqueSelector
-- `components/sources/` – MaterialUpload, StyleGuideUpload
-- `components/versions/` – VersionDiff, VersionsPanel, VersionViewer
-
-### Core prompts (`packages/core/src/prompts/`)
-`brief.ts`, `personas.ts`, `drafts.ts`, `synthesis.ts`, `style.ts`, `critique.ts`, `final-style.ts`, `export.ts`
+packages/core/src/prompts/
+    → brief, personas, drafts, synthesis, style, critique, final-style, export
+```
 
 ## 13-Step SOP Reference
 | Step | Name | Agent | Checkpoint |
