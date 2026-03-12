@@ -41,7 +41,7 @@
         "apps/worker/src/jobs/handlers/"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

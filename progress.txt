@@ -8,6 +8,8 @@
 - Optional steps (currently step 11 = Edit for Style) use `/stages/<N>/complete` endpoint
 - Skippable steps (currently step 9 = Integrate Critiques) use `/stages/<N>/skip` endpoint
 - Critiques flow: step 8 (Devil's Advocate) → critiques/select API → either step 9 (Integrate) or skip to step 12 (Export)
+- Worker runner.ts maps step numbers to handler functions via a switch statement — must stay in sync with pipeline order
+- Handler functions internally reference their own step number for DB stage updates, audit logs, and currentStage advancement
 
 ---
 
@@ -35,4 +37,19 @@
   - Static route directories (stages/7/, stages/9/, stages/12/) must be moved/recreated when step numbers change
   - The critiques/select route has complex skip logic that advances currentStage — must match new step flow
   - FinalStylePassStep component still exists as dead code (not imported) — can be cleaned up in US-002
+---
+
+## 2026-03-12 - US-002
+- Updated worker handlers for new 12-step pipeline numbering
+- Changes:
+  - `apps/worker/src/jobs/handlers/fact-check.ts` — step 8→6 (all DB stage refs, audit log, producedByStep)
+  - `apps/worker/src/jobs/handlers/devils-advocate.ts` — step 11→8 (stage running/awaiting_human, audit log, currentStage)
+  - `apps/worker/src/jobs/handlers/integrate-critiques.ts` — step 12→9, advances to stage 10 instead of 13 (stage running/completed, audit log, producedByStep, currentStage)
+  - `apps/worker/src/jobs/handlers/style-edit.ts` — step 7→11, advances to stage 12 instead of 8 (stage running/completed, audit log)
+  - `apps/worker/src/jobs/runner.ts` — remapped switch cases: 6→factCheck, 8→devilsAdvocate, 9→integrateCritiques, 11→styleEdit; removed finalStylePass import
+  - Deleted: `apps/worker/src/jobs/handlers/final-style-pass.ts`
+- **Learnings for future iterations:**
+  - Each handler has 3-5 places referencing its step number: stage set running, audit log stepNumber, producedByStep in versions, stage set completed, and currentStage advancement
+  - Dead code remains: `packages/core/src/prompts/final-style.ts` (exports buildFinalStyleSystemPrompt/UserMessage), `apps/web/src/components/projects/steps/final-style-pass-step.tsx` — both can be cleaned up
+  - The `integrate-critiques` handler had a "Step 10 output" user message that needed updating to reflect new numbering
 ---

@@ -20,7 +20,7 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
   await db
     .update(stages)
     .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 6)));
 
   const startedAt = Date.now();
 
@@ -89,7 +89,7 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
     .insert(versions)
     .values({
       projectId,
-      producedByStep: 8,
+      producedByStep: 6,
       versionType: "fact_checked",
       internalLabel: `Fact-Checked V3${issueCount > 0 ? ` (${issueCount} issue${issueCount !== 1 ? "s" : ""} found)` : ""}`,
       content: geminiResult.correctedContent,
@@ -111,7 +111,7 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
     projectId,
     userId,
     action: "agent_response_received",
-    stepNumber: 8,
+    stepNumber: 6,
     modelId: "gemini-2.5-pro+google-search",
     payload: {
       durationMs,
@@ -134,5 +134,5 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
         factCheckFindings: geminiResult.findings,
       },
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 6)));
 }
