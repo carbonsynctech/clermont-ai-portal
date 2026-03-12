@@ -404,8 +404,6 @@ export function FactCheckReviewStep({
                     <div className="flex items-start gap-2">
                       <Checkbox
                         checked={selected}
-                        onCheckedChange={() => toggleFinding(finding.id)}
-                        onClick={(e) => e.stopPropagation()}
                         className="mt-0.5"
                       />
                       <div className="space-y-2">
