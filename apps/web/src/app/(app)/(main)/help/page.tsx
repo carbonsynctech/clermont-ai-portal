@@ -40,7 +40,7 @@ export default function HelpPage() {
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Help</h1>
         <p className="text-sm text-muted-foreground">
-          Practical guidance for moving through the 13-step memo workflow from brief creation to
+          Practical guidance for moving through the 12-step memo workflow from brief creation to
           final PDF export.
         </p>
       </header>
@@ -87,7 +87,7 @@ export default function HelpPage() {
           </div>
           <Separator />
           <div>
-            <h2 className="text-foreground font-medium">Human review and finish (Steps 10–13)</h2>
+            <h2 className="text-foreground font-medium">Review, polish, and export (Steps 6–12)</h2>
             <p>
               Edit inline, select critiques intentionally, integrate only relevant feedback, and
               export once content is client-ready.

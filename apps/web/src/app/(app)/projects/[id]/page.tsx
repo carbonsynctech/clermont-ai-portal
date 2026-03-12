@@ -86,7 +86,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
   const usageSummary = summarizeTokenUsage(usageRows);
 
   const stepParam = typeof sp["step"] === "string" ? Number(sp["step"]) : NaN;
-  const initialStep = Number.isFinite(stepParam) && stepParam >= 1 && stepParam <= 13
+  const initialStep = Number.isFinite(stepParam) && stepParam >= 1 && stepParam <= 12
     ? stepParam
     : project.currentStage;
   const step8Stage = stageRows.find((stage) => stage.stepNumber === 8);

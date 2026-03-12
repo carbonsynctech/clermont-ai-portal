@@ -1,0 +1,38 @@
+## Codebase Patterns
+- Pipeline step definitions live in `packages/core/src/types/pipeline.ts` (SOP_STEPS, SOP_STEP_NAMES)
+- UI step names are duplicated in pipeline-step-nav.tsx (STEP_NAMES), pipeline-progress.tsx (SHORT_STEP_NAMES), and pipeline-view.tsx (STEP_TITLES) — all must stay in sync
+- Static API routes for specific steps live at `apps/web/src/app/api/projects/[id]/stages/<N>/<action>/route.ts`
+- The `[step]/run/route.ts` dynamic route handles all step run requests; export step is blocked there
+- Worker export-html handler references step numbers — keep in sync with UI
+- Step completion flow: pipeline-view.tsx calls API routes which update DB stages and project currentStage
+- Optional steps (currently step 11 = Edit for Style) use `/stages/<N>/complete` endpoint
+- Skippable steps (currently step 9 = Integrate Critiques) use `/stages/<N>/skip` endpoint
+- Critiques flow: step 8 (Devil's Advocate) → critiques/select API → either step 9 (Integrate) or skip to step 12 (Export)
+
+---
+
+## 2026-03-12 - US-001
+- Removed Final Polish (old step 9) and reordered pipeline from 13 to 12 steps
+- New order: 1-5 unchanged, Fact-Check(6), Human Review(7), Devil's Advocate(8), Integrate Critiques(9), Style Guide(10), Edit for Style(11), Export(12)
+- Files changed:
+  - `packages/core/src/types/pipeline.ts` (already done in prior commit)
+  - `apps/web/src/components/projects/pipeline-view.tsx` (full rewrite — step titles, phases, completion messages, switch cases, state vars, floating bar logic, prerequisite map)
+  - `apps/web/src/components/projects/pipeline-step-nav.tsx` (STEP_NAMES, GROUPS)
+  - `apps/web/src/components/projects/pipeline-progress.tsx` (SHORT_STEP_NAMES, length 13→12)
+  - `apps/web/src/app/api/projects/route.ts` (create 12 stages instead of 13)
+  - `apps/web/src/app/(app)/projects/[id]/page.tsx` (step range 13→12)
+  - `apps/web/src/app/api/projects/[id]/stages/[step]/run/route.ts` (max 13→12, step 13→12 export guard)
+  - `apps/web/src/app/api/projects/[id]/export/route.ts` (step 13→12 references)
+  - `apps/web/src/app/api/projects/[id]/critiques/select/route.ts` (stage 11→8, step 12→9, step 13→12)
+  - `apps/web/src/app/api/projects/[id]/stages/11/complete/route.ts` (NEW — replaces old stages/7/complete)
+  - `apps/web/src/app/api/projects/[id]/stages/9/skip/route.ts` (NEW — replaces old stages/12/skip)
+  - Deleted: `stages/7/complete/`, `stages/9/complete/`, `stages/12/skip/`
+  - `apps/worker/src/routes/stages.ts` (max 13→12)
+  - `apps/worker/src/jobs/handlers/export-html.ts` (step 13→12)
+  - `apps/web/src/app/(app)/(main)/help/page.tsx` (13-step→12-step references)
+- **Learnings for future iterations:**
+  - pipeline-view.tsx has extensive hardcoded step number references in floating bar logic, optional step handling, and prerequisites — any step reorder requires careful audit
+  - Static route directories (stages/7/, stages/9/, stages/12/) must be moved/recreated when step numbers change
+  - The critiques/select route has complex skip logic that advances currentStage — must match new step flow
+  - FinalStylePassStep component still exists as dead code (not imported) — can be cleaned up in US-002
+---

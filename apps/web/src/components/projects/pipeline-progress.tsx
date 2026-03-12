@@ -15,14 +15,13 @@ const SHORT_STEP_NAMES: Record<number, string> = {
   3: "Gather Sources",
   4: "Persona Drafts",
   5: "Synthesize",
-  6: "Load Style",
-  7: "Edit to Style",
-  8: "Fact-Check",
-  9: "Final Style",
-  10: "Human Review",
-  11: "Devil's Advocate",
-  12: "Integrate Critiques",
-  13: "Export PDF",
+  6: "Fact-Check",
+  7: "Human Review",
+  8: "Devil's Advocate",
+  9: "Integrate Critiques",
+  10: "Load Style",
+  11: "Edit to Style",
+  12: "Export PDF",
 };
 
 function StepCircle({
@@ -65,7 +64,7 @@ export function PipelineProgress({ stages, currentStep }: PipelineProgressProps)
 
   return (
     <div className="space-y-0.5">
-      {Array.from({ length: 13 }, (_, i) => i + 1).map((step) => {
+      {Array.from({ length: 12 }, (_, i) => i + 1).map((step) => {
         const stage = stageMap.get(step);
         const status: StageStatus = (stage?.status as StageStatus) ?? "pending";
         const isCurrentStep = step === currentStep;

@@ -31,11 +31,11 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
     throw new Error(`Project ${projectId} has no final version`);
   }
 
-  // 3. Update stage 13 to running
+  // 3. Update stage 12 to running
   await db
     .update(stages)
     .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 13)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 12)));
 
   const startedAt = Date.now();
 
@@ -62,7 +62,7 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
     .insert(versions)
     .values({
       projectId,
-      producedByStep: 13,
+      producedByStep: 12,
       versionType: "exported_html",
       internalLabel: "Export HTML V7",
       content: result.content,
@@ -84,14 +84,14 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
     projectId,
     userId,
     action: "export_requested",
-    stepNumber: 13,
+    stepNumber: 12,
     modelId: result.model,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
     payload: { durationMs },
   });
 
-  // 8. Update stage 13 to completed
+  // 8. Update stage 12 to completed
   await db
     .update(stages)
     .set({
@@ -105,11 +105,11 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
         durationMs,
       },
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 13)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 12)));
 
   // 9. Mark project as completed
   await db
     .update(projects)
-    .set({ status: "completed", currentStage: 13, updatedAt: new Date() })
+    .set({ status: "completed", currentStage: 12, updatedAt: new Date() })
     .where(eq(projects.id, projectId));
 }

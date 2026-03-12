@@ -10,7 +10,6 @@ import { SelectPersonasStep } from "./steps/select-personas-step";
 import { SynthesisStep } from "./steps/synthesis-step";
 import { ExportStep } from "./steps/export-step";
 import { StyleEditStep } from "./steps/style-edit-step";
-import { FinalStylePassStep } from "./steps/final-style-pass-step";
 import { IntegrateCritiquesStep } from "./steps/integrate-critiques-step";
 import { MarkdownVersionPanel } from "./markdown-version-panel";
 import { MaterialUpload } from "@/components/sources/material-upload";
@@ -42,37 +41,35 @@ const STEP_TITLES: Record<number, string> = {
   3: "Source Material",
   4: "Generate Drafts",
   5: "Synthesize",
-  6: "Style Guide",
-  7: "Edit for Style",
-  8: "Fact-Check",
-  9: "Final Polish",
-  10: "Human Review",
-  11: "Devil's Advocate",
-  12: "Integrate Critiques",
-  13: "Export",
+  6: "Fact-Check",
+  7: "Human Review",
+  8: "Devil's Advocate",
+  9: "Integrate Critiques",
+  10: "Style Guide",
+  11: "Edit for Style",
+  12: "Export",
 };
 
 const STEP_PHASES: Record<number, string> = {
   1: "Setup Phase", 2: "Setup Phase", 3: "Setup Phase",
   4: "Generate Phase", 5: "Generate Phase",
-  6: "Polish Phase", 7: "Polish Phase", 8: "Polish Phase", 9: "Polish Phase",
-  10: "Review Phase", 11: "Review Phase", 12: "Review Phase", 13: "Review Phase",
+  6: "Review Phase", 7: "Review Phase", 8: "Review Phase", 9: "Review Phase",
+  10: "Polish Phase", 11: "Polish Phase", 12: "Polish Phase",
 };
 
 const STEP_COMPLETION_MESSAGES: Record<number, string> = {
   4: "Persona drafts generated.",
   5: "Synthesis V1 completed.",
-  6: "Style guide is ready.",
-  7: "Style edit V2 completed.",
-  8: "Fact-check V3 completed.",
-  9: "Final style pass V4 completed.",
-  10: "Human review V5 approved.",
-  11: "Critiques selected and confirmed.",
-  12: "Critiques integrated into final V6.",
-  13: "Export is ready.",
+  6: "Fact-check V3 completed.",
+  7: "Human review V5 approved.",
+  8: "Critiques selected and confirmed.",
+  9: "Critiques integrated into final V6.",
+  10: "Style guide is ready.",
+  11: "Style edit V2 completed.",
+  12: "Export is ready.",
 };
 
-interface Step11DraftPayload {
+interface Step8DraftPayload {
   critiques: CritiqueItem[];
   selectedIds: number[];
   selectedCritiques: string[];
@@ -97,7 +94,7 @@ function isNumberArray(value: unknown): value is number[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
 }
 
-function getStep11DraftFromMetadata(value: unknown): Step11DraftPayload | null {
+function getStep8DraftFromMetadata(value: unknown): Step8DraftPayload | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
   const draft = record.devilsAdvocateDraft;
@@ -167,19 +164,18 @@ export function PipelineView({
   const [step1Running, setStep1Running] = useState(false);
   const [step4Running, setStep4Running] = useState(false);
   const [step5Running, setStep5Running] = useState(false);
+  const [step6Running, setStep6Running] = useState(false);
   const [step8Running, setStep8Running] = useState(false);
-  const [step9Running, setStep9Running] = useState(false);
-  const [step11Running, setStep11Running] = useState(false);
-  const [step11Submitting, setStep11Submitting] = useState(false);
-  const [step11SelectedCritiques, setStep11SelectedCritiques] = useState<string[]>([]);
-  const [step11Draft, setStep11Draft] = useState<Step11DraftPayload | null>(null);
+  const [step8Submitting, setStep8Submitting] = useState(false);
+  const [step8SelectedCritiques, setStep8SelectedCritiques] = useState<string[]>([]);
+  const [step8Draft, setStep8Draft] = useState<Step8DraftPayload | null>(null);
   const [optionalStepCompleting, setOptionalStepCompleting] = useState<number | null>(null);
-  const [step12Running, setStep12Running] = useState(false);
-  const [step12Skipping, setStep12Skipping] = useState(false);
-  const [step7FormatRunId, setStep7FormatRunId] = useState(0);
-  const step11DraftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [step9Running, setStep9Running] = useState(false);
+  const [step9Skipping, setStep9Skipping] = useState(false);
+  const [step11FormatRunId, setStep11FormatRunId] = useState(0);
+  const step8DraftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Shared document styling state — set in step 6, consumed in step 7
+  // Shared document styling state — set in step 10, consumed in step 11
   const [documentColors, setDocumentColors] = useState<DocumentColors>(DEFAULT_COLORS);
   const [liveCoverImageUrl, setLiveCoverImageUrl] = useState<string | undefined>(coverImageUrl);
 
@@ -200,20 +196,20 @@ export function PipelineView({
     });
   }, []);
 
-  // Step 10 editor ref + state (for floating bar actions)
+  // Step 7 editor ref + state (for floating bar actions)
   const editorRef = useRef<InlineEditorHandle | null>(null);
-  const [step10IsDirty, setStep10IsDirty] = useState(false);
-  const [step10IsApproving, setStep10IsApproving] = useState(false);
-  const handleStep10ContentChange = useCallback((isDirty: boolean) => {
-    setStep10IsDirty(isDirty);
+  const [step7IsDirty, setStep7IsDirty] = useState(false);
+  const [step7IsApproving, setStep7IsApproving] = useState(false);
+  const handleStep7ContentChange = useCallback((isDirty: boolean) => {
+    setStep7IsDirty(isDirty);
   }, []);
-  async function handleStep10Approve() {
+  async function handleStep7Approve() {
     if (!editorRef.current) return;
-    setStep10IsApproving(true);
+    setStep7IsApproving(true);
     try {
       await editorRef.current.approve();
     } finally {
-      setStep10IsApproving(false);
+      setStep7IsApproving(false);
     }
   }
 
@@ -242,19 +238,19 @@ export function PipelineView({
   const factCheckVersion = versions.filter((v) => v.versionType === "fact_checked").at(-1);
   const finalStyledVersion = getLatestVersion("final_styled");
 
-  const persistStep11Draft = useCallback(
-    (draft: Step11DraftPayload) => {
-      if (step11DraftSaveTimeoutRef.current) {
-        clearTimeout(step11DraftSaveTimeoutRef.current);
+  const persistStep8Draft = useCallback(
+    (draft: Step8DraftPayload) => {
+      if (step8DraftSaveTimeoutRef.current) {
+        clearTimeout(step8DraftSaveTimeoutRef.current);
       }
 
-      step11DraftSaveTimeoutRef.current = setTimeout(() => {
+      step8DraftSaveTimeoutRef.current = setTimeout(() => {
         void fetch(`/api/projects/${project.id}/critiques/draft`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(draft),
         }).catch(() => {
-          // Silent failure: the final save still occurs on Step 11 continue.
+          // Silent failure: the final save still occurs on Step 8 continue.
         });
       }, 600);
     },
@@ -263,8 +259,8 @@ export function PipelineView({
 
   useEffect(() => {
     return () => {
-      if (step11DraftSaveTimeoutRef.current) {
-        clearTimeout(step11DraftSaveTimeoutRef.current);
+      if (step8DraftSaveTimeoutRef.current) {
+        clearTimeout(step8DraftSaveTimeoutRef.current);
       }
     };
   }, []);
@@ -279,7 +275,8 @@ export function PipelineView({
   const isNewStep = activeStep >= project.currentStage;
 
   async function goToNextStep() {
-    if (activeStep === 7 || activeStep === 9) {
+    // Step 11 (Edit for Style) is optional — complete it before advancing
+    if (activeStep === 11) {
       setOptionalStepCompleting(activeStep);
       try {
         const res = await fetch(`/api/projects/${project.id}/stages/${activeStep}/complete`, {
@@ -301,61 +298,61 @@ export function PipelineView({
     const next = activeStep + 1;
     setActiveStep(next);
     router.push(`/projects/${project.id}?step=${next}`);
-    if (activeStep === 7 || activeStep === 9) {
+    if (activeStep === 11) {
       router.refresh();
     }
   }
 
-  async function handleStep11Continue() {
-    setStep11Submitting(true);
+  async function handleStep8Continue() {
+    setStep8Submitting(true);
     try {
       const res = await fetch(`/api/projects/${project.id}/critiques/select`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          selectedCritiques: step11SelectedCritiques,
-          critiques: step11Draft?.critiques ?? [],
-          selectedIds: step11Draft?.selectedIds ?? [],
+          selectedCritiques: step8SelectedCritiques,
+          critiques: step8Draft?.critiques ?? [],
+          selectedIds: step8Draft?.selectedIds ?? [],
         }),
       });
 
       if (!res.ok) {
-        throw new Error("Failed to save Step 11 selection");
+        throw new Error("Failed to save Step 8 selection");
       }
 
       const data = (await res.json()) as { nextStep?: number };
-      const next = data.nextStep === 13 ? 13 : 12;
+      const next = data.nextStep === 12 ? 12 : 9;
       setActiveStep(next);
       router.push(`/projects/${project.id}?step=${next}`);
       router.refresh();
     } catch (error) {
-      console.error("Step 11 continue error:", error);
-      alert(error instanceof Error ? error.message : "Failed to continue to Step 12");
+      console.error("Step 8 continue error:", error);
+      alert(error instanceof Error ? error.message : "Failed to continue to Step 9");
     } finally {
-      setStep11Submitting(false);
+      setStep8Submitting(false);
     }
   }
 
-  async function handleStep12SkipContinue() {
-    setStep12Skipping(true);
+  async function handleStep9SkipContinue() {
+    setStep9Skipping(true);
     try {
-      const res = await fetch(`/api/projects/${project.id}/stages/12/skip`, {
+      const res = await fetch(`/api/projects/${project.id}/stages/9/skip`, {
         method: "POST",
       });
 
       if (!res.ok) {
-        throw new Error("Failed to skip Step 12");
+        throw new Error("Failed to skip Step 9");
       }
 
-      const next = 13;
+      const next = 10;
       setActiveStep(next);
       router.push(`/projects/${project.id}?step=${next}`);
       router.refresh();
     } catch (error) {
-      console.error("Step 12 skip error:", error);
-      alert(error instanceof Error ? error.message : "Failed to continue to Step 13");
+      console.error("Step 9 skip error:", error);
+      alert(error instanceof Error ? error.message : "Failed to continue to Step 10");
     } finally {
-      setStep12Skipping(false);
+      setStep9Skipping(false);
     }
   }
   const showFloatingStepBar = activeStep >= 4;
@@ -434,7 +431,128 @@ export function PipelineView({
           />
         );
 
-      case 6:
+      case 6: {
+        const canRunStep6 = stageMap[5]?.status === "completed";
+        if (factCheckVersion && (status === "awaiting_human" || status === "completed")) {
+          return (
+            <FactCheckReviewStep
+              projectId={project.id}
+              factCheckFindings={factCheckFindings ?? []}
+              sourceVersion={sourceSynthesisVersion}
+              factCheckedVersion={factCheckVersion}
+              approvedFindingIds={factCheckApprovedFindingIds ?? undefined}
+              approvedIssues={factCheckApprovedIssues ?? undefined}
+              appliedCorrections={factCheckAppliedCorrections ?? undefined}
+              isStepApproved={status === "completed"}
+            />
+          );
+        }
+        return (
+          <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+            <MarkdownVersionPanel
+              title="Content to Fact-Check (Step 5 Synthesis)"
+              content={sourceSynthesisVersion?.content ?? ""}
+              wordCount={sourceSynthesisVersion?.wordCount ?? undefined}
+            />
+
+            <div className="rounded-xl border bg-card p-6 space-y-4 lg:sticky lg:top-4 h-fit">
+              <StepTrigger
+                projectId={project.id}
+                stepNumber={6}
+                label="Fact-Check with Gemini"
+                currentStatus={status}
+                disabled={!canRunStep6}
+                disabledReason="Complete Step 5 to run this step."
+                autoRun={canRunStep6}
+                onRunningChange={setStep6Running}
+              />
+            </div>
+          </div>
+        );
+      }
+
+      case 7:
+        return (
+          <div className="rounded-xl border bg-card p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Eye className="size-4 text-muted-foreground" />
+              <h3 className="font-medium text-base text-foreground">Human Review</h3>
+            </div>
+            <InlineEditor
+              ref={editorRef}
+              projectId={project.id}
+              initialContent={
+                getLatestVersion("human_reviewed")?.content
+                ?? finalStyledVersion?.content
+                ?? factCheckVersion?.content
+                ?? ""
+              }
+              compareContent={finalStyledVersion?.content ?? factCheckVersion?.content}
+              versionLabel="Final Styled V4"
+              hideActions
+              onContentChange={handleStep7ContentChange}
+              onApproveSuccess={() => setActiveStep(8)}
+            />
+          </div>
+        );
+
+      case 8: {
+        const canRunStep8 = stageMap[7]?.status === "completed";
+        const persistedDraft = getStep8DraftFromMetadata(stageMap[8]?.metadata);
+        const redReportContent = persistedDraft ? "" : (getLatestVersion("red_report")?.content ?? "");
+        const shouldShowSelector = status === "awaiting_human" || status === "completed" || Boolean(persistedDraft);
+        return (
+          <div className="rounded-xl border bg-card p-6 space-y-4">
+            <StepTrigger
+              projectId={project.id}
+              stepNumber={8}
+              label="Generate Devil's Advocate Critiques"
+              currentStatus={status}
+              disabled={!canRunStep8}
+              disabledReason="Complete Step 7 to run this step."
+              autoRun={canRunStep8}
+              onRunningChange={setStep8Running}
+              hideButton
+            />
+            {shouldShowSelector && (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Select critiques to integrate into Step 9. You can continue with none selected, and Step 9 will be skipped automatically.
+                </p>
+                <CritiqueSelector
+                  projectId={project.id}
+                  redReport={redReportContent}
+                  step10Markdown={
+                    getLatestVersion("human_reviewed")?.content
+                    ?? getLatestVersion("final_styled")?.content
+                    ?? ""
+                  }
+                  onSelectedCritiquesChange={setStep8SelectedCritiques}
+                  initialCritiques={persistedDraft?.critiques}
+                  initialSelectedIds={persistedDraft?.selectedIds}
+                  onDraftChange={(draft) => {
+                    setStep8Draft(draft);
+                    persistStep8Draft(draft);
+                  }}
+                />
+              </>
+            )}
+          </div>
+        );
+      }
+
+      case 9:
+        return (
+          <IntegrateCritiquesStep
+            projectId={project.id}
+            finalVersion={getLatestVersion("final")}
+            stage11Status={stageMap[8]?.status ?? "pending"}
+            stage12Status={status}
+            onRunningChange={setStep9Running}
+          />
+        );
+
+      case 10:
         return (
           <div className="space-y-0">
             <div className="rounded-xl border bg-card p-6">
@@ -468,7 +586,7 @@ export function PipelineView({
           </div>
         );
 
-      case 7:
+      case 11:
         return (
           <StyleEditStep
             projectId={project.id}
@@ -481,148 +599,11 @@ export function PipelineView({
             latestStyleGuide={latestStyleGuide}
             coverImageUrl={liveCoverImageUrl}
             colors={documentColors}
-            formatRunId={step7FormatRunId}
+            formatRunId={step11FormatRunId}
           />
         );
 
-      case 8: {
-        const canRunStep8 = stageMap[5]?.status === "completed";
-        if (factCheckVersion && (status === "awaiting_human" || status === "completed")) {
-          return (
-            <FactCheckReviewStep
-              projectId={project.id}
-              factCheckFindings={factCheckFindings ?? []}
-              sourceVersion={sourceSynthesisVersion}
-              factCheckedVersion={factCheckVersion}
-              approvedFindingIds={factCheckApprovedFindingIds ?? undefined}
-              approvedIssues={factCheckApprovedIssues ?? undefined}
-              appliedCorrections={factCheckAppliedCorrections ?? undefined}
-              isStepApproved={status === "completed"}
-            />
-          );
-        }
-        return (
-          <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-            <MarkdownVersionPanel
-              title="Content to Fact-Check (Step 5 Synthesis)"
-              content={sourceSynthesisVersion?.content ?? ""}
-              wordCount={sourceSynthesisVersion?.wordCount ?? undefined}
-            />
-
-            <div className="rounded-xl border bg-card p-6 space-y-4 lg:sticky lg:top-4 h-fit">
-              <StepTrigger
-                projectId={project.id}
-                stepNumber={8}
-                label="Fact-Check with Gemini"
-                currentStatus={status}
-                disabled={!canRunStep8}
-                disabledReason="Complete Step 5 to run this step."
-                autoRun={canRunStep8}
-                onRunningChange={setStep8Running}
-              />
-            </div>
-          </div>
-        );
-      }
-
-      case 9:
-        return (
-          <FinalStylePassStep
-            projectId={project.id}
-            projectTitle={project.title}
-            companyName={brief?.companyName}
-            dealType={brief?.dealType}
-            coverImageUrl={coverImageUrl}
-            factCheckedVersion={getLatestVersion("fact_checked")}
-            finalStyledVersion={getLatestVersion("final_styled")}
-            stage8Status={stageMap[8]?.status ?? "pending"}
-            stage9Status={status}
-            onRunningChange={setStep9Running}
-          />
-        );
-
-      case 10:
-        return (
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            <div className="flex items-center gap-2">
-              <Eye className="size-4 text-muted-foreground" />
-              <h3 className="font-medium text-base text-foreground">Human Review</h3>
-            </div>
-            <InlineEditor
-              ref={editorRef}
-              projectId={project.id}
-              initialContent={
-                getLatestVersion("human_reviewed")?.content
-                ?? finalStyledVersion?.content
-                ?? factCheckVersion?.content
-                ?? ""
-              }
-              compareContent={finalStyledVersion?.content ?? factCheckVersion?.content}
-              versionLabel="Final Styled V4"
-              hideActions
-              onContentChange={handleStep10ContentChange}
-              onApproveSuccess={() => setActiveStep(11)}
-            />
-          </div>
-        );
-
-      case 11: {
-        const canRunStep11 = stageMap[10]?.status === "completed";
-        const persistedDraft = getStep11DraftFromMetadata(stageMap[11]?.metadata);
-        const redReportContent = persistedDraft ? "" : (getLatestVersion("red_report")?.content ?? "");
-        const shouldShowSelector = status === "awaiting_human" || status === "completed" || Boolean(persistedDraft);
-        return (
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            <StepTrigger
-              projectId={project.id}
-              stepNumber={11}
-              label="Generate Devil's Advocate Critiques"
-              currentStatus={status}
-              disabled={!canRunStep11}
-              disabledReason="Complete Step 10 to run this step."
-              autoRun={canRunStep11}
-              onRunningChange={setStep11Running}
-              hideButton
-            />
-            {shouldShowSelector && (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Select critiques to integrate into Step 12. You can continue with none selected, and Step 12 will be skipped automatically.
-                </p>
-                <CritiqueSelector
-                  projectId={project.id}
-                  redReport={redReportContent}
-                  step10Markdown={
-                    getLatestVersion("human_reviewed")?.content
-                    ?? getLatestVersion("final_styled")?.content
-                    ?? ""
-                  }
-                  onSelectedCritiquesChange={setStep11SelectedCritiques}
-                  initialCritiques={persistedDraft?.critiques}
-                  initialSelectedIds={persistedDraft?.selectedIds}
-                  onDraftChange={(draft) => {
-                    setStep11Draft(draft);
-                    persistStep11Draft(draft);
-                  }}
-                />
-              </>
-            )}
-          </div>
-        );
-      }
-
-      case 12:
-        return (
-          <IntegrateCritiquesStep
-            projectId={project.id}
-            finalVersion={getLatestVersion("final")}
-            stage11Status={stageMap[11]?.status ?? "pending"}
-            stage12Status={status}
-            onRunningChange={setStep12Running}
-          />
-        );
-
-      case 13:
+      case 12: {
         // Find the relevant versions for export
         const finalVersion = getLatestVersion("final");
         return (
@@ -633,9 +614,10 @@ export function PipelineView({
             dealType={project.briefData?.dealType}
             coverImageUrl={coverImageUrl}
             finalVersion={finalVersion}
-            stage12Status={stageMap[12]?.status ?? "pending"}
+            stage12Status={stageMap[11]?.status ?? "pending"}
           />
         );
+      }
 
       default:
         return null;
@@ -652,7 +634,7 @@ export function PipelineView({
               Investment memo complete
             </p>
             <p className="text-sm text-green-700/80 dark:text-green-400/80 mt-0.5">
-              All 13 pipeline steps finished.
+              All 12 pipeline steps finished.
             </p>
           </div>
           <Link
@@ -677,11 +659,10 @@ export function PipelineView({
               ...(step1Running ? { 1: "running" as const } : {}),
               ...(step4Running ? { 4: "running" as const } : {}),
               ...(step5Running ? { 5: "running" as const } : {}),
-              ...(coverImagesGenerating ? { 6: "running" as const } : {}),
+              ...(step6Running ? { 6: "running" as const } : {}),
+              ...(coverImagesGenerating ? { 10: "running" as const } : {}),
               ...(step8Running ? { 8: "running" as const } : {}),
               ...(step9Running ? { 9: "running" as const } : {}),
-              ...(step11Running ? { 11: "running" as const } : {}),
-              ...(step12Running ? { 12: "running" as const } : {}),
             }}
           />
         </div>
@@ -715,7 +696,7 @@ export function PipelineView({
           {/* Step header */}
           <div className="mb-6">
             <p className="text-sm text-muted-foreground mb-1">
-              Step {activeStep} of 13 &bull; {STEP_PHASES[activeStep]}
+              Step {activeStep} of 12 &bull; {STEP_PHASES[activeStep]}
             </p>
             <h1 className="text-2xl font-bold tracking-tight">{STEP_TITLES[activeStep]}</h1>
           </div>
@@ -732,7 +713,7 @@ export function PipelineView({
 
           <div className="relative">
             {renderStepContent()}
-            {showFloatingStepBar && activeStep < 13 && !(activeStep === 4 && versions.length > 0) && (
+            {showFloatingStepBar && activeStep < 12 && !(activeStep === 4 && versions.length > 0) && (
               <div className="sticky bottom-4 z-30 mt-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 px-5 py-3.5 shadow-lg backdrop-blur">
                 <div className="flex items-center gap-2.5 min-w-0">
                   {activeStatus === "completed" && (
@@ -740,7 +721,7 @@ export function PipelineView({
                   )}
 
                   <span className="text-sm font-medium text-foreground truncate">
-                    {((activeStep === 7 || activeStep === 9) && activeStatus !== "completed")
+                    {(activeStep === 11 && activeStatus !== "completed")
                       ? "Optional step — continue anytime or run it before moving on."
                       : activeStatus === "completed"
                       ? STEP_COMPLETION_MESSAGES[activeStep]
@@ -751,11 +732,11 @@ export function PipelineView({
                           : "Complete this step to continue."}
                   </span>
 
-                  {activeStep === 7 && activeStatus === "completed" && (
+                  {activeStep === 11 && activeStatus === "completed" && (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setStep7FormatRunId((curr) => curr + 1)}
+                      onClick={() => setStep11FormatRunId((curr) => curr + 1)}
                       className="gap-1.5 shrink-0"
                     >
                       <RefreshCw className="size-3.5" />
@@ -766,70 +747,66 @@ export function PipelineView({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  {activeStep === 10 && activeStatus !== "completed" && (
+                  {activeStep === 7 && activeStatus !== "completed" && (
                     <>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => editorRef.current?.reset()}
-                        disabled={!step10IsDirty || step10IsApproving}
+                        disabled={!step7IsDirty || step7IsApproving}
                       >
                         Reset to Original
                       </Button>
                       <Button
                         size="sm"
-                        onClick={() => void handleStep10Approve()}
-                        disabled={step10IsApproving}
+                        onClick={() => void handleStep7Approve()}
+                        disabled={step7IsApproving}
                       >
-                        {step10IsApproving ? "Saving…" : "Approve & Continue to Step 11"}
+                        {step7IsApproving ? "Saving…" : "Approve & Continue to Step 8"}
                       </Button>
                     </>
                   )}
-                  {activeStep < 13 && activeStep !== 10 && (
+                  {activeStep < 12 && activeStep !== 7 && (
                     isNewStep ? (
                       <Button
                         size="sm"
                         disabled={
                           optionalStepCompleting !== null
                           ||
-                          activeStep === 11
-                            ? !["completed", "awaiting_human"].includes(activeStatus) || step11Submitting
-                            : activeStep === 12
-                              ? step12Skipping
-                              : activeStep === 7 || activeStep === 9
+                          activeStep === 8
+                            ? !["completed", "awaiting_human"].includes(activeStatus) || step8Submitting
+                            : activeStep === 9
+                              ? step9Skipping
+                              : activeStep === 11
                                 ? false
                                 : activeStatus !== "completed"
                         }
                         onClick={
-                          activeStep === 11
-                            ? () => void handleStep11Continue()
-                            : activeStep === 12
-                              ? () => void handleStep12SkipContinue()
+                          activeStep === 8
+                            ? () => void handleStep8Continue()
+                            : activeStep === 9
+                              ? () => void handleStep9SkipContinue()
                               : () => void goToNextStep()
                         }
                       >
-                        {activeStep === 11 && step11Submitting
+                        {activeStep === 8 && step8Submitting
                           ? "Saving…"
-                          : activeStep === 12 && step12Skipping
+                          : activeStep === 9 && step9Skipping
                             ? "Saving…"
-                          : (activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
+                          : activeStep === 11 && optionalStepCompleting === activeStep
                             ? "Saving…"
-                          : activeStep === 8
-                            ? "Continue to Step 9"
-                            : `Save and continue to Step ${activeStep + 1}`}
+                          : `Save and continue to Step ${activeStep + 1}`}
                       </Button>
                     ) : (
-                      (activeStatus === "completed" || activeStep === 7 || activeStep === 9) && (
+                      (activeStatus === "completed" || activeStep === 11) && (
                         <Button
                           size="sm"
                           onClick={() => void goToNextStep()}
-                          disabled={(activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep}
+                          disabled={activeStep === 11 && optionalStepCompleting === activeStep}
                         >
-                          {(activeStep === 7 || activeStep === 9) && optionalStepCompleting === activeStep
+                          {activeStep === 11 && optionalStepCompleting === activeStep
                             ? "Saving…"
-                            : activeStep === 8
-                              ? "Continue to Step 9"
-                              : `Save and continue to Step ${activeStep + 1}`}
+                            : `Save and continue to Step ${activeStep + 1}`}
                         </Button>
                       )
                     )
@@ -913,13 +890,12 @@ function getPrerequisiteMessage(
     4: 3,
     5: 4,
     6: 5,
-    7: 5,
-    8: 5,
+    7: 6,
+    8: 7,
     9: 8,
-    10: 9,
-    11: 10,
+    10: 5,
+    11: 5,
     12: 11,
-    13: 12,
   };
 
   const requiredStep = prerequisiteStep[step];

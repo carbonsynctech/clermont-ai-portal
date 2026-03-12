@@ -22,13 +22,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id: projectId, step: stepStr } = await params;
   const stepNumber = parseInt(stepStr, 10);
 
-  if (isNaN(stepNumber) || stepNumber < 1 || stepNumber > 13) {
+  if (isNaN(stepNumber) || stepNumber < 1 || stepNumber > 12) {
     return NextResponse.json({ error: "Invalid step number" }, { status: 400 });
   }
 
-  if (stepNumber === 13) {
+  if (stepNumber === 12) {
     return NextResponse.json(
-      { error: "Step 13 is export-only. Use /api/projects/[id]/export endpoints." },
+      { error: "Step 12 is export-only. Use /api/projects/[id]/export endpoints." },
       { status: 400 }
     );
   }
