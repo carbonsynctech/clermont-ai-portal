@@ -14,7 +14,7 @@ import { IntegrateCritiquesStep } from "./steps/integrate-critiques-step";
 import { MarkdownVersionPanel } from "./markdown-version-panel";
 import { MaterialUpload } from "@/components/sources/material-upload";
 import { StyleGuideUpload } from "@/components/sources/style-guide-upload";
-import { StyleGuidePreview, type ColorPaletteEntry } from "@/components/sources/style-guide-preview";
+import { StyleGuidePreview } from "@/components/sources/style-guide-preview";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 import { InlineEditor, type InlineEditorHandle } from "@/components/review/inline-editor";
 import { CritiqueSelector, type CritiqueItem } from "@/components/review/critique-selector";
@@ -131,6 +131,8 @@ interface PipelineViewProps {
   factCheckAppliedCorrections?: number | null;
   coverImageUrl?: string;
   tokenUsageSummary: TokenUsageSummary;
+  step11Critiques?: CritiqueItem[];
+  step11SelectedIds?: number[];
 }
 
 function formatUsd(value: number): string {
@@ -157,6 +159,8 @@ export function PipelineView({
   factCheckAppliedCorrections,
   coverImageUrl,
   tokenUsageSummary,
+  step11Critiques = [],
+  step11SelectedIds = [],
 }: PipelineViewProps) {
   const router = useRouter();
   const [activeStep, setActiveStep] = useState(initialStep);
@@ -175,7 +179,7 @@ export function PipelineView({
   const [step11FormatRunId, setStep11FormatRunId] = useState(0);
   const step8DraftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Shared document styling state — set in step 10, consumed in step 11
+  // Shared document styling state -?set in step 10, consumed in step 11
   const [documentColors, setDocumentColors] = useState<DocumentColors>(DEFAULT_COLORS);
   const [liveCoverImageUrl, setLiveCoverImageUrl] = useState<string | undefined>(coverImageUrl);
 
@@ -184,17 +188,7 @@ export function PipelineView({
     setLiveCoverImageUrl(coverImageUrl);
   }, [coverImageUrl]);
 
-  const handleColorsChange = useCallback((palette: ColorPaletteEntry[]) => {
-    const [primary, secondary, accent, neutral, muted, surface] = palette;
-    setDocumentColors({
-      primary:   primary?.hex   ?? DEFAULT_COLORS.primary,
-      secondary: secondary?.hex ?? DEFAULT_COLORS.secondary,
-      accent:    accent?.hex    ?? DEFAULT_COLORS.accent,
-      neutral:   neutral?.hex   ?? DEFAULT_COLORS.neutral,
-      muted:     muted?.hex     ?? DEFAULT_COLORS.muted,
-      surface:   surface?.hex   ?? DEFAULT_COLORS.surface,
-    });
-  }, []);
+  
 
   // Step 7 editor ref + state (for floating bar actions)
   const editorRef = useRef<InlineEditorHandle | null>(null);
@@ -275,7 +269,7 @@ export function PipelineView({
   const isNewStep = activeStep >= project.currentStage;
 
   async function goToNextStep() {
-    // Step 11 (Edit for Style) is optional — complete it before advancing
+    // Step 11 (Edit for Style) is optional -?complete it before advancing
     if (activeStep === 11) {
       setOptionalStepCompleting(activeStep);
       try {
@@ -412,7 +406,7 @@ export function PipelineView({
                 currentStatus={status}
                 disabled={!canRunStep4}
                 disabledReason="Complete Step 3 to run this step."
-                autoRun={canRunStep4}
+
                 onRunningChange={setStep4Running}
               />
             </div>
@@ -463,7 +457,7 @@ export function PipelineView({
                 currentStatus={status}
                 disabled={!canRunStep6}
                 disabledReason="Complete Step 5 to run this step."
-                autoRun={canRunStep6}
+
                 onRunningChange={setStep6Running}
               />
             </div>
@@ -510,7 +504,7 @@ export function PipelineView({
               currentStatus={status}
               disabled={!canRunStep8}
               disabledReason="Complete Step 7 to run this step."
-              autoRun={canRunStep8}
+
               onRunningChange={setStep8Running}
               hideButton
             />
@@ -579,7 +573,7 @@ export function PipelineView({
                 projectTitle={project.title}
                 companyName={brief?.companyName}
                 onGeneratingChange={setCoverImagesGenerating}
-                onColorsChange={handleColorsChange}
+
                 onCoverImageChange={setLiveCoverImageUrl}
               />
             )}
@@ -674,7 +668,7 @@ export function PipelineView({
               <div>
                 <p className="text-sm font-medium">Token Usage</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Input {tokenUsageSummary.totalInputTokens.toLocaleString()} • Output {tokenUsageSummary.totalOutputTokens.toLocaleString()}
+                  Input {tokenUsageSummary.totalInputTokens.toLocaleString()} -?Output {tokenUsageSummary.totalOutputTokens.toLocaleString()}
                 </p>
               </div>
               <div className="text-right">
@@ -686,7 +680,7 @@ export function PipelineView({
               Total {tokenUsageSummary.totalTokens.toLocaleString()} tokens across {tokenUsageSummary.models.length.toLocaleString()} model
               {tokenUsageSummary.models.length === 1 ? "" : "s"}
               {tokenUsageSummary.unpricedInputTokens + tokenUsageSummary.unpricedOutputTokens > 0
-                ? ` • ${(
+                ? ` -?${(
                     tokenUsageSummary.unpricedInputTokens + tokenUsageSummary.unpricedOutputTokens
                   ).toLocaleString()} tokens are not priced yet`
                 : ""}
@@ -722,11 +716,11 @@ export function PipelineView({
 
                   <span className="text-sm font-medium text-foreground truncate">
                     {(activeStep === 11 && activeStatus !== "completed")
-                      ? "Optional step — continue anytime or run it before moving on."
+                      ? "Optional step - continue anytime or run it before moving on."
                       : activeStatus === "completed"
                       ? STEP_COMPLETION_MESSAGES[activeStep]
                       : activeStatus === "running"
-                        ? "Step is running…"
+                        ? "Step is running..."
                         : activeStatus === "awaiting_human"
                           ? "Awaiting your input to continue."
                           : "Complete this step to continue."}
@@ -762,7 +756,7 @@ export function PipelineView({
                         onClick={() => void handleStep7Approve()}
                         disabled={step7IsApproving}
                       >
-                        {step7IsApproving ? "Saving…" : "Approve & Continue to Step 8"}
+                        {step7IsApproving ? "Saving..." : "Approve & Continue to Step 8"}
                       </Button>
                     </>
                   )}
@@ -790,11 +784,11 @@ export function PipelineView({
                         }
                       >
                         {activeStep === 8 && step8Submitting
-                          ? "Saving…"
+                          ? "Saving..."
                           : activeStep === 9 && step9Skipping
-                            ? "Saving…"
+                            ? "Saving..."
                           : activeStep === 11 && optionalStepCompleting === activeStep
-                            ? "Saving…"
+                            ? "Saving..."
                           : `Save and continue to Step ${activeStep + 1}`}
                       </Button>
                     ) : (
@@ -805,7 +799,7 @@ export function PipelineView({
                           disabled={activeStep === 11 && optionalStepCompleting === activeStep}
                         >
                           {activeStep === 11 && optionalStepCompleting === activeStep
-                            ? "Saving…"
+                            ? "Saving..."
                             : `Save and continue to Step ${activeStep + 1}`}
                         </Button>
                       )
@@ -841,7 +835,7 @@ export function PipelineView({
                   {activeStatus === "completed"
                     ? STEP_COMPLETION_MESSAGES[activeStep]
                     : activeStatus === "running"
-                      ? "Step is running…"
+                        ? "Step is running..."
                       : activeStatus === "awaiting_human"
                         ? "Awaiting your input to continue."
                         : "Complete this step to continue."}
@@ -907,3 +901,9 @@ function getPrerequisiteMessage(
     ? null
     : `Complete Step ${requiredStep} to run this step.`;
 }
+
+
+
+
+
+

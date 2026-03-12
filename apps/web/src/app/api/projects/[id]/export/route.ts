@@ -11,7 +11,85 @@ import {
   AlignmentType,
   Packer,
 } from "docx";
-import { buildStyledExportHtml } from "@/lib/export-html";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { buildStyledExportHtml, buildFlowingPdfHtml } from "@/lib/export-html";
+
+/* ------------------------------------------------------------------ */
+/*  Inline external assets as base64 data URIs so Puppeteer on the    */
+/*  worker has zero external network dependencies.                     */
+/* ------------------------------------------------------------------ */
+
+function guessMime(url: string): string {
+  const l = url.toLowerCase();
+  if (l.includes(".png")) return "image/png";
+  if (l.includes(".jpg") || l.includes(".jpeg")) return "image/jpeg";
+  if (l.includes(".svg")) return "image/svg+xml";
+  if (l.includes(".gif")) return "image/gif";
+  if (l.includes(".webp")) return "image/webp";
+  if (l.includes(".ttf")) return "font/ttf";
+  if (l.includes(".woff2")) return "font/woff2";
+  if (l.includes(".woff")) return "font/woff";
+  return "application/octet-stream";
+}
+
+async function inlineHtmlAssets(
+  html: string,
+  origin?: string
+): Promise<string> {
+  const urlSet = new Set<string>();
+
+  // Collect src="https://..." URLs
+  const srcRe = /src=(["'])(https?:\/\/[^"']+)\1/g;
+  let m: RegExpExecArray | null;
+  while ((m = srcRe.exec(html)) !== null) {
+    if (m[2]) urlSet.add(m[2]);
+  }
+
+  // Collect url("https://...") / url('https://...') / url(https://...) URLs
+  const urlFnRe = /url\((["']?)(https?:\/\/[^"')\s]+)\1\)/g;
+  while ((m = urlFnRe.exec(html)) !== null) {
+    if (m[2]) urlSet.add(m[2]);
+  }
+
+  if (urlSet.size === 0) return html;
+
+  const replacements = new Map<string, string>();
+
+  await Promise.all(
+    [...urlSet].map(async (url) => {
+      try {
+        // Same-origin assets → read from public/ directory (no HTTP needed)
+        if (origin && url.startsWith(origin + "/")) {
+          const relativePath = url.slice(origin.length); // e.g. "/clermont-logo.png"
+          const filePath = join(process.cwd(), "public", relativePath);
+          const buf = readFileSync(filePath);
+          const ct = guessMime(url);
+          replacements.set(
+            url,
+            `data:${ct};base64,${buf.toString("base64")}`
+          );
+          return;
+        }
+
+        // External assets → fetch with timeout
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) return;
+        const buf = Buffer.from(await res.arrayBuffer());
+        const ct = res.headers.get("content-type") || guessMime(url);
+        replacements.set(url, `data:${ct};base64,${buf.toString("base64")}`);
+      } catch {
+        // leave original URL — Puppeteer will just skip the asset
+      }
+    })
+  );
+
+  for (const [url, dataUri] of replacements) {
+    html = html.split(url).join(dataUri);
+  }
+
+  return html;
+}
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -206,13 +284,28 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const workerSecret = process.env["WORKER_SECRET"] ?? "";
 
   try {
+    // Build flowing CSS-layout HTML for PDF (no fixed-height pages = no clipping)
+    const flowingPdfHtml = buildFlowingPdfHtml({
+      content: finalVersion.content,
+      projectTitle: title,
+      companyName: project.title,
+      dealType: undefined,
+      coverImageUrl,
+      assetBaseUrl: req.nextUrl.origin,
+    });
+
+    // Inline all external images/fonts as base64 so the worker's Puppeteer
+    // doesn't need to fetch anything over the network.
+    const inlinedHtml = await inlineHtmlAssets(flowingPdfHtml, req.nextUrl.origin);
+
     const workerRes = await fetch(`${workerUrl}/export/pdf`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-worker-secret": workerSecret,
       },
-      body: JSON.stringify({ projectId, html: styledHtml }),
+      body: JSON.stringify({ projectId, html: inlinedHtml }),
+      signal: AbortSignal.timeout(50_000), // stay under Vercel 60s limit
     });
 
     if (!workerRes.ok) {

@@ -23,7 +23,7 @@ export function IntegrateCritiquesStep({
   onRunningChange,
 }: IntegrateCritiquesStepProps) {
   const canRun = stage11Status === "completed";
-  const trigger = useStepTrigger(projectId, 12, stage12Status, canRun);
+  const trigger = useStepTrigger(projectId, 12, stage12Status);
 
   useEffect(() => {
     onRunningChange?.(trigger.isRunning);

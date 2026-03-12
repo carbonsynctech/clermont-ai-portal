@@ -64,7 +64,7 @@ export function VersionViewer({ version }: VersionViewerProps) {
         </Button>
       </div>
 
-      <div className="text-sm text-muted-foreground">
+      <div className="text-sm text-muted-foreground" suppressHydrationWarning>
         {version.internalLabel} · {new Date(version.createdAt).toLocaleString()}
       </div>
 

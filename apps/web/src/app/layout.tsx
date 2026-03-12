@@ -51,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase,
-    title: "Clermont Group | AI Content Portal 2026",
+    title: "Clermont Group | Clermont AI Portal 2026",
     description:
       "Create high-quality investment memos faster with an AI-assisted, auditable workflow for research, drafting, review, and export.",
     alternates: {
@@ -60,13 +60,13 @@ export async function generateMetadata(): Promise<Metadata> {
     icons: {
       icon: [
         { url: "/favicon.ico" },
-        { url: "/fleur-de-lis.png", type: "image/png" },
+        { url: "/site-icon.png", type: "image/png" },
       ],
       shortcut: ["/favicon.ico"],
-      apple: [{ url: "/fleur-de-lis.png", type: "image/png" }],
+      apple: [{ url: "/site-icon.png", type: "image/png" }],
     },
     openGraph: {
-      title: "Clermont Group | AI Content Portal 2026",
+      title: "Clermont Group | Clermont AI Portal 2026",
       description:
         "Turn source material into investor-ready memos with a structured AI workflow, human review checkpoints, and polished exports.",
       url: requestOrigin,
@@ -75,7 +75,7 @@ export async function generateMetadata(): Promise<Metadata> {
           url: socialPreviewImage,
           width: 1200,
           height: 630,
-          alt: "AI Content Portal social preview",
+          alt: "Clermont AI Portal social preview",
         },
       ],
       type: "website",
@@ -96,7 +96,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

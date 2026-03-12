@@ -1,43 +1,50 @@
-import { spawn } from "child_process";
-import path from "path";
+// ── Web search–based person lookup ──────────────────────────────────────────
+//
+// Replaces the old social-analyzer (OSINT) approach.
+// Searches the web for a person's LinkedIn profile and professional info.
+// Primary: Brave Search API (free 2000 queries/month — set BRAVE_SEARCH_API_KEY)
+// Fallback: Google Custom Search (set GOOGLE_CSE_KEY + GOOGLE_CSE_CX) or basic DuckDuckGo
 
-// ── Web search types ──────────────────────────────────────────────────────────
+// ── Types ───────────────────────────────────────────────────────────────────
 
 interface BraveWebResult {
   title?: string;
   description?: string;
   url?: string;
+  extra_snippets?: string[];
 }
 
 interface BraveSearchResponse {
   web?: { results?: BraveWebResult[] };
+  infobox?: {
+    results?: Array<{
+      title?: string;
+      description?: string;
+      long_desc?: string;
+      attributes?: Array<{ label?: string; value?: string }>;
+    }>;
+  };
 }
 
-interface DuckDuckGoResponse {
-  Heading?: string;
-  AbstractText?: string;
-  AbstractSource?: string;
+interface GoogleCseItem {
+  title?: string;
+  snippet?: string;
+  link?: string;
+  pagemap?: {
+    metatags?: Array<Record<string, string>>;
+  };
 }
 
-// ── Person lookup types ───────────────────────────────────────────────────────
-
-export interface PersonLookupResult {
-  found: boolean;
-  name?: string;
-  headline?: string;
-  summary?: string;
-  platforms?: Array<{
-    platform: string;
-    url: string;
-  }>;
+interface GoogleCseResponse {
+  items?: GoogleCseItem[];
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Brave Search ────────────────────────────────────────────────────────────
 
 async function searchBrave(query: string, apiKey: string): Promise<string | null> {
   try {
     const res = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&text_decorations=false`,
       {
         headers: { Accept: "application/json", "X-Subscription-Token": apiKey },
         signal: AbortSignal.timeout(10_000),
@@ -46,16 +53,79 @@ async function searchBrave(query: string, apiKey: string): Promise<string | null
     if (!res.ok) return null;
 
     const data = (await res.json()) as BraveSearchResponse;
-    const snippets = (data.web?.results ?? [])
-      .filter((r) => r.title ?? r.description)
-      .map((r) => [r.title, r.description].filter(Boolean).join(": "))
-      .slice(0, 5);
+    const parts: string[] = [];
 
-    return snippets.length > 0 ? snippets.join("\n") : null;
+    // Extract infobox if present (rich knowledge panel)
+    const infobox = data.infobox?.results?.[0];
+    if (infobox) {
+      if (infobox.title) parts.push(`Name: ${infobox.title}`);
+      if (infobox.description) parts.push(`Summary: ${infobox.description}`);
+      if (infobox.long_desc) parts.push(`Details: ${infobox.long_desc}`);
+      if (infobox.attributes) {
+        for (const attr of infobox.attributes) {
+          if (attr.label && attr.value) parts.push(`${attr.label}: ${attr.value}`);
+        }
+      }
+    }
+
+    // Extract web results
+    const results = data.web?.results ?? [];
+    for (const r of results) {
+      const snippets: string[] = [];
+      if (r.title) snippets.push(r.title);
+      if (r.description) snippets.push(r.description);
+      if (r.extra_snippets) snippets.push(...r.extra_snippets);
+      if (snippets.length > 0) {
+        parts.push(snippets.join(" — "));
+      }
+    }
+
+    return parts.length > 0 ? parts.join("\n") : null;
   } catch {
     return null;
   }
 }
+
+// ── Google Custom Search ────────────────────────────────────────────────────
+
+async function searchGoogleCse(query: string, apiKey: string, cx: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&key=${apiKey}&cx=${cx}&num=5`,
+      { signal: AbortSignal.timeout(10_000) },
+    );
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as GoogleCseResponse;
+    const items = data.items ?? [];
+    const parts: string[] = [];
+
+    for (const item of items) {
+      const snippets: string[] = [];
+      if (item.title) snippets.push(item.title);
+      if (item.snippet) snippets.push(item.snippet);
+
+      // Extract LinkedIn og:title / og:description from page metatags if available
+      const meta = item.pagemap?.metatags?.[0];
+      if (meta) {
+        const ogTitle = meta["og:title"];
+        const ogDesc = meta["og:description"];
+        if (ogTitle && !snippets.includes(ogTitle)) snippets.push(ogTitle);
+        if (ogDesc) snippets.push(ogDesc);
+      }
+
+      if (snippets.length > 0) {
+        parts.push(snippets.join(" — "));
+      }
+    }
+
+    return parts.length > 0 ? parts.join("\n") : null;
+  } catch {
+    return null;
+  }
+}
+
+// ── DuckDuckGo Instant Answers (very limited but no key needed) ─────────────
 
 async function searchDuckDuckGo(query: string): Promise<string | null> {
   try {
@@ -65,140 +135,106 @@ async function searchDuckDuckGo(query: string): Promise<string | null> {
     );
     if (!res.ok) return null;
 
-    const data = (await res.json()) as DuckDuckGoResponse;
+    const data = (await res.json()) as {
+      Heading?: string;
+      AbstractText?: string;
+      RelatedTopics?: Array<{ Text?: string }>;
+    };
     const parts: string[] = [];
     if (data.Heading) parts.push(`Name: ${data.Heading}`);
     if (data.AbstractText) parts.push(data.AbstractText);
+    if (data.RelatedTopics) {
+      for (const topic of data.RelatedTopics.slice(0, 3)) {
+        if (topic.Text) parts.push(topic.Text);
+      }
+    }
     return parts.length > 0 ? parts.join("\n") : null;
   } catch {
     return null;
   }
 }
 
+// ── Main lookup function ────────────────────────────────────────────────────
+
 /**
  * Search the web for a person's professional background.
- * Uses Brave Search if BRAVE_SEARCH_API_KEY is set, otherwise DuckDuckGo (no key needed).
- * Returns labelled search snippets, or null if nothing useful was found.
- */
-export async function searchForPerson(
-  name: string,
-  linkedinUrl?: string,
-): Promise<string | null> {
-  const query = linkedinUrl
-    ? `${name} LinkedIn professional`
-    : `${name} professional profile`;
-
-  const braveKey = process.env["BRAVE_SEARCH_API_KEY"];
-  if (braveKey) {
-    const result = await searchBrave(query, braveKey);
-    if (result) return `Web search results:\n${result}`;
-  }
-
-  const ddgResult = await searchDuckDuckGo(query);
-  if (ddgResult) return `Web search results:\n${ddgResult}`;
-
-  return null;
-}
-
-/**
- * Format a PersonLookupResult into human-readable text for AI consumption.
- */
-function formatPersonLookup(result: PersonLookupResult): string {
-  const parts: string[] = [];
-
-  if (result.name) parts.push(`Name: ${result.name}`);
-  if (result.headline) parts.push(`Headline: ${result.headline}`);
-  if (result.summary) parts.push(`Summary: ${result.summary}`);
-
-  if (result.platforms && result.platforms.length > 0) {
-    const platformList = result.platforms
-      .map((p) => `  - ${p.platform}: ${p.url}`)
-      .join("\n");
-    parts.push(`Social Profiles:\n${platformList}`);
-  }
-
-  return parts.join("\n");
-}
-
-/**
- * Lookup a person's public profile via social-analyzer (OSINT).
- * No credentials required.
  *
- * Returns formatted profile text, or null if:
- *   - The Python script fails or times out
- *   - No results found
+ * Runs up to 2 search queries for best results:
+ *   1. LinkedIn-specific query (if URL provided)
+ *   2. General professional profile query
  *
- * If webSearchFallback is true (default), will automatically fall back to
- * web search if OSINT lookup returns no results.
+ * Search engine priority:
+ *   Brave Search (BRAVE_SEARCH_API_KEY) > Google CSE (GOOGLE_CSE_KEY + GOOGLE_CSE_CX) > DuckDuckGo
  */
 export async function lookupPerson(
   name: string,
   linkedinUrl?: string,
-  webSearchFallback = true,
+  _webSearchFallback = true,
 ): Promise<string | null> {
-  // scripts/ lives alongside the worker app root (apps/worker/scripts/)
-  const scriptPath = path.resolve(process.cwd(), "scripts", "linkedin_fetch.py");
+  const braveKey = process.env["BRAVE_SEARCH_API_KEY"];
+  const googleKey = process.env["GOOGLE_CSE_KEY"];
+  const googleCx = process.env["GOOGLE_CSE_CX"];
 
-  // Build arguments for Python script
-  const args = [scriptPath, name];
+  // Build multiple query variations to maximize match chance
+  const queries: string[] = [];
+
   if (linkedinUrl) {
-    args.push("--linkedin-url", linkedinUrl);
+    const handleMatch = linkedinUrl.match(/linkedin\.com\/in\/([^/?#]+)/);
+    if (handleMatch) {
+      const handle = handleMatch[1];
+      // Try the handle directly as a search term + LinkedIn
+      queries.push(`${handle} LinkedIn`);
+      // Try the full URL in the query
+      queries.push(`linkedin.com/in/${handle}`);
+    }
   }
 
-  const osintResult = await new Promise<PersonLookupResult | null>((resolve) => {
-    let stdout = "";
-    let stderr = "";
-
-    const proc = spawn("python3", args, {
-      env: { ...process.env },
-    });
-
-    const timeout = setTimeout(() => {
-      proc.kill();
-      console.warn("[person-lookup] OSINT lookup timed out after 60s");
-      resolve(null);
-    }, 60_000);
-
-    proc.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-    proc.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-
-    proc.on("close", (code) => {
-      clearTimeout(timeout);
-      if (code !== 0) {
-        console.warn(`[person-lookup] Script failed (exit ${code ?? "?"}):\n${stderr.trim()}`);
-        resolve(null);
-        return;
-      }
-      try {
-        const result = JSON.parse(stdout.trim()) as PersonLookupResult;
-        resolve(result);
-      } catch {
-        console.warn("[person-lookup] Failed to parse JSON output:", stdout.slice(0, 200));
-        resolve(null);
-      }
-    });
-
-    proc.on("error", (err) => {
-      clearTimeout(timeout);
-      console.warn("[person-lookup] Failed to spawn python3:", err.message);
-      resolve(null);
-    });
-  });
-
-  // If OSINT found results, format and return
-  if (osintResult?.found) {
-    return `OSINT profile data:\n${formatPersonLookup(osintResult)}`;
+  // Clean the name — strip parenthetical parts for search
+  // e.g. "Edward (Zehua) Zhang" → search both "Edward Zehua Zhang" and "Edward Zhang"
+  const cleanName = name.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  const nameVariants = new Set([name, cleanName]);
+  // Also try without middle name/parenthetical
+  const nameParts = cleanName.split(" ");
+  if (nameParts.length > 2) {
+    nameVariants.add(`${nameParts[0]} ${nameParts[nameParts.length - 1]}`);
   }
 
-  // Fall back to web search if enabled
-  if (webSearchFallback) {
-    console.log("[person-lookup] OSINT returned no results, falling back to web search");
-    return searchForPerson(name, linkedinUrl);
+  for (const variant of nameVariants) {
+    queries.push(`"${variant}" LinkedIn professional`);
   }
 
-  return null;
+  // Deduplicate queries
+  const uniqueQueries = [...new Set(queries)];
+
+  const allResults: string[] = [];
+
+  // Run a search function based on available API keys
+  async function search(query: string): Promise<string | null> {
+    if (braveKey) return searchBrave(query, braveKey);
+    if (googleKey && googleCx) return searchGoogleCse(query, googleKey, googleCx);
+    return searchDuckDuckGo(query);
+  }
+
+  // Run first query, check if results look relevant; if not, try more
+  for (const query of uniqueQueries) {
+    const result = await search(query);
+    if (result) {
+      allResults.push(result);
+      // If we got results from a LinkedIn-specific query and they mention the person's name,
+      // that's probably good enough — stop early
+      if (allResults.length >= 2) break;
+    }
+  }
+
+  if (allResults.length === 0) {
+    console.log(`[person-lookup] No results found for "${name}"`);
+    return null;
+  }
+
+  // Deduplicate and combine results
+  const combined = allResults.join("\n\n");
+  return `Web search results for ${name}:\n${combined}`;
 }
+
+// Re-export for backward compatibility
+export { searchBrave, searchDuckDuckGo };

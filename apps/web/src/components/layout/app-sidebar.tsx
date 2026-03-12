@@ -53,7 +53,7 @@ import {
 const data = {
   teams: [
     {
-      name: "AI Content Portal",
+      name: "Clermont AI Portal",
       logo: FleurDeLis,
       plan: "Enterprise",
     },

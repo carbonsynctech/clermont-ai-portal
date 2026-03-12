@@ -12,7 +12,8 @@ Instructions:
 - Do NOT change any facts, figures, or analytical conclusions
 - Do NOT add new content or opinions
 - Return ONLY the polished memo content, no preamble, no commentary
-- Never use em dashes (—); replace them with a comma, colon, or rewrite the sentence instead`;
+- Never use em dashes (—); replace them with a comma, colon, or rewrite the sentence instead
+- CRITICAL: Any tabular data MUST use proper HTML table markup (<table>, <thead>, <tbody>, <tr>, <th>, <td>). NEVER output markdown pipe tables (| col1 | col2 |). If you encounter markdown pipe tables in the input, convert them to HTML tables. Markdown pipe tables render as raw text in the final document`;
 }
 
 export function buildFinalStyleUserMessage(factCheckedContent: string): string {

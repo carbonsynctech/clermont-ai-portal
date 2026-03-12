@@ -50,7 +50,7 @@ export function FinalStylePassStep({
 }: FinalStylePassStepProps) {
   void finalStyledVersion;
   const canRun = stage8Status === "completed";
-  const trigger = useStepTrigger(projectId, 9, stage9Status, canRun);
+  const trigger = useStepTrigger(projectId, 9, stage9Status);
 
   useEffect(() => {
     onRunningChange?.(trigger.isRunning);

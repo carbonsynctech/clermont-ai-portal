@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { Check, Loader2, XCircle } from "lucide-react";
+import { Check, Lock, Loader2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Stage } from "@repo/db";
+
+const PREREQUISITE_STEP: Record<number, number> = {
+  2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 5, 8: 5, 9: 8, 10: 9, 11: 10, 12: 11, 13: 12,
+};
 
 const STEP_NAMES: Record<number, string> = {
   1: "Define Task",
   2: "Select Personas",
   3: "Source Material",
-  4: "Generate Drafts",
+  4: "Generate Opinions",
   5: "Synthesize",
   6: "Fact-Check",
   7: "Human Review",
@@ -89,6 +93,8 @@ interface PipelineStepNavProps {
   onStepClick: (step: number) => void;
   /** Override the displayed status for specific steps (e.g. background jobs not tied to stage status) */
   stepStatusOverrides?: Partial<Record<number, StageStatus>>;
+  /** Steps optimistically marked as completed during transitions (before server data arrives) */
+  completedStepOverrides?: Set<number>;
 }
 
 export function PipelineStepNav({
@@ -97,6 +103,7 @@ export function PipelineStepNav({
   activeStep,
   onStepClick,
   stepStatusOverrides,
+  completedStepOverrides,
 }: PipelineStepNavProps) {
   const stageMap = new Map(stages.map((s) => [s.stepNumber, s]));
 
@@ -115,6 +122,25 @@ export function PipelineStepNav({
                 const baseStatus = (stage?.status as StageStatus) ?? "pending";
                 const status = stepStatusOverrides?.[step] ?? baseStatus;
                 const isActive = step === activeStep;
+
+                // A step is locked if its prerequisite step is not completed
+                const prereq = PREREQUISITE_STEP[step];
+                const prereqStatus = prereq ? (stageMap.get(prereq)?.status as StageStatus | undefined) ?? "pending" : "completed";
+                const isLocked = prereqStatus !== "completed" && !(prereq !== undefined && completedStepOverrides?.has(prereq));
+
+                if (isLocked) {
+                  return (
+                    <div
+                      key={step}
+                      className="w-full flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm text-left opacity-40 cursor-not-allowed select-none"
+                    >
+                      <div className="size-6 rounded-full flex items-center justify-center shrink-0 border-2 border-muted-foreground/25 text-muted-foreground/40">
+                        <Lock className="size-3" />
+                      </div>
+                      <span className="truncate text-muted-foreground">{STEP_NAMES[step]}</span>
+                    </div>
+                  );
+                }
 
                 return (
                   <Link

@@ -1,4 +1,4 @@
-# AI Content Portal – Phase 1 Foundation Implementation Plan
+# Clermont AI Portal – Phase 1 Foundation Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
@@ -713,7 +713,7 @@ git commit -m "feat: project overview page with pipeline status and Step 1 trigg
 **Full content:**
 
 ```markdown
-# CLAUDE.md – AI Content Portal
+# CLAUDE.md – Clermont AI Portal
 
 Read this fully before making any changes.
 
@@ -865,7 +865,7 @@ git commit -m "feat: configure Supabase and GitHub MCP servers"
 
 **Step 2:** Populate `README.md`:
 ```markdown
-# AI Content Portal
+# Clermont AI Portal
 
 AI-powered investment memo creation portal automating a 13-step SOP.
 

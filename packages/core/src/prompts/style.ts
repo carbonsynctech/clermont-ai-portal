@@ -18,7 +18,9 @@ Preserve all substantive content — your job is style, not substance.
 </edited_draft>
 
 Important: Do not add meta-commentary outside the XML tags. Your entire response must be the two XML blocks.
-Never use em dashes (—) in the edited draft; replace them with a comma, colon, or rewrite the sentence instead.`;
+Never use em dashes (—) in the edited draft; replace them with a comma, colon, or rewrite the sentence instead.
+
+CRITICAL TABLE FORMATTING RULE: Any tabular data in the edited draft MUST use proper HTML table markup (<table>, <thead>, <tbody>, <tr>, <th>, <td>). NEVER output markdown pipe tables (| col1 | col2 |). If the input draft contains markdown pipe tables, convert them to HTML tables. This is essential because markdown pipe tables render as raw text in the final document.`;
 }
 
 export function buildStyleEditUserMessage(

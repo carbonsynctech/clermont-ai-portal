@@ -25,7 +25,6 @@ export function useStepTrigger(
   projectId: string,
   stepNumber: number,
   currentStatus: string,
-  autoRun = false,
 ): StepTriggerState {
   const router = useRouter();
 
@@ -34,16 +33,19 @@ export function useStepTrigger(
   const outputKey = `output-${projectId}-${stepNumber}`;
 
   // Restore jobId from sessionStorage so polling survives navigation
-  const [jobId, setJobId] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return sessionStorage.getItem(jobKey);
-  });
+  // NOTE: Always init as null/"" to avoid hydration mismatch, then sync in useEffect
+  const [jobId, setJobId] = useState<string | null>(null);
 
   // Restore last output so completed steps stay visible after navigation
-  const [cachedOutput, setCachedOutput] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return sessionStorage.getItem(outputKey) ?? "";
-  });
+  const [cachedOutput, setCachedOutput] = useState<string>("");
+
+  // Hydration-safe: restore from sessionStorage after mount
+  useEffect(() => {
+    const storedJob = sessionStorage.getItem(jobKey);
+    if (storedJob) setJobId(storedJob);
+    const storedOutput = sessionStorage.getItem(outputKey);
+    if (storedOutput) setCachedOutput(storedOutput);
+  }, [jobKey, outputKey]);
 
   const [isDispatching, setIsDispatching] = useState(false);
   const [hasDispatched, setHasDispatched] = useState(false);
@@ -52,7 +54,6 @@ export function useStepTrigger(
   const { status, isPolling, error: pollError, elapsedSeconds, partialOutput } =
     useJobStatus(jobId);
   const outputRef = useRef<HTMLPreElement | null>(null);
-  const autoRunFiredRef = useRef(false);
 
   const isFailed = status === "failed";
   const isDone = status === "completed" || isFailed;
@@ -153,13 +154,6 @@ export function useStepTrigger(
     }
   }, [projectId, stepNumber, jobKey, outputKey]);
 
-  useEffect(() => {
-    if (!autoRun || autoRunFiredRef.current) return;
-    if (currentStatus === "completed" || currentStatus === "running") return;
-    autoRunFiredRef.current = true;
-    void handleRun();
-  }, [autoRun, currentStatus, handleRun]);
-
   return { isRunning, isDispatching, phase, showError, elapsedSeconds, partialOutput: effectiveOutput, outputRef, handleRun, handleReset };
 }
 
@@ -175,16 +169,22 @@ interface StepTriggerButtonProps {
   label: string;
   disabled?: boolean;
   disabledReason?: string;
+  variant?: "default" | "outline" | "secondary" | "ghost" | "link" | "destructive";
+  onBeforeRun?: () => Promise<void>;
 }
 
-export function StepTriggerButton({ trigger, label, disabled = false, disabledReason }: StepTriggerButtonProps) {
+export function StepTriggerButton({ trigger, label, disabled = false, disabledReason, variant = "default", onBeforeRun }: StepTriggerButtonProps) {
   const { isRunning, isDispatching, handleRun, handleReset } = trigger;
 
   return (
     <div className="flex items-center gap-2">
       <Button
         size="sm"
-        onClick={() => void handleRun()}
+        variant={variant}
+        onClick={async () => {
+          if (onBeforeRun) await onBeforeRun();
+          void handleRun();
+        }}
         disabled={disabled || isRunning}
       >
         {isRunning ? (
@@ -289,9 +289,9 @@ interface StepTriggerProps {
   currentStatus: string;
   disabled?: boolean;
   disabledReason?: string;
-  autoRun?: boolean;
   onRunningChange?: (running: boolean) => void;
   hideButton?: boolean;
+  hideOutput?: boolean;
 }
 
 export function StepTrigger({
@@ -301,11 +301,11 @@ export function StepTrigger({
   currentStatus,
   disabled = false,
   disabledReason,
-  autoRun = false,
   onRunningChange,
   hideButton = false,
+  hideOutput = false,
 }: StepTriggerProps) {
-  const trigger = useStepTrigger(projectId, stepNumber, currentStatus, autoRun);
+  const trigger = useStepTrigger(projectId, stepNumber, currentStatus);
 
   useEffect(() => {
     onRunningChange?.(trigger.isRunning);
@@ -316,7 +316,7 @@ export function StepTrigger({
       {!hideButton && (
         <StepTriggerButton trigger={trigger} label={label} disabled={disabled} disabledReason={disabledReason} />
       )}
-      <StepTriggerOutput trigger={trigger} />
+      {!hideOutput && <StepTriggerOutput trigger={trigger} />}
     </div>
   );
 }

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { db } from "@repo/db";
 import { projects, sourceMaterials, auditLogs } from "@repo/db";
 import { workerClient } from "@/lib/worker-client";
 import { eq, and } from "drizzle-orm";
-import { randomUUID } from "crypto";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -42,36 +41,33 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  // Parse multipart form data
-  const formData = await req.formData();
-  const file = formData.get("file");
-  const materialTypeRaw = formData.get("materialType");
+  // Accept JSON body with metadata (file already uploaded directly to storage)
+  const body = (await req.json()) as {
+    storagePath: string;
+    originalFilename: string;
+    mimeType: string;
+    fileSizeBytes: number;
+    materialType?: string;
+  };
 
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "file is required" }, { status: 400 });
+  const { storagePath, originalFilename, mimeType, fileSizeBytes } = body;
+
+  if (!storagePath || !originalFilename || !mimeType || !fileSizeBytes) {
+    return NextResponse.json(
+      { error: "storagePath, originalFilename, mimeType, and fileSizeBytes are required" },
+      { status: 400 }
+    );
+  }
+
+  // Validate the storage path belongs to this user/project
+  if (!storagePath.startsWith(`${user.id}/${projectId}/`)) {
+    return NextResponse.json({ error: "Invalid storage path" }, { status: 403 });
   }
 
   const materialType =
-    typeof materialTypeRaw === "string" && VALID_MATERIAL_TYPES.includes(materialTypeRaw as MaterialType)
-      ? (materialTypeRaw as MaterialType)
+    typeof body.materialType === "string" && VALID_MATERIAL_TYPES.includes(body.materialType as MaterialType)
+      ? (body.materialType as MaterialType)
       : "other";
-  const originalFilename = file.name;
-  const mimeType = file.type || "application/octet-stream";
-  const fileBuffer = Buffer.from(await file.arrayBuffer());
-  const fileSizeBytes = fileBuffer.length;
-
-  // Upload to Supabase Storage
-  const storagePath = `${user.id}/${projectId}/${randomUUID()}-${originalFilename}`;
-  const adminSupabase = createAdminClient();
-
-  const { error: uploadError } = await adminSupabase.storage
-    .from("source-materials")
-    .upload(storagePath, fileBuffer, { contentType: mimeType });
-
-  if (uploadError) {
-    console.error("Storage upload error:", uploadError);
-    return NextResponse.json({ error: "Failed to upload file to storage" }, { status: 500 });
-  }
 
   // Insert source_materials row
   const [material] = await db

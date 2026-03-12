@@ -172,7 +172,7 @@ export function DashboardExplorer({ projects, mode }: DashboardExplorerProps) {
               {(() => {
                 const { label, date } = getDateInfo(project);
                 return (
-                  <span className="text-xs text-muted-foreground/60 whitespace-nowrap">
+                  <span className="text-xs text-muted-foreground/60 whitespace-nowrap" suppressHydrationWarning>
                     {label} {formatDate(date)}
                   </span>
                 );
@@ -217,7 +217,7 @@ export function DashboardExplorer({ projects, mode }: DashboardExplorerProps) {
                 {(() => {
                   const { label, date } = getDateInfo(project);
                   return (
-                    <span className="text-xs text-muted-foreground/60 whitespace-nowrap">
+                    <span className="text-xs text-muted-foreground/60 whitespace-nowrap" suppressHydrationWarning>
                       {label} {formatDate(date)}
                     </span>
                   );

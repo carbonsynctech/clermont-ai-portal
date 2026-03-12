@@ -4,6 +4,7 @@ import { db } from "@repo/db";
 import { projects, styleGuides, stages } from "@repo/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { sanitizeFilename } from "@/lib/sanitize-filename";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -40,8 +41,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const mimeType = file.type || "application/octet-stream";
   const fileBuffer = Buffer.from(await file.arrayBuffer());
 
+  const safeFilename = sanitizeFilename(originalFilename);
+
   // Upload to Supabase Storage
-  const storagePath = `${user.id}/${projectId}/style-guide-${randomUUID()}-${originalFilename}`;
+  const storagePath = `${user.id}/${projectId}/style-guide-${randomUUID()}-${safeFilename}`;
   const adminSupabase = createAdminClient();
 
   const { error: uploadError } = await adminSupabase.storage

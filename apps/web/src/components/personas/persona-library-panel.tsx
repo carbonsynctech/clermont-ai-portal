@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, Library } from "lucide-react";
+import { Search, Library, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PersonaCardV2 } from "./persona-card-v2";
@@ -36,6 +37,7 @@ export function PersonaLibraryPanel({
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [drawerPersona, setDrawerPersona] = useState<Persona | null>(null);
+  const [visibleCount, setVisibleCount] = useState(6);
 
   const fetchPersonas = useCallback(async () => {
     setLoading(true);
@@ -62,6 +64,11 @@ export function PersonaLibraryPanel({
     const timer = setTimeout(() => void fetchPersonas(), 400);
     return () => clearTimeout(timer);
   }, [fetchPersonas]);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(6);
+  }, [q, activeTag]);
 
   const normalizedQuery = q.trim().toLowerCase();
   const queryFilteredInjected = injectedPersonas.filter((persona) => {
@@ -164,20 +171,35 @@ export function PersonaLibraryPanel({
             : "The library is empty — generate personas above to populate it."}
         </p>
       ) : (
-        <div className="grid grid-cols-3 gap-3">
-          {mergedPersonas.map((persona) => (
-            <PersonaCardV2
-              key={persona.id}
-              persona={persona}
-              isSelected={selectedIds.includes(persona.id)}
-              onSelect={() => onSelect(persona)}
-              onView={() => setDrawerPersona(persona)}
-              onDelete={() => void handleDelete(persona.id)}
-              isDeleting={deletingId === persona.id}
-              disableSelect={selectedCount >= maxCount && !selectedIds.includes(persona.id)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            {mergedPersonas.slice(0, visibleCount).map((persona) => (
+              <PersonaCardV2
+                key={persona.id}
+                persona={persona}
+                isSelected={selectedIds.includes(persona.id)}
+                onSelect={() => onSelect(persona)}
+                onView={() => setDrawerPersona(persona)}
+                onDelete={() => void handleDelete(persona.id)}
+                isDeleting={deletingId === persona.id}
+                disableSelect={selectedCount >= maxCount && !selectedIds.includes(persona.id)}
+              />
+            ))}
+          </div>
+          {mergedPersonas.length > visibleCount && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVisibleCount((prev) => prev + 6)}
+                className="gap-1.5"
+              >
+                <ChevronDown className="size-3.5" />
+                Load More ({mergedPersonas.length - visibleCount} remaining)
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <PersonaDrawer

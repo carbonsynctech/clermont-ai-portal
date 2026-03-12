@@ -46,11 +46,14 @@ exportRoute.post("/pdf", async (c) => {
 
   try {
     const page = await browser.newPage();
-    await page.setContent(body.html, { waitUntil: "networkidle0" });
+    page.setDefaultTimeout(30_000);
+    // Assets are inlined as base64 data URIs by the web API route,
+    // so we only need DOM ready — no external network fetches required.
+    await page.setContent(body.html, { waitUntil: "domcontentloaded" });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
-      margin: { top: "0", right: "0", bottom: "0", left: "0" },
+      preferCSSPageSize: true,
     });
 
     return new Response(pdf, {

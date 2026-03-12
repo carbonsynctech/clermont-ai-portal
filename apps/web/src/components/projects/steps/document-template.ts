@@ -36,6 +36,127 @@ export const DEFAULT_COLORS: DocumentColors = {
   surface: "#F8FAFC",
 };
 
+// ── Style presets ─────────────────────────────────────────────────────────────
+
+export interface StylePreset {
+  id: string;
+  name: string;
+  description: string;
+  colors: DocumentColors;
+  condensedRules: string;
+}
+
+export const STYLE_PRESETS: StylePreset[] = [
+  {
+    id: "corporate",
+    name: "Corporate Navy",
+    description: "Classic navy & gold, formal institutional tone",
+    colors: {
+      primary: "#0F2A4A",
+      secondary: "#1A5276",
+      accent: "#966E32",
+      neutral: "#404040",
+      muted: "#8C8C8C",
+      surface: "#F8FAFC",
+    },
+    condensedRules: [
+      "- Use formal, institutional tone throughout; avoid casual language or colloquialisms",
+      "- Write in third person; never use first or second person",
+      "- Use active voice where possible; avoid passive constructions",
+      "- No contractions (write \"do not\" instead of \"don't\")",
+      "- Section headings in Title Case; sub-headings in Sentence case",
+      "- Numbers below 10 written out; 10 and above as numerals",
+      "- Use Oxford comma in all lists",
+      "- Financial figures formatted with currency symbol and two decimal places",
+      "- Percentages written as numerals with % symbol (e.g. 12.5%)",
+      "- Avoid superlatives and unsubstantiated claims",
+      "- Every assertion must be supported by data or qualified with hedging language",
+      "- Never use em dashes; replace with comma, colon, or sentence rewrite",
+    ].join("\n"),
+  },
+  {
+    id: "modern",
+    name: "Modern Teal",
+    description: "Clean contemporary style, confident and direct",
+    colors: {
+      primary: "#0D3B4F",
+      secondary: "#1B6B7D",
+      accent: "#D4943A",
+      neutral: "#2D3748",
+      muted: "#A0AEC0",
+      surface: "#F7FAFC",
+    },
+    condensedRules: [
+      "- Adopt a confident, forward-looking professional tone",
+      "- Concise sentences; eliminate filler words and redundancy",
+      "- Lead each section with the key insight or conclusion",
+      "- Use bullet points for lists of three or more items",
+      "- Section headings in Sentence case; keep them action-oriented",
+      "- Numbers always as numerals, including 1-9",
+      "- Use Oxford comma in all lists",
+      "- Financial figures with currency symbol; round to nearest whole number where appropriate",
+      "- Bold key terms and metrics on first mention",
+      "- Favour short paragraphs (3-4 sentences max)",
+      "- Avoid jargon without immediate context or definition",
+      "- Never use em dashes; replace with comma, colon, or sentence rewrite",
+    ].join("\n"),
+  },
+  {
+    id: "minimal",
+    name: "Minimal Mono",
+    description: "Black & white, ultra-clean and structured",
+    colors: {
+      primary: "#1A1A1A",
+      secondary: "#333333",
+      accent: "#707070",
+      neutral: "#404040",
+      muted: "#999999",
+      surface: "#FAFAFA",
+    },
+    condensedRules: [
+      "- Write in a clear, precise, no-nonsense style",
+      "- Eliminate all decorative language; every word must earn its place",
+      "- Use short, declarative sentences; one idea per sentence",
+      "- Structure content with clear hierarchical headings",
+      "- Section headings in ALL CAPS; sub-headings in Sentence case",
+      "- Use numbered lists for sequential items, bullets for unordered",
+      "- Numbers always as numerals",
+      "- Financial data in tables where possible rather than inline text",
+      "- No adjectives unless they convey measurable information",
+      "- Avoid hedging language; state findings directly with supporting evidence",
+      "- Keep paragraphs to 2-3 sentences maximum",
+      "- Never use em dashes; replace with comma, colon, or sentence rewrite",
+    ].join("\n"),
+  },
+  {
+    id: "executive",
+    name: "Executive Burgundy",
+    description: "Rich burgundy & bronze, authoritative presence",
+    colors: {
+      primary: "#4A1525",
+      secondary: "#722F37",
+      accent: "#C4956A",
+      neutral: "#3D3D3D",
+      muted: "#8B8B8B",
+      surface: "#FAF8F5",
+    },
+    condensedRules: [
+      "- Use an authoritative, senior executive tone",
+      "- Write for a C-suite audience; assume financial literacy",
+      "- Lead with strategic implications before supporting detail",
+      "- Use formal language but allow measured emphasis for key conclusions",
+      "- Section headings in Title Case with strong action verbs",
+      "- Numbers below 10 written out; 10 and above as numerals",
+      "- Use Oxford comma in all lists",
+      "- Financial figures with full currency notation and appropriate precision",
+      "- Percentages written as numerals with % symbol",
+      "- Include comparative context for all metrics (YoY, vs. benchmark, etc.)",
+      "- Qualify risk statements with probability language where appropriate",
+      "- Never use em dashes; replace with comma, colon, or sentence rewrite",
+    ].join("\n"),
+  },
+];
+
 export function getDocumentCSS(colors: DocumentColors = DEFAULT_COLORS): string {
   return `
 @font-face {
@@ -302,6 +423,71 @@ export function getDocumentCSS(colors: DocumentColors = DEFAULT_COLORS): string 
 .page-content.page-content-flow .flow-columns strong {
   font-weight: 700;
   color: #3f3f3f;
+}
+
+/* Table groups: heading + optional intro paragraph + table kept together,
+   all spanning full width so the heading is always on the left. */
+.page-content .content-columns .table-group,
+.page-content .flow-columns .table-group {
+  column-span: all;
+  break-inside: avoid;
+}
+.page-content .flow-columns .table-group h2,
+.page-content .flow-columns .table-group h3 {
+  margin-top: 0;
+}
+.page-content .flow-columns .table-group p {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #4a4a4a;
+  margin-bottom: 6px;
+}
+
+/* Tables in content pages — span full width across both columns */
+.page-content .content-columns table,
+.page-content .flow-columns table {
+  column-span: all;
+  width: 100%;
+  border-collapse: collapse;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: ${colors.neutral};
+  margin: 12px 0 16px;
+  break-inside: avoid;
+  table-layout: fixed;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.page-content .content-columns th,
+.page-content .flow-columns th {
+  background: ${colors.primary};
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 2px solid ${colors.accent};
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.page-content .content-columns td,
+.page-content .flow-columns td {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.page-content .content-columns tr:last-child td,
+.page-content .flow-columns tr:last-child td {
+  border-bottom: none;
+}
+.page-content .content-columns tr:nth-child(even) td,
+.page-content .flow-columns tr:nth-child(even) td {
+  background: rgba(0,0,0,0.02);
 }
 
 /* Page number */

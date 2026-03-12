@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Image from "next/image";
 import { LoginForm } from "@/components/login-form";
 
@@ -13,7 +14,9 @@ export default function LoginPage() {
       />
       <div className="absolute inset-0 bg-black/70" />
       <div className="relative w-full max-w-sm md:max-w-4xl">
-        <LoginForm />
+        <Suspense>
+          <LoginForm />
+        </Suspense>
       </div>
     </div>
   );

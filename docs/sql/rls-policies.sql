@@ -1,5 +1,5 @@
 -- ============================================================
--- RLS Policies for AI Content Portal
+-- RLS Policies for Clermont AI Portal
 -- Run this in Supabase SQL Editor after running db:migrate
 -- ============================================================
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,15 +14,16 @@ import {
   FileUploadList,
   FileUploadTrigger,
 } from "@/components/ui/file-upload";
-import { Loader2, Upload, CheckCircle2, X, Files } from "lucide-react";
+import { Loader2, Upload, X, Files, Trash2 } from "lucide-react";
 import type { SourceMaterial } from "@repo/db";
 
 interface MaterialUploadProps {
   projectId: string;
   materials: SourceMaterial[];
+  onNavigate?: (step: number) => void;
 }
 
-export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
+export function MaterialUpload({ projectId, materials, onNavigate }: MaterialUploadProps) {
   const router = useRouter();
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -30,10 +31,18 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [lastUploaded, setLastUploaded] = useState<string | null>(null);
+  const [visibleMaterials, setVisibleMaterials] = useState<SourceMaterial[]>(materials);
+
+  // Sync visible materials when props change (e.g., new file uploaded)
+  useEffect(() => {
+    setVisibleMaterials((prev) => {
+      const deletedIds = new Set(prev.map((m) => m.id).filter((id) => !materials.find((m) => m.id === id)));
+      return materials.filter((m) => !deletedIds.has(m.id));
+    });
+  }, [materials]);
 
   const canUpload = selectedFiles.length > 0 && ndaAcknowledged;
-  const hasMaterials = materials.length > 0;
+  const hasMaterials = visibleMaterials.length > 0;
 
   async function handleUpload() {
     const selectedFile = selectedFiles[0];
@@ -42,14 +51,54 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
     setIsUploading(true);
     setUploadError(null);
 
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("ndaAcknowledged", "true");
-
     try {
+      // 1. Get a signed upload URL from the API
+      const urlRes = await fetch(`/api/projects/${projectId}/materials/upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: selectedFile.name,
+          contentType: selectedFile.type || "application/octet-stream",
+        }),
+      });
+
+      if (!urlRes.ok) {
+        const body = (await urlRes.json()) as { error?: string };
+        setUploadError(body.error ?? "Failed to get upload URL");
+        return;
+      }
+
+      const { signedUrl, token, storagePath } = (await urlRes.json()) as {
+        signedUrl: string;
+        token: string;
+        storagePath: string;
+      };
+
+      // 2. Upload file directly to Supabase Storage (bypasses Vercel 4.5 MB limit)
+      const uploadRes = await fetch(signedUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": selectedFile.type || "application/octet-stream",
+          "x-upsert": "true",
+        },
+        body: selectedFile,
+      });
+
+      if (!uploadRes.ok) {
+        setUploadError("Failed to upload file to storage. Please try again.");
+        return;
+      }
+
+      // 3. Register the material metadata with the API (small JSON payload)
       const res = await fetch(`/api/projects/${projectId}/materials`, {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storagePath,
+          originalFilename: selectedFile.name,
+          mimeType: selectedFile.type || "application/octet-stream",
+          fileSizeBytes: selectedFile.size,
+        }),
       });
 
       if (!res.ok) {
@@ -58,7 +107,26 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         return;
       }
 
-      setLastUploaded(selectedFile.name);
+      const { materialId } = (await res.json()) as { materialId: string };
+
+      // Optimistically add to the uploaded materials list
+      setVisibleMaterials((prev) => [
+        ...prev,
+        {
+          id: materialId,
+          projectId,
+          materialType: "other",
+          originalFilename: selectedFile.name,
+          storagePath,
+          mimeType: selectedFile.type || "application/octet-stream",
+          fileSizeBytes: selectedFile.size,
+          chunkCount: 0,
+          ndaAcknowledged: true,
+          extractedMetadata: null,
+          uploadedAt: new Date(),
+        },
+      ]);
+
       setSelectedFiles([]);
       setNdaAcknowledged(false);
       router.refresh();
@@ -67,6 +135,43 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
     } finally {
       setIsUploading(false);
     }
+  }
+
+  function handleDelete(materialId: string) {
+    // Optimistically remove from UI
+    setVisibleMaterials((prev) => prev.filter((m) => m.id !== materialId));
+
+    // Delete in background
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/materials/${materialId}`, {
+          method: "DELETE",
+        });
+
+        if (!res.ok) {
+          const body = (await res.json()) as { error?: string };
+          // Restore material if deletion failed
+          setVisibleMaterials((prev) => {
+            const deleted = materials.find((m) => m.id === materialId);
+            if (deleted && !prev.find((m) => m.id === deleted.id)) {
+              return [...prev, deleted];
+            }
+            return prev;
+          });
+          setUploadError(body.error ?? "Failed to delete material");
+        }
+      } catch {
+        // Restore material if network error
+        setVisibleMaterials((prev) => {
+          const deleted = materials.find((m) => m.id === materialId);
+          if (deleted && !prev.find((m) => m.id === deleted.id)) {
+            return [...prev, deleted];
+          }
+          return prev;
+        });
+        setUploadError("Network error. Failed to delete material.");
+      }
+    })();
   }
 
   async function handleFinalize() {
@@ -83,7 +188,14 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         return;
       }
 
-      router.push(`/projects/${projectId}?step=4`);
+      if (onNavigate) {
+        onNavigate(4);
+        window.history.replaceState(null, "", `/projects/${projectId}?step=4`);
+        router.refresh();
+      } else {
+        router.push(`/projects/${projectId}?step=4`);
+        router.refresh();
+      }
     } catch {
       setUploadError("Network error. Please try again.");
     } finally {
@@ -92,35 +204,39 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
   }
 
   async function handlePrimaryAction() {
-    if (hasMaterials) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
     await handleFinalize();
   }
 
   return (
     <div className="space-y-5">
       {/* Uploaded materials panel */}
-      {materials.length > 0 && (
+      {visibleMaterials.length > 0 && (
         <div className="rounded-xl border bg-card p-6 space-y-3">
           <div className="flex items-center gap-2">
             <Files className="size-4 text-muted-foreground" />
             <h3 className="font-medium text-base">Uploaded materials</h3>
           </div>
-          {materials.map((m) => (
+          {visibleMaterials.map((m) => (
             <div
               key={m.id}
               className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
                 <span className="truncate">{m.originalFilename}</span>
               </div>
-              {m.chunkCount > 0 && (
-                <span className="text-muted-foreground shrink-0 ml-2">{m.chunkCount} chunks</span>
-              )}
+              <div className="flex items-center gap-2 shrink-0 ml-2">
+                {m.chunkCount > 0 && (
+                  <span className="text-muted-foreground">{m.chunkCount} chunks</span>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => handleDelete(m.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
@@ -134,7 +250,10 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm text-muted-foreground">File (PDF, DOCX, TXT, CSV)</label>
+          <div className="flex items-baseline justify-between">
+            <label className="text-sm text-muted-foreground">File (PDF, DOCX, TXT, CSV)</label>
+            <span className="text-xs text-muted-foreground/60">Max 20 MB per file</span>
+          </div>
           <FileUpload
             className="w-full"
             value={selectedFiles}
@@ -147,6 +266,7 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
             onFileReject={(_, message) => setUploadError(message)}
             accept=".pdf,.txt,.docx,.doc,.csv"
             maxFiles={1}
+            maxSize={20 * 1024 * 1024}
           >
             <FileUploadDropzone>
               <div className="flex flex-col items-center gap-1 text-center">
@@ -154,8 +274,8 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
                   <Upload className="size-5 text-muted-foreground" />
                 </div>
                 <p className="font-medium text-sm">Drag & drop file here</p>
-                <p className="text-muted-foreground text-sm">
-                  Or click to browse (max 1 file)
+                <p className="text-muted-foreground text-xs">
+                  PDF, DOCX, TXT, or CSV — up to 20 MB
                 </p>
               </div>
               <FileUploadTrigger asChild>
@@ -194,9 +314,6 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         </label>
 
         {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
-        {lastUploaded && (
-          <p className="text-sm text-green-600">Uploaded: {lastUploaded}</p>
-        )}
 
         <Button
           size="sm"
@@ -223,9 +340,9 @@ export function MaterialUpload({ projectId, materials }: MaterialUploadProps) {
         <div className="flex items-center gap-3">
           <Files className="size-4 text-muted-foreground" />
           <span className="text-base text-muted-foreground">
-            {materials.length} source material{materials.length === 1 ? "" : "s"} uploaded
+            {visibleMaterials.length} source material{visibleMaterials.length === 1 ? "" : "s"} uploaded
           </span>
-          {materials.length > 0 && (
+          {visibleMaterials.length > 0 && (
             <Badge variant="secondary" className="text-sm h-5 px-1.5">
               Ready for Step 4
             </Badge>

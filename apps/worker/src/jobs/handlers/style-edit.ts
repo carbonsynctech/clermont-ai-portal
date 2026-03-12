@@ -34,30 +34,38 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
 
   if (!styleGuide) throw new Error(`Project ${projectId} has no style guide`);
 
-  // 4. Download style guide file
-  const adminSupabase = createAdminClient();
-  const { data: fileData, error: downloadError } = await adminSupabase.storage
-    .from("source-materials")
-    .download(styleGuide.storagePath);
-
-  if (downloadError ?? !fileData) {
-    throw new Error(`Failed to download style guide: ${String(downloadError?.message)}`);
-  }
-
-  const arrayBuffer = await fileData.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
+  // 4. Get style guide text — either from preset rules or by downloading file
   let styleGuideText: string;
-  if (
-    styleGuide.originalFilename.toLowerCase().endsWith(".pdf") ||
-    buffer[0] === 0x25 // PDF magic byte %
-  ) {
-    const parser = new PDFParse({ data: new Uint8Array(buffer) });
-    const result = await parser.getText();
-    styleGuideText = result.text;
-    await parser.destroy();
+  const isPreset = styleGuide.storagePath.startsWith("preset:");
+
+  if (isPreset && styleGuide.condensedRulesText) {
+    // Preset style: use pre-defined condensed rules directly
+    styleGuideText = styleGuide.condensedRulesText;
   } else {
-    styleGuideText = buffer.toString("utf-8");
+    // File-based style guide: download and parse
+    const adminSupabase = createAdminClient();
+    const { data: fileData, error: downloadError } = await adminSupabase.storage
+      .from("source-materials")
+      .download(styleGuide.storagePath);
+
+    if (downloadError ?? !fileData) {
+      throw new Error(`Failed to download style guide: ${String(downloadError?.message)}`);
+    }
+
+    const arrayBuffer = await fileData.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    if (
+      styleGuide.originalFilename.toLowerCase().endsWith(".pdf") ||
+      buffer[0] === 0x25 // PDF magic byte %
+    ) {
+      const parser = new PDFParse({ data: new Uint8Array(buffer) });
+      const result = await parser.getText();
+      styleGuideText = result.text;
+      await parser.destroy();
+    } else {
+      styleGuideText = buffer.toString("utf-8");
+    }
   }
 
   // Step 7: Fetch synthesis version to edit
@@ -89,7 +97,9 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
     messages: [
       {
         role: "user" as const,
-        content: buildStyleEditUserMessage(styleGuideText, synthesisContent),
+        content: isPreset
+          ? buildStyleEditUserMessage(styleGuideText, synthesisContent, styleGuideText)
+          : buildStyleEditUserMessage(styleGuideText, synthesisContent),
       },
     ],
     maxTokens: 8192,

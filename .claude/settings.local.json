@@ -37,7 +37,26 @@
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git push:*)",
-      "WebFetch(domain:)"
+      "WebFetch(domain:)",
+      "Bash(vercel env:*)",
+      "Bash(npx vercel:*)",
+      "Bash(npx supabase:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_bd142e2957cfb1f47fc313d5c0e1839974f5baf5\" npx supabase:*)",
+      "Bash(curl:*)",
+      "Bash(railway:*)",
+      "Bash(printf:*)",
+      "Bash(pip3 show:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python3:*)",
+      "Read(//private/tmp/**)",
+      "Bash(social-analyzer --cli --username edwardzehuazhang --metadata --silent --output json --folder /tmp/sa-test)",
+      "Bash(social-analyzer:*)",
+      "Bash(git:*)",
+      "Bash(lsof:*)",
+      "Bash(sips:*)",
+      "Read(//tmp/**)",
+      "Bash(rm /tmp/env-check)",
+      "Bash(brew install:*)"
     ]
   },
   "defaultMode": "bypassPermissions"

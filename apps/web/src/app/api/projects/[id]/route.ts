@@ -4,6 +4,7 @@ import { db } from "@repo/db";
 import { auditLogs, projects, sourceMaterials, styleGuides } from "@repo/db";
 import type { ProjectBriefData } from "@repo/db";
 import { and, eq } from "drizzle-orm";
+import { estimateTokens } from "@repo/core";
 
 export async function PATCH(
   req: NextRequest,
@@ -137,6 +138,9 @@ export async function PATCH(
   }
 
   if (typeof body.masterPrompt === "string") {
+    if (body.masterPrompt.trim() === "") {
+      return NextResponse.json({ error: "Master prompt cannot be empty" }, { status: 400 });
+    }
     updates.masterPrompt = body.masterPrompt;
   }
 
@@ -145,6 +149,20 @@ export async function PATCH(
     .set(updates)
     .where(and(eq(projects.id, id), eq(projects.ownerId, user.id)))
     .returning();
+
+  // Log master prompt edits
+  if (typeof body.masterPrompt === "string" && existing.masterPrompt !== body.masterPrompt) {
+    await db.insert(auditLogs).values({
+      projectId: id,
+      userId: user.id,
+      action: "master_prompt_edited",
+      stepNumber: 1,
+      payload: {
+        previousTokens: existing.masterPrompt ? estimateTokens(existing.masterPrompt) : 0,
+        newTokens: estimateTokens(body.masterPrompt),
+      },
+    });
+  }
 
   return NextResponse.json(updated);
 }

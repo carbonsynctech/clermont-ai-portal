@@ -646,6 +646,7 @@ function FileUpload(props: FileUploadProps) {
           data-disabled={disabled ? "" : undefined}
           data-slot="file-upload"
           dir={dir}
+          suppressHydrationWarning
           {...rootProps}
           className={cn("relative flex flex-col gap-2", className)}
         >
@@ -660,12 +661,13 @@ function FileUpload(props: FileUploadProps) {
             accept={accept}
             name={name}
             className="sr-only"
+            suppressHydrationWarning
             disabled={disabled}
             multiple={multiple}
             required={required}
             onChange={onInputChange}
           />
-          <div id={labelId} className="sr-only">
+          <div id={labelId} className="sr-only" suppressHydrationWarning>
             {label ?? "File upload"}
           </div>
         </RootPrimitive>
@@ -863,6 +865,7 @@ function FileUploadDropzone(props: FileUploadDropzoneProps) {
       data-invalid={invalid ? "" : undefined}
       data-slot="file-upload-dropzone"
       dir={context.dir}
+      suppressHydrationWarning
       tabIndex={context.disabled ? undefined : 0}
       {...dropzoneProps}
       className={cn(
@@ -951,6 +954,7 @@ function FileUploadList(props: FileUploadListProps) {
       data-slot="file-upload-list"
       data-state={shouldRender ? "active" : "inactive"}
       dir={context.dir}
+      suppressHydrationWarning
       {...listProps}
       className={cn(
         "data-[state=inactive]:fade-out-0 data-[state=active]:fade-in-0 data-[state=inactive]:slide-out-to-top-2 data-[state=active]:slide-in-from-top-2 flex flex-col gap-2 data-[state=active]:animate-in data-[state=inactive]:animate-out",
@@ -1040,6 +1044,7 @@ function FileUploadItem(props: FileUploadItemProps) {
         aria-labelledby={nameId}
         data-slot="file-upload-item"
         dir={context.dir}
+        suppressHydrationWarning
         {...itemProps}
         className={cn(
           "relative flex items-center gap-2.5 rounded-md border p-3",
@@ -1047,7 +1052,7 @@ function FileUploadItem(props: FileUploadItemProps) {
         )}
       >
         {props.children}
-        <span id={statusId} className="sr-only">
+        <span id={statusId} className="sr-only" suppressHydrationWarning>
           {statusText}
         </span>
       </ItemPrimitive>

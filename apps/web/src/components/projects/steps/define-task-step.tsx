@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2, FileText, Target, Users, MessageSquare,
-  Sparkles, Layers, Pencil, Eye,
+  Sparkles, Layers, Pencil, Eye, Loader2,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -268,6 +268,7 @@ interface DefineTaskStepProps {
   stage1Status: string;
   masterPrompt: string | null;
   onRunningChange?: (running: boolean) => void;
+  onNavigate?: (step: number) => void;
 }
 
 const CORE_BRIEF_KEYS = new Set([
@@ -282,6 +283,7 @@ export function DefineTaskStep({
   stage1Status,
   masterPrompt,
   onRunningChange,
+  onNavigate,
 }: DefineTaskStepProps) {
   const router = useRouter();
   const step1Trigger = useStepTrigger(projectId, 1, stage1Status);
@@ -300,6 +302,7 @@ export function DefineTaskStep({
   useEffect(() => {
     if (masterPrompt) setPromptText(masterPrompt);
   }, [masterPrompt]);
+
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(briefData !== null);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -695,66 +698,67 @@ export function DefineTaskStep({
 
       <div className="sticky bottom-4 flex items-center justify-between gap-4 rounded-xl border bg-card/95 backdrop-blur px-5 py-3.5 shadow-lg">
         <div className="flex items-center gap-3">
-          <Button
-            onClick={() => void handleSave({ refresh: true })}
-            disabled={!isFormValid || isSaving || stage1Status === "completed"}
-            variant={saved ? "outline" : "default"}
-          >
-            {isSaving
-              ? "Saving…"
-              : stage1Status === "completed"
-                ? "Saved ✓"
-                : "Save & Continue to Step 2"}
-          </Button>
+          {stage1Status !== "completed" && (
+            <StepTriggerButton
+              trigger={step1Trigger}
+              label="Generate Master Prompt"
+              disabled={!isFormValid}
+              onBeforeRun={async () => {
+                if (!saved) await handleSave({ refresh: false });
+              }}
+            />
+          )}
+
+          {stage1Status === "completed" && (
+            <StepTriggerButton
+              trigger={step1Trigger}
+              label="Regenerate Master Prompt"
+              variant="outline"
+            />
+          )}
 
           {stage1Status === "completed" && (
             <div className="flex items-center gap-2 text-green-600">
               <CheckCircle2 className="size-4" />
-              <span className="text-sm font-medium">Brief saved & master prompt generated.</span>
+              <span className="text-sm font-medium">Master prompt generated.</span>
             </div>
           )}
         </div>
 
         <div className="flex items-center gap-2">
-          {saved && stage1Status !== "completed" && (
-            <StepTriggerButton
-              trigger={step1Trigger}
-              label="Generate Master Prompt"
-            />
-          )}
-
           {stage1Status === "completed" && (
-            <>
-              <Button
-                size="sm"
-                disabled={isSavingPrompt}
-                onClick={async () => {
-                  setIsSavingPrompt(true);
-                  setPromptSaveError(null);
-                  try {
-                    const res = await fetch(`/api/projects/${projectId}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ masterPrompt: promptText }),
-                    });
-                    if (!res.ok) throw new Error("Failed to save");
-                    setIsEditingPrompt(false);
-                    router.push(`/projects/${projectId}?step=2`);
-                  } catch {
-                    setPromptSaveError("Failed to save prompt. Please try again.");
-                  } finally {
-                    setIsSavingPrompt(false);
+            <Button
+              disabled={isSavingPrompt}
+              onClick={async () => {
+                setIsSavingPrompt(true);
+                setPromptSaveError(null);
+                try {
+                  const res = await fetch(`/api/projects/${projectId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ masterPrompt: promptText }),
+                  });
+                  if (!res.ok) {
+                    const body = (await res.json()) as { error?: string };
+                    throw new Error(body.error ?? "Failed to save");
                   }
-                }}
-              >
-                {isSavingPrompt ? "Saving…" : "Save and continue to Step 2"}
-              </Button>
-            </>
+                  setIsEditingPrompt(false);
+                  onNavigate?.(2);
+                  router.push(`/projects/${projectId}?step=2`);
+                } catch (err) {
+                  setPromptSaveError(err instanceof Error ? err.message : "Failed to save prompt. Please try again.");
+                } finally {
+                  setIsSavingPrompt(false);
+                }
+              }}
+            >
+              {isSavingPrompt ? <><Loader2 className="size-4 mr-2 animate-spin" />Saving…</> : "Save & Continue to Step 2"}
+            </Button>
           )}
         </div>
       </div>
 
-      {saved && stage1Status !== "completed" && (
+      {stage1Status !== "completed" && (
         <StepTriggerOutput trigger={step1Trigger} />
       )}
 
