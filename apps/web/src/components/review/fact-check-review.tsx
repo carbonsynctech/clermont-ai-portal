@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, SkipForward } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -160,6 +160,7 @@ export function FactCheckReviewStep({
   const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>(approvedFindingIds ?? findingIds);
   const [isStartingOver, setIsStartingOver] = useState(false);
   const [isApplyingCorrections, setIsApplyingCorrections] = useState(false);
+  const [isSkipping, setIsSkipping] = useState(false);
   const [isApproved, setIsApproved] = useState(false);
   const [displayedContent, setDisplayedContent] = useState(factCheckedVersion.content);
   const [appliedDiff, setAppliedDiff] = useState<ReturnType<typeof computeWordDiff> | null>(null);
@@ -301,6 +302,40 @@ export function FactCheckReviewStep({
     }
   }
 
+  async function handleSkip() {
+    setIsSkipping(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/fact-check/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          baseContent: displayedContent,
+          findingIds: [],
+        }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to skip fact-check");
+      }
+
+      setIsApproved(true);
+      setLastApiOutput({
+        appliedCorrections: 0,
+        issuesApproved: [],
+        findingIds: [],
+      });
+      router.refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to skip fact-check");
+    } finally {
+      setIsSkipping(false);
+    }
+  }
+
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
       <div className="space-y-4">
@@ -433,24 +468,35 @@ export function FactCheckReviewStep({
 
         <div className="mt-auto space-y-2 pt-1">
           <div className="flex items-center justify-between gap-2">
-            <Button variant="outline" onClick={() => void handleStartOver()} disabled={isStartingOver || isApplyingCorrections}>
+            <Button variant="outline" onClick={() => void handleStartOver()} disabled={isStartingOver || isApplyingCorrections || isSkipping}>
               {isStartingOver ? "Restarting…" : "Start Over Fact Check"}
             </Button>
-            <Button
-              variant={isApproved ? "secondary" : "default"}
-              className={isApproved ? "text-muted-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90"}
-              onClick={() => void handleAcceptCorrections()}
-              disabled={
-                isApproved
-                ||
-                isApplyingCorrections
-                || isStartingOver
-                || issueCount === 0
-                || acceptedCount === 0
-              }
-            >
-              {isApplyingCorrections ? "Applying…" : isApproved ? `${acceptedCount}/${issueCount} accepted` : "Accept Corrections"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => void handleSkip()}
+                disabled={isApproved || isSkipping || isApplyingCorrections || isStartingOver}
+              >
+                <SkipForward className="size-4 mr-1" />
+                {isSkipping ? "Skipping…" : "Skip"}
+              </Button>
+              <Button
+                variant={isApproved ? "secondary" : "default"}
+                className={isApproved ? "text-muted-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90"}
+                onClick={() => void handleAcceptCorrections()}
+                disabled={
+                  isApproved
+                  ||
+                  isApplyingCorrections
+                  || isStartingOver
+                  || isSkipping
+                  || issueCount === 0
+                  || acceptedCount === 0
+                }
+              >
+                {isApplyingCorrections ? "Applying…" : isApproved ? `${acceptedCount}/${issueCount} accepted` : "Accept Corrections"}
+              </Button>
+            </div>
           </div>
 
           <p className="text-sm text-muted-foreground">
