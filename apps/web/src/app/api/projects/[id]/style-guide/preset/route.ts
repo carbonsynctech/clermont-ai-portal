@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@repo/db";
-import { projects, styleGuides } from "@repo/db";
+import { projects, styleGuides, stages, auditLogs } from "@repo/db";
 import { eq, and } from "drizzle-orm";
 
 interface RouteParams {
@@ -85,10 +85,50 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     });
   }
 
+  const now = new Date();
+
   await db
     .update(projects)
-    .set({ updatedAt: new Date() })
+    .set({ updatedAt: now })
     .where(eq(projects.id, projectId));
+
+  // Mark step 10 as completed
+  if (project) {
+    const step10Stage = await db.query.stages.findFirst({
+      where: and(eq(stages.projectId, projectId), eq(stages.stepNumber, 10)),
+    });
+
+    if (step10Stage && step10Stage.status !== "completed") {
+      await db
+        .update(stages)
+        .set({
+          status: "completed",
+          completedAt: now,
+          updatedAt: now,
+        })
+        .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 10)));
+
+      await db.insert(auditLogs).values({
+        projectId,
+        userId: user.id,
+        action: "stage_completed",
+        stepNumber: 10,
+        payload: {
+          source: "preset_selected",
+          presetId,
+          presetName: preset.name,
+        },
+      });
+
+      // Update currentStage if needed
+      if (project.currentStage < 11) {
+        await db
+          .update(projects)
+          .set({ currentStage: 11, updatedAt: now })
+          .where(eq(projects.id, projectId));
+      }
+    }
+  }
 
   return NextResponse.json({ presetId, presetName: preset.name });
 }
