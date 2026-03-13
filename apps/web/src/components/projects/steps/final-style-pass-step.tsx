@@ -247,7 +247,7 @@ export function FinalStylePassStep({
             <h3 className="font-medium text-base">Final Style Pass V4</h3>
           </div>
           <Badge variant="outline">
-              {factCheckedVersion.wordCount?.toLocaleString() ?? "?"} words
+              {factCheckedVersion.word_count?.toLocaleString() ?? "?"} words
           </Badge>
           <StepTriggerButton
             trigger={trigger}

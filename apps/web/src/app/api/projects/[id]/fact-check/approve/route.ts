@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, stages, versions, auditLogs } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -63,9 +60,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -80,19 +80,27 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     ? body.findingIds.filter((findingId): findingId is string => typeof findingId === "string")
     : [];
 
-  const stage8 = await db.query.stages.findFirst({
-    where: and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)),
-  });
-  const rawFindings = stage8?.metadata?.factCheckFindings;
+  const { data: stage8 } = await supabase
+    .from("stages")
+    .select()
+    .eq("project_id", projectId)
+    .eq("step_number", 8)
+    .single();
+  const metadata = stage8?.metadata as Record<string, unknown> | null;
+  const rawFindings = metadata?.factCheckFindings;
   const allFindings = isFindingRecordArray(rawFindings) ? rawFindings : [];
   const selectedFindingSet = new Set(findingIds);
   const selectedFindings = allFindings.filter((finding) => selectedFindingSet.has(finding.id));
   const issuesApproved = selectedFindings.map((finding) => finding.issue);
 
-  const latestFactChecked = await db.query.versions.findFirst({
-    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "fact_checked")),
-    orderBy: (v, { desc }) => [desc(v.createdAt)],
-  });
+  const { data: latestFactChecked } = await supabase
+    .from("versions")
+    .select()
+    .eq("project_id", projectId)
+    .eq("version_type", "fact_checked")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
 
   if (!latestFactChecked) {
     return NextResponse.json({ error: "Fact-checked version not found" }, { status: 404 });
@@ -103,19 +111,20 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   let finalFactCheckedVersionId = latestFactChecked.id;
   if (revisedContent !== latestFactChecked.content) {
-    const [newVersion] = await db
-      .insert(versions)
-      .values({
-        projectId,
-        parentVersionId: latestFactChecked.id,
-        producedByStep: 8,
-        versionType: "fact_checked",
-        internalLabel: `Fact-Checked V3 (Approved ${appliedCount} correction${appliedCount === 1 ? "" : "s"})`,
+    const { data: newVersion } = await supabase
+      .from("versions")
+      .insert({
+        project_id: projectId,
+        parent_version_id: latestFactChecked.id,
+        produced_by_step: 8,
+        version_type: "fact_checked",
+        internal_label: `Fact-Checked V3 (Approved ${appliedCount} correction${appliedCount === 1 ? "" : "s"})`,
         content: revisedContent,
-        wordCount: countWords(revisedContent),
-        isClientVisible: false,
+        word_count: countWords(revisedContent),
+        is_client_visible: false,
       })
-      .returning();
+      .select()
+      .single();
 
     if (!newVersion) {
       return NextResponse.json({ error: "Failed to save revised fact-checked version" }, { status: 500 });
@@ -123,32 +132,35 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     finalFactCheckedVersionId = newVersion.id;
   }
 
-  await db
-    .update(projects)
-    .set({ activeVersionId: finalFactCheckedVersionId, updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  const now = new Date().toISOString();
 
-  await db
-    .update(stages)
-    .set({
+  await supabase
+    .from("projects")
+    .update({ active_version_id: finalFactCheckedVersionId, updated_at: now })
+    .eq("id", projectId);
+
+  await supabase
+    .from("stages")
+    .update({
       status: "completed",
-      completedAt: new Date(),
-      updatedAt: new Date(),
+      completed_at: now,
+      updated_at: now,
       metadata: {
-        ...(stage8?.metadata ?? {}),
+        ...(metadata ?? {}),
         factCheckApprovedFindingIds: findingIds,
         factCheckApprovedIssues: issuesApproved,
         factCheckAppliedCorrections: appliedCount,
         factCheckRevisedVersionId: finalFactCheckedVersionId,
       },
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
+    .eq("project_id", projectId)
+    .eq("step_number", 8);
 
-  await db.insert(auditLogs).values({
-    projectId,
-    userId: user.id,
+  await supabase.from("audit_logs").insert({
+    project_id: projectId,
+    user_id: user.id,
     action: "stage_completed",
-    stepNumber: 8,
+    step_number: 8,
     payload: {
       event: "fact_check_approved",
       issuesApproved,
@@ -158,10 +170,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     },
   });
 
-  await db
-    .update(projects)
-    .set({ currentStage: 9, updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ current_stage: 9, updated_at: now })
+    .eq("id", projectId);
 
   return NextResponse.json({
     ok: true,

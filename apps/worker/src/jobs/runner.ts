@@ -14,27 +14,42 @@ import { generateCoverImages } from "./handlers/generate-cover-images";
 import type { StageRunPayload, AskAiPayload } from "@repo/core";
 import type { CustomPersonaPayload } from "./handlers/generate-custom-persona";
 import type { CoverImagesPayload } from "./handlers/generate-cover-images";
-import { db, stages } from "@repo/db";
-import { and, eq } from "drizzle-orm";
+import { createAdminClient } from "../lib/supabase-admin";
+
+const POLL_INTERVAL_MS = 1000;
+const CHUNK_THROTTLE_MS = 200;
 
 export async function runJob(jobId: string): Promise<void> {
-  const job = getJob(jobId);
+  const job = await getJob(jobId);
   if (!job) throw new Error(`Job ${jobId} not found`);
 
-  updateJob(jobId, { status: "running", startedAt: new Date() });
+  await updateJob(jobId, { status: "running", startedAt: new Date() });
 
-  // Callback that appends each streamed token to the job's partialOutput field,
-  // so the web client can display it in real-time via polling.
+  // Throttled callback that appends each streamed token to the job's partialOutput field
+  let pendingChunks = "";
+  let lastFlush = 0;
+  const flushChunks = async () => {
+    if (!pendingChunks) return;
+    const chunk = pendingChunks;
+    pendingChunks = "";
+    const current = (await getJob(jobId))?.partialOutput ?? "";
+    await updateJob(jobId, { partialOutput: current + chunk });
+    lastFlush = Date.now();
+  };
+
   const onChunk = (chunk: string) => {
-    const current = getJob(jobId)?.partialOutput ?? "";
-    updateJob(jobId, { partialOutput: current + chunk });
+    pendingChunks += chunk;
+    if (Date.now() - lastFlush >= CHUNK_THROTTLE_MS) {
+      void flushChunks();
+    }
   };
 
   try {
     if (job.type === "custom_persona") {
       const payload = job.payload as CustomPersonaPayload;
       const result = await generateCustomPersona(payload, onChunk);
-      updateJob(jobId, { status: "completed", completedAt: new Date(), result });
+      await flushChunks();
+      await updateJob(jobId, { status: "completed", completedAt: new Date(), result });
       return;
     } else if (job.type === "cover_images") {
       const payload = job.payload as CoverImagesPayload;
@@ -79,25 +94,74 @@ export async function runJob(jobId: string): Promise<void> {
       }
     }
 
-    updateJob(jobId, { status: "completed", completedAt: new Date() });
+    await flushChunks();
+    await updateJob(jobId, { status: "completed", completedAt: new Date() });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     console.error(`Job ${jobId} failed:`, error);
-    updateJob(jobId, { status: "failed", error, completedAt: new Date() });
+    await flushChunks();
+    await updateJob(jobId, { status: "failed", error, completedAt: new Date() });
 
     // Reset any DB stage that got stuck in "running" so the UI doesn't hang permanently.
     const payload = job.payload as Partial<StageRunPayload>;
     if (payload.projectId && payload.stepNumber) {
-      await db
-        .update(stages)
-        .set({ status: "failed", updatedAt: new Date() })
-        .where(
-          and(
-            eq(stages.projectId, payload.projectId),
-            eq(stages.stepNumber, payload.stepNumber),
-          ),
-        )
-        .catch(() => undefined); // best-effort — don't mask the original error
+      const supabase = createAdminClient();
+      await supabase
+        .from("stages")
+        .update({ status: "failed", updated_at: new Date().toISOString() })
+        .eq("project_id", payload.projectId)
+        .eq("step_number", payload.stepNumber)
+        .then(() => undefined, () => undefined); // best-effort — don't mask the original error
     }
   }
+}
+
+/**
+ * Poll PGMQ for new job messages, process each, then archive.
+ * Call once after server starts.
+ */
+export function startQueueConsumer(): void {
+  let running = true;
+
+  async function poll() {
+    while (running) {
+      try {
+        const supabase = createAdminClient();
+        const { data: messages } = await supabase.rpc("pgmq_read", {
+          queue_name: "jobs",
+          sleep_seconds: 5,
+          batch_size: 1,
+        });
+
+        if (messages && messages.length > 0) {
+          for (const msg of messages) {
+            const payload = msg.message as { job_id?: string };
+            if (payload.job_id) {
+              try {
+                await runJob(payload.job_id);
+              } catch (err) {
+                console.error(`[queue-consumer] Job ${payload.job_id} failed:`, err);
+              }
+            }
+            // Archive regardless of success/failure (job status is tracked in jobs table)
+            await supabase.rpc("pgmq_archive", {
+              queue_name: "jobs",
+              msg_id: msg.msg_id,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("[queue-consumer] Poll error:", err);
+      }
+
+      // Brief pause before next poll
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+  }
+
+  void poll();
+
+  // Graceful shutdown
+  process.on("SIGTERM", () => { running = false; });
+  process.on("SIGINT", () => { running = false; });
 }

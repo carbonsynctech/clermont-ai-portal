@@ -1,8 +1,5 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects } from "@repo/db";
-import { and, eq } from "drizzle-orm";
 import { AppShell } from "@/components/layout/app-shell";
 import { ProjectNavActions } from "@/components/layout/project-nav-actions";
 
@@ -21,9 +18,12 @@ export default async function ProjectLayout({ children, params }: LayoutProps) {
 
   const { id } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, id), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) notFound();
 
@@ -39,7 +39,7 @@ export default async function ProjectLayout({ children, params }: LayoutProps) {
       headerTitle={project.title}
       mainClassName="bg-[#FAFAFA]"
       headerActions={
-        <ProjectNavActions projectId={id} createdAt={project.createdAt} updatedAt={project.updatedAt} />
+        <ProjectNavActions projectId={id} createdAt={project.created_at} updatedAt={project.updated_at} />
       }
       user={{ name: userName, email: user.email ?? "", avatar: userAvatar }}
     >

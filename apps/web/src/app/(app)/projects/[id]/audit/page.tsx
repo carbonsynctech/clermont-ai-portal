@@ -1,9 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, auditLogs } from "@repo/db";
-import { eq, and, desc } from "drizzle-orm";
 import { Badge } from "@/components/ui/badge";
 import { AuditFilterBar } from "./audit-filter-bar";
 import { summarizeTokenUsage } from "@/lib/token-usage-cost";
@@ -60,28 +57,34 @@ export default async function AuditPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { filter } = await searchParams;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, id), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) notFound();
 
-  const logs = await db.query.auditLogs.findMany({
-    where: eq(auditLogs.projectId, id),
-    orderBy: [desc(auditLogs.createdAt)],
-    limit: 200,
-  });
+  const { data: logs } = await supabase
+    .from("audit_logs")
+    .select()
+    .eq("project_id", id)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const allLogs = logs ?? [];
 
   const filteredLogs =
     filter && filter !== "all"
-      ? logs.filter((log) => getActionCategory(log.action) === filter)
-      : logs;
+      ? allLogs.filter((log) => getActionCategory(log.action) === filter)
+      : allLogs;
 
   const tokenSummary = summarizeTokenUsage(
-    logs.map((log) => ({
-      modelId: log.modelId,
-      inputTokens: log.inputTokens,
-      outputTokens: log.outputTokens,
+    allLogs.map((log) => ({
+      modelId: log.model_id,
+      inputTokens: log.input_tokens,
+      outputTokens: log.output_tokens,
     })),
   );
 
@@ -192,12 +195,12 @@ export default async function AuditPage({ params, searchParams }: PageProps) {
               {filteredLogs.map((log) => {
                 const cat = getActionCategory(log.action);
                 const payloadStr = log.payload ? JSON.stringify(log.payload) : "";
-                const payloadPreview = payloadStr.length > 80 ? payloadStr.slice(0, 80) + "…" : payloadStr;
+                const payloadPreview = payloadStr.length > 80 ? payloadStr.slice(0, 80) + "..." : payloadStr;
                 return (
                   <tr key={log.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                      <span title={new Date(log.createdAt).toLocaleString()}>
-                        {formatRelativeTime(new Date(log.createdAt))}
+                      <span title={new Date(log.created_at).toLocaleString()}>
+                        {formatRelativeTime(new Date(log.created_at))}
                       </span>
                     </td>
                     <td className="px-3 py-2">
@@ -206,16 +209,16 @@ export default async function AuditPage({ params, searchParams }: PageProps) {
                       </Badge>
                     </td>
                     <td className="px-3 py-2 text-center text-muted-foreground">
-                      {log.stepNumber ?? "–"}
+                      {log.step_number ?? "–"}
                     </td>
                     <td className="px-3 py-2 font-mono text-muted-foreground truncate max-w-40">
-                      {log.modelId ?? "–"}
+                      {log.model_id ?? "–"}
                     </td>
                     <td className="px-3 py-2 text-right text-muted-foreground">
-                      {log.inputTokens?.toLocaleString() ?? "–"}
+                      {log.input_tokens?.toLocaleString() ?? "–"}
                     </td>
                     <td className="px-3 py-2 text-right text-muted-foreground">
-                      {log.outputTokens?.toLocaleString() ?? "–"}
+                      {log.output_tokens?.toLocaleString() ?? "–"}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {payloadStr ? (
@@ -240,7 +243,7 @@ export default async function AuditPage({ params, searchParams }: PageProps) {
       </div>
 
       <p className="text-xs text-muted-foreground text-right">
-        Showing {filteredLogs.length} of {logs.length} entries (max 200)
+        Showing {filteredLogs.length} of {allLogs.length} entries (max 200)
       </p>
     </div>
   );

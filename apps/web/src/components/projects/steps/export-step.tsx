@@ -141,7 +141,7 @@ export function ExportStep({
         </div>
 
         <Badge variant="outline">
-          {finalVersion.wordCount?.toLocaleString() ?? "?"} words
+          {finalVersion.word_count?.toLocaleString() ?? "?"} words
         </Badge>
 
         {!canExport && (

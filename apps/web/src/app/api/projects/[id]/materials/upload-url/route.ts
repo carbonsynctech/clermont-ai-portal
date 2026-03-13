@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { sanitizeFilename } from "@/lib/sanitize-filename";
 
@@ -22,11 +19,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
-  if (!project) {
+  if (projectError || !project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 

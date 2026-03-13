@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { workerAuth } from "../middleware/auth";
 import { enqueueJob } from "../jobs/queue";
-import { runJob } from "../jobs/runner";
 
 const stagesRoute = new Hono();
 
@@ -23,12 +22,7 @@ stagesRoute.post("/:step/run", async (c) => {
   }
 
   const { projectId, stepNumber, userId } = parsed.data;
-  const job = enqueueJob("stage_run", { projectId, stepNumber, userId });
-
-  // Run async — fire and forget, client polls job status
-  void runJob(job.id).catch((err: unknown) => {
-    console.error(`Background job ${job.id} error:`, err);
-  });
+  const job = await enqueueJob("stage_run", { projectId, stepNumber, userId });
 
   return c.json({ jobId: job.id, status: job.status });
 });

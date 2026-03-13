@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, styleGuides, stages, auditLogs } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -22,9 +19,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -58,61 +58,68 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   };
 
   // Check for existing style guide and update or create
-  const existingStyleGuide = await db.query.styleGuides.findFirst({
-    where: eq(styleGuides.projectId, projectId),
-    orderBy: (sg, { desc }) => [desc(sg.uploadedAt)],
-  });
+  const { data: existingStyleGuide } = await supabase
+    .from("style_guides")
+    .select()
+    .eq("project_id", projectId)
+    .order("uploaded_at", { ascending: false })
+    .limit(1)
+    .single();
 
   if (existingStyleGuide) {
-    await db
-      .update(styleGuides)
-      .set({
-        originalFilename: `preset:${presetId}`,
-        storagePath: `preset:${presetId}`,
-        condensedRulesText: preset.condensedRules,
-        isProcessed: true,
-        extractedRules: presetRules,
+    await supabase
+      .from("style_guides")
+      .update({
+        original_filename: `preset:${presetId}`,
+        storage_path: `preset:${presetId}`,
+        condensed_rules_text: preset.condensedRules,
+        is_processed: true,
+        extracted_rules: presetRules,
       })
-      .where(eq(styleGuides.id, existingStyleGuide.id));
+      .eq("id", existingStyleGuide.id);
   } else {
-    await db.insert(styleGuides).values({
-      projectId,
-      originalFilename: `preset:${presetId}`,
-      storagePath: `preset:${presetId}`,
-      condensedRulesText: preset.condensedRules,
-      isProcessed: true,
-      extractedRules: presetRules,
+    await supabase.from("style_guides").insert({
+      project_id: projectId,
+      original_filename: `preset:${presetId}`,
+      storage_path: `preset:${presetId}`,
+      condensed_rules_text: preset.condensedRules,
+      is_processed: true,
+      extracted_rules: presetRules,
     });
   }
 
-  const now = new Date();
+  const now = new Date().toISOString();
 
-  await db
-    .update(projects)
-    .set({ updatedAt: now })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ updated_at: now })
+    .eq("id", projectId);
 
   // Mark step 10 as completed
   if (project) {
-    const step10Stage = await db.query.stages.findFirst({
-      where: and(eq(stages.projectId, projectId), eq(stages.stepNumber, 10)),
-    });
+    const { data: step10Stage } = await supabase
+      .from("stages")
+      .select()
+      .eq("project_id", projectId)
+      .eq("step_number", 10)
+      .single();
 
     if (step10Stage && step10Stage.status !== "completed") {
-      await db
-        .update(stages)
-        .set({
+      await supabase
+        .from("stages")
+        .update({
           status: "completed",
-          completedAt: now,
-          updatedAt: now,
+          completed_at: now,
+          updated_at: now,
         })
-        .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 10)));
+        .eq("project_id", projectId)
+        .eq("step_number", 10);
 
-      await db.insert(auditLogs).values({
-        projectId,
-        userId: user.id,
+      await supabase.from("audit_logs").insert({
+        project_id: projectId,
+        user_id: user.id,
         action: "stage_completed",
-        stepNumber: 10,
+        step_number: 10,
         payload: {
           source: "preset_selected",
           presetId,
@@ -121,11 +128,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       });
 
       // Update currentStage if needed
-      if (project.currentStage < 11) {
-        await db
-          .update(projects)
-          .set({ currentStage: 11, updatedAt: now })
-          .where(eq(projects.id, projectId));
+      if (project.current_stage < 11) {
+        await supabase
+          .from("projects")
+          .update({ current_stage: 11, updated_at: now })
+          .eq("id", projectId);
       }
     }
   }

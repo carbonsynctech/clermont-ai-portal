@@ -9,13 +9,13 @@ AI-powered investment memo creation portal automating a 13-step SOP using Claude
 - `docs/proposal.pdf` – original project proposal from the client (Wesley); product scope and business context
 - `docs/sync-notes.pdf` – sync meeting notes; key decisions and constraints that **override** the proposal where they conflict
 - `docs/samples/` – sample PDFs used as test inputs (PromptForge Wisdom Report, Video Game Industry report)
-- `docs/sql/rls-policies.sql` – Supabase RLS policies (run once manually in Supabase SQL Editor)
+- `packages/db/schema.sql` – source-of-truth DDL: all enums, tables, FKs, RLS policies, PGMQ setup
 - `docs/plans/2026-02-28-phase-1-foundation.md` – Phase 1 implementation plan (historical reference)
 
 ## Apps & Packages
 - `apps/web/` – Next.js 16 App Router frontend → Vercel
-- `apps/worker/` – Hono HTTP server, long-running AI jobs → Railway
-- `packages/db/` – Drizzle ORM schema + Supabase PostgreSQL
+- `apps/worker/` – Hono HTTP server, PGMQ queue consumer, long-running AI jobs → Railway
+- `packages/db/` – Supabase generated types (`database.types.ts`), hand-written JSONB interfaces (`json-types.ts`), row aliases
 - `packages/core/` – Claude/Gemini wrappers, prompt templates, pipeline types
 
 ## Critical Architecture Rules
@@ -31,10 +31,10 @@ NEVER pass a raw uploaded file into a Claude message. All uploads MUST be:
 - `versions.is_sealed = true` means content MUST NOT be mutated. Create a new row instead.
 - `projects.active_version_id` tracks the working version.
 
-### 3. Long AI Jobs → Worker Only
+### 3. Long AI Jobs → Worker via PGMQ
 Next.js API routes have a 60s Vercel timeout. Any AI call goes:
-`Next.js route → workerClient.runStage() → Hono worker → AI API`
-Routes dispatch (fire-and-forget) and return `jobId`. Client polls `/api/jobs/:jobId`.
+`Next.js route → workerClient.runStage() → Hono worker → enqueueJob() → PGMQ → queue consumer → handler`
+Routes dispatch and return `jobId`. Client polls `/api/jobs/:jobId`. Jobs are persisted in the `jobs` table.
 
 ### 4. AI Model Assignment (follow exactly)
 - **Claude `claude-sonnet-4-6`**: ALL steps EXCEPT fact-checking
@@ -46,31 +46,43 @@ Routes dispatch (fire-and-forget) and return `jobId`. Client polls `/api/jobs/:j
 Every AI call, human decision, and stage transition MUST write an `audit_logs` row. No exceptions.
 
 ### 6. Stage Rows Are Pre-created
-All 13 stage rows are created when a project is created. Always use `db.update(stages)` — never insert a new stage row.
+All 12 stage rows are created when a project is created. Always update existing stage rows — never insert a new stage row.
 
 ## Database Rules
-- All DB access through `packages/db/src/client.ts`
-- Worker uses service role key (bypasses RLS). Web uses anon key (RLS enforced).
+- **No ORM** — all DB access via Supabase JS client (`@supabase/supabase-js`)
+- `packages/db/` exports types only (no runtime code). Import types: `import type { Project, StageMetadata } from "@repo/db"`
+- Worker uses `createAdminClient()` with service role key (bypasses RLS)
+- Web uses `createClient()` from `@/lib/supabase/server` with anon key (RLS enforced)
+- Use `assertData()` from `apps/worker/src/lib/db.ts` to unwrap Supabase responses in worker
+- All column names are **snake_case** in code (matching DB). No camelCase mapping.
+- JSONB interfaces (`ProjectBriefData`, `StageMetadata`, etc.) use camelCase (hand-written).
 - Never `UPDATE` a sealed version. Never `DELETE` any version row.
-- 9 tables: `audit_logs`, `personas`, `projects`, `source_chunks`, `source_materials`, `stages`, `style_guides`, `users`, `versions`
+- Schema changes: edit `packages/db/schema.sql`, run in Supabase SQL Editor, then `pnpm db:gen-types`
+- 10 tables: `audit_logs`, `jobs`, `personas`, `projects`, `source_chunks`, `source_materials`, `stages`, `style_guides`, `users`, `versions`
 
 ## TypeScript Rules
 - `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`
 - No `any`. Use `unknown` and narrow.
 - Server-only code (DB, service role) never imported in client components.
-- Module resolution: `bundler` for all non-Next.js packages (db, core, worker) — drizzle-kit requires this
+- Module resolution: `bundler` for all non-Next.js packages (db, core, worker)
 - `apps/web` uses Next.js default resolution; no `.js` extensions needed anywhere
-- Do NOT add `"type": "module"` to `packages/db/package.json` — drizzle-kit bundles as CJS
 
 ## Codemap
 ```
 apps/worker/src/
-├── routes/          → stages.ts, jobs.ts, export.ts, health.ts
-└── jobs/handlers/   → generate-master-prompt, suggest-personas,
-                       extract-and-chunk, generate-persona-drafts,
-                       synthesize, style-edit, fact-check,
-                       final-style-pass, devils-advocate,
-                       integrate-critiques, export-html
+├── routes/          → stages.ts, jobs.ts, export.ts, health.ts, personas.ts
+├── jobs/
+│   ├── queue.ts     → enqueueJob (DB + PGMQ), getJob, updateJob
+│   ├── runner.ts    → runJob, startQueueConsumer (PGMQ poll loop)
+│   └── handlers/    → generate-master-prompt, suggest-personas,
+│                      extract-and-chunk, generate-persona-drafts,
+│                      synthesize, style-edit, fact-check,
+│                      devils-advocate, integrate-critiques,
+│                      export-html, ask-ai, generate-custom-persona,
+│                      generate-cover-images
+└── lib/
+    ├── supabase-admin.ts → createAdminClient<Database>()
+    └── db.ts             → assertData() helper
 
 apps/web/src/app/
 ├── (app)/           → dashboard/, projects/, projects/[id]/, projects/[id]/audit/
@@ -78,6 +90,11 @@ apps/web/src/app/
                          versions/, review/, critiques/, export/
 └── components/      → brief/, layout/, personas/, projects/,
                        review/, sources/, versions/
+
+packages/db/src/
+├── database.types.ts → auto-generated Supabase types (Tables, Enums, etc.)
+├── json-types.ts     → hand-written JSONB interfaces
+└── index.ts          → re-exports + row aliases (Project, Stage, Version, etc.)
 
 packages/core/src/prompts/
     → brief, personas, drafts, synthesis, style, critique, final-style, export
@@ -104,23 +121,22 @@ packages/core/src/prompts/
 pnpm dev          # Start web (3000) + worker (3001)
 pnpm build        # Build all apps
 pnpm typecheck    # TypeScript check all packages
-pnpm db:generate  # Generate Drizzle migrations
-pnpm db:migrate   # Apply migrations to Supabase
-pnpm db:studio    # Open Drizzle Studio (DB browser)
+pnpm db:gen-types # Regenerate Supabase types after schema changes
 ```
 
 ## MCP Servers
 See `.claude/mcp.json`. Active: Supabase (DB inspection + migrations), GitHub (PR management).
 
 ## Pitfalls
-1. Never import `@repo/db` or `postgres` in client components
+1. Never import `@repo/db` runtime values in client components — types only (`import type`)
 2. Never store ANTHROPIC_API_KEY or GOOGLE_GEMINI_API_KEY in web app env – worker only
 3. Never call AI APIs directly from Next.js API routes
 4. Never mutate a sealed version
 5. Never skip writing audit_logs
 6. Use `pnpm shadcn init` (local devDependency), NOT `pnpm dlx shadcn` — Node 22 compat issue
-7. DATABASE_URL must use session pooler: `aws-1-ap-northeast-1.pooler.supabase.com:5432`
-8. `selectedCritiques` (Step 11) are stored in `audit_logs.payload`; Step 12 fetches via `auditLogs.findFirst` where `action = "critique_selected"`
-9. PDF download: Next.js `/api/projects/[id]/export` proxies to worker to keep WORKER_SECRET server-side
-10. For shadcn components that fail with `pnpm shadcn add`, install from `@radix-ui` directly (e.g. checkbox)
-11. **`DATABASE_URL` must be in `apps/web/.env.local`** — Next.js only reads its own app directory, never the root `.env.local`. Both the web API routes and server components use `@repo/db` (server-side only). If you see "DATABASE_URL is not set", add it to `apps/web/.env.local`.
+7. `selectedCritiques` (Step 11) are stored in `audit_logs.payload`; Step 12 fetches via audit_logs query where `action = "critique_selected"`
+8. PDF download: Next.js `/api/projects/[id]/export` proxies to worker to keep WORKER_SECRET server-side
+9. For shadcn components that fail with `pnpm shadcn add`, install from `@radix-ui` directly (e.g. checkbox)
+10. All DB column access is **snake_case** — Supabase JS returns raw column names, no camelCase mapping
+11. JSONB interfaces (`ProjectBriefData`, `StageMetadata`, etc.) remain **camelCase** — cast from `Json` as needed
+12. `packages/db` has no runtime dependencies — only type exports. Do NOT add `drizzle-orm`, `postgres`, or any DB driver.

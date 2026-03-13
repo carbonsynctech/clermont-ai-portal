@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db, auditLogs, projects, stages, versions } from "@repo/db";
-import { and, desc, eq } from "drizzle-orm";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -19,54 +17,64 @@ export async function POST(_req: Request, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const synthesisVersion = await db.query.versions.findFirst({
-    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "synthesis")),
-    orderBy: [desc(versions.createdAt)],
-  });
+  const { data: synthesisVersion } = await supabase
+    .from("versions")
+    .select()
+    .eq("project_id", projectId)
+    .eq("version_type", "synthesis")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
 
   if (!synthesisVersion) {
     return NextResponse.json({ error: "No Step 5 synthesis version found" }, { status: 400 });
   }
 
-  await db
-    .update(stages)
-    .set({
+  const now = new Date().toISOString();
+
+  await supabase
+    .from("stages")
+    .update({
       status: "pending",
-      workerJobId: null,
-      errorMessage: null,
+      worker_job_id: null,
+      error_message: null,
       metadata: null,
-      startedAt: null,
-      completedAt: null,
-      updatedAt: new Date(),
+      started_at: null,
+      completed_at: null,
+      updated_at: now,
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
+    .eq("project_id", projectId)
+    .eq("step_number", 8);
 
-  await db
-    .update(projects)
-    .set({
-      activeVersionId: synthesisVersion.id,
-      currentStage: 8,
-      updatedAt: new Date(),
+  await supabase
+    .from("projects")
+    .update({
+      active_version_id: synthesisVersion.id,
+      current_stage: 8,
+      updated_at: now,
     })
-    .where(eq(projects.id, projectId));
+    .eq("id", projectId);
 
-  await db.insert(auditLogs).values({
-    projectId,
-    userId: user.id,
+  await supabase.from("audit_logs").insert({
+    project_id: projectId,
+    user_id: user.id,
     action: "stage_started",
-    stepNumber: 8,
+    step_number: 8,
     payload: {
       event: "fact_check_restart_requested",
       resetToVersionId: synthesisVersion.id,
-      resetToVersionType: synthesisVersion.versionType,
+      resetToVersionType: synthesisVersion.version_type,
     },
   });
 

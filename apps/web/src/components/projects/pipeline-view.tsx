@@ -191,7 +191,7 @@ export function PipelineView({
 
   // Resolve initial preset from style guide originalFilename (format: "preset:<id>")
   const serverPresetId = (() => {
-    const filename = latestStyleGuide?.originalFilename;
+    const filename = latestStyleGuide?.original_filename;
     if (filename?.startsWith("preset:")) {
       return filename.slice("preset:".length);
     }
@@ -262,15 +262,15 @@ export function PipelineView({
     setActiveStep(initialStep);
   }, [initialStep]);
 
-  const stageMap = Object.fromEntries(stages.map((s) => [s.stepNumber, s]));
-  const brief = project.briefData as ProjectBriefData | null;
+  const stageMap = Object.fromEntries(stages.map((s) => [s.step_number, s]));
+  const brief = project.brief_data as ProjectBriefData | null;
   const getLatestVersion = useCallback(
-    (versionType: Version["versionType"]) => versions.filter((v) => v.versionType === versionType).at(-1),
+    (versionType: Version["version_type"]) => versions.filter((v) => v.version_type === versionType).at(-1),
     [versions],
   );
 
   const sourceSynthesisVersion = getLatestVersion("synthesis");
-  const factCheckVersion = versions.filter((v) => v.versionType === "fact_checked").at(-1);
+  const factCheckVersion = versions.filter((v) => v.version_type === "fact_checked").at(-1);
 
   const persistStep8Draft = useCallback(
     (draft: Step8DraftPayload) => {
@@ -306,7 +306,7 @@ export function PipelineView({
   const prerequisiteMessage = getPrerequisiteMessage(activeStep, stageMap);
   const isLockedStep = prerequisiteMessage !== null;
   const activeStatus = stageMap[activeStep]?.status ?? "pending";
-  const isNewStep = activeStep >= project.currentStage;
+  const isNewStep = activeStep >= project.current_stage;
 
   async function goToNextStep() {
     // Step 11 (Edit for Style) is optional -?complete it before advancing
@@ -404,7 +404,7 @@ export function PipelineView({
             projectTitle={project.title}
             briefData={brief}
             stage1Status={status}
-            masterPrompt={project.masterPrompt ?? null}
+            masterPrompt={project.master_prompt ?? null}
             onRunningChange={setStep1Running}
           />
         );
@@ -486,7 +486,7 @@ export function PipelineView({
             <MarkdownVersionPanel
               title="Content to Fact-Check (Step 5 Synthesis)"
               content={sourceSynthesisVersion?.content ?? ""}
-              wordCount={sourceSynthesisVersion?.wordCount ?? undefined}
+              wordCount={sourceSynthesisVersion?.word_count ?? undefined}
             />
 
             <div className="rounded-xl border bg-card p-6 space-y-4 lg:sticky lg:top-4 h-fit">
@@ -637,8 +637,8 @@ export function PipelineView({
           <ExportStep
             projectId={project.id}
             projectTitle={project.title}
-            companyName={project.briefData?.companyName}
-            dealType={project.briefData?.dealType}
+            companyName={(project.brief_data as ProjectBriefData | null)?.companyName}
+            dealType={(project.brief_data as ProjectBriefData | null)?.dealType}
             coverImageUrl={coverImageUrl}
             finalVersion={finalVersion}
             stage12Status={stageMap[11]?.status ?? "pending"}
@@ -680,7 +680,7 @@ export function PipelineView({
             projectId={project.id}
             stages={stages}
             activeStep={activeStep}
-            currentStep={project.currentStage}
+            currentStep={project.current_stage}
             onStepClick={handleStepClick}
             stepStatusOverrides={{
               ...(step1Running ? { 1: "running" as const } : {}),

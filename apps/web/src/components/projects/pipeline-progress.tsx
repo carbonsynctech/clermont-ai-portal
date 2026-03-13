@@ -60,7 +60,7 @@ function StepCircle({
 }
 
 export function PipelineProgress({ stages, currentStep }: PipelineProgressProps) {
-  const stageMap = new Map(stages.map((s) => [s.stepNumber, s]));
+  const stageMap = new Map(stages.map((s) => [s.step_number, s]));
 
   return (
     <div className="space-y-0.5">

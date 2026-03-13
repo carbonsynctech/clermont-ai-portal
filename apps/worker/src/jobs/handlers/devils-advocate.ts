@@ -1,43 +1,50 @@
-import { db, projects, stages, versions, auditLogs } from "@repo/db";
 import {
   claude,
   buildDevilsAdvocateSystemPrompt,
   buildDevilsAdvocateUserMessage,
   parseCritiques,
 } from "@repo/core";
-import { eq, and } from "drizzle-orm";
+import type { Json } from "@repo/db";
+import { createAdminClient } from "../../lib/supabase-admin";
+import { assertData } from "../../lib/db";
 
 export async function devilsAdvocate(
   projectId: string,
   userId: string,
   onChunk?: (chunk: string) => void,
 ): Promise<void> {
-  // 1. Fetch project
-  const project = await db.query.projects.findFirst({
-    where: eq(projects.id, projectId),
-  });
+  const supabase = createAdminClient();
 
-  if (!project) throw new Error(`Project ${projectId} not found`);
-  if (!project.masterPrompt) throw new Error(`Project ${projectId} has no master prompt`);
+  // 1. Fetch project
+  const project = assertData(
+    await supabase.from("projects").select().eq("id", projectId).single(),
+  );
+
+  if (!project.master_prompt) throw new Error(`Project ${projectId} has no master prompt`);
 
   // 2. Fetch human_reviewed version
-  const humanReviewedVersion = await db.query.versions.findFirst({
-    where: and(
-      eq(versions.projectId, projectId),
-      eq(versions.versionType, "human_reviewed")
-    ),
-    orderBy: (v, { desc }) => [desc(v.createdAt)],
-  });
-
-  if (!humanReviewedVersion) {
-    throw new Error(`Project ${projectId} has no human-reviewed version`);
-  }
+  const humanReviewedVersion = assertData(
+    await supabase
+      .from("versions")
+      .select()
+      .eq("project_id", projectId)
+      .eq("version_type", "human_reviewed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single(),
+  );
 
   // 3. Update stage 8 to running
-  await db
-    .update(stages)
-    .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
+  await supabase
+    .from("stages")
+    .update({
+      status: "running",
+      started_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("project_id", projectId)
+    .eq("step_number", 8)
+    .throwOnError();
 
   const startedAt = Date.now();
 
@@ -49,7 +56,7 @@ export async function devilsAdvocate(
         role: "user" as const,
         content: buildDevilsAdvocateUserMessage(
           humanReviewedVersion.content,
-          project.masterPrompt
+          project.master_prompt
         ),
       },
     ],
@@ -70,24 +77,27 @@ export async function devilsAdvocate(
   const savedAt = new Date().toISOString();
 
   // 5. Insert audit log
-  await db.insert(auditLogs).values({
-    projectId,
-    userId,
-    action: "agent_response_received",
-    stepNumber: 8,
-    modelId: result.model,
-    inputTokens: result.inputTokens,
-    outputTokens: result.outputTokens,
-    payload: { durationMs, generatedCritiquesCount: parsedCritiques.length },
-    responseSnapshot: result.content,
-  });
+  await supabase
+    .from("audit_logs")
+    .insert({
+      project_id: projectId,
+      user_id: userId,
+      action: "agent_response_received",
+      step_number: 8,
+      model_id: result.model,
+      input_tokens: result.inputTokens,
+      output_tokens: result.outputTokens,
+      payload: { durationMs, generatedCritiquesCount: parsedCritiques.length },
+      response_snapshot: result.content,
+    })
+    .throwOnError();
 
   // 6. Update stage 8 to awaiting_human (critique selection checkpoint)
-  await db
-    .update(stages)
-    .set({
+  await supabase
+    .from("stages")
+    .update({
       status: "awaiting_human",
-      updatedAt: new Date(),
+      updated_at: new Date().toISOString(),
       metadata: {
         modelId: result.model,
         inputTokens: result.inputTokens,
@@ -100,13 +110,16 @@ export async function devilsAdvocate(
           selectedCritiques: [],
           savedAt,
         },
-      },
+      } as unknown as Json,
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
+    .eq("project_id", projectId)
+    .eq("step_number", 8)
+    .throwOnError();
 
-  // 7. Stay at currentStage = 8 (user must select critiques before advancing)
-  await db
-    .update(projects)
-    .set({ currentStage: 8, updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  // 7. Stay at current_stage = 8 (user must select critiques before advancing)
+  await supabase
+    .from("projects")
+    .update({ current_stage: 8, updated_at: new Date().toISOString() })
+    .eq("id", projectId)
+    .throwOnError();
 }

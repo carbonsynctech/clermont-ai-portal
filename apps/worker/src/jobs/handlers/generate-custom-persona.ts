@@ -1,10 +1,11 @@
-import { db, personas, auditLogs } from "@repo/db";
 import {
   claude,
   buildCustomPersonaSystemPrompt,
   buildCustomPersonaUserMessage,
 } from "@repo/core";
 import { lookupPerson } from "../../lib/linkedin";
+import { createAdminClient } from "../../lib/supabase-admin";
+import { assertData } from "../../lib/db";
 
 
 export interface CustomPersonaPayload {
@@ -27,6 +28,7 @@ export async function generateCustomPersona(
   onChunk?: (chunk: string) => void,
 ): Promise<{ personaId: string }> {
   const { name, linkedinUrl, context, projectId, userId } = payload;
+  const supabase = createAdminClient();
 
   // Attempt OSINT lookup with automatic web search fallback
   let profileContent: string | undefined;
@@ -74,30 +76,35 @@ export async function generateCustomPersona(
     throw err instanceof Error ? err : new Error("Failed to parse custom persona from Claude response");
   }
 
-  const [inserted] = await db
-    .insert(personas)
-    .values({
-      projectId,
-      name: parsed.name,
-      description: parsed.description,
-      systemPrompt: parsed.systemPrompt,
-      tags: parsed.tags ?? [],
-      sourceUrls: linkedinUrl ? [linkedinUrl] : [],
-    })
-    .returning({ id: personas.id });
+  const [inserted] = assertData(
+    await supabase
+      .from("personas")
+      .insert({
+        project_id: projectId,
+        name: parsed.name,
+        description: parsed.description,
+        system_prompt: parsed.systemPrompt,
+        tags: parsed.tags ?? [],
+        source_urls: linkedinUrl ? [linkedinUrl] : [],
+      })
+      .select("id"),
+  );
 
   if (!inserted) throw new Error("Failed to insert persona");
 
-  await db.insert(auditLogs).values({
-    projectId,
-    userId,
-    action: "agent_response_received",
-    stepNumber: 2,
-    modelId: result.model,
-    inputTokens: result.inputTokens,
-    outputTokens: result.outputTokens,
-    payload: { durationMs, customPersona: true, personaId: inserted.id },
-  });
+  await supabase
+    .from("audit_logs")
+    .insert({
+      project_id: projectId,
+      user_id: userId,
+      action: "agent_response_received",
+      step_number: 2,
+      model_id: result.model,
+      input_tokens: result.inputTokens,
+      output_tokens: result.outputTokens,
+      payload: { durationMs, customPersona: true, personaId: inserted.id },
+    })
+    .throwOnError();
 
   return { personaId: inserted.id };
 }

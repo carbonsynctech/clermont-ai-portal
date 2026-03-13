@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
@@ -22,27 +21,32 @@ export async function GET(req: NextRequest) {
   const offset = isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
 
   // Fetch all rows first, then filter in JS (spec requirement)
-  const rows = await db.query.personas.findMany({
-    orderBy: (p, { desc }) => [desc(p.createdAt)],
-  });
+  const { data: rows, error } = await supabase
+    .from("personas")
+    .select()
+    .order("created_at", { ascending: false });
 
-  let filtered = rows;
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  let filtered = rows ?? [];
 
   if (excludeProjectId) {
-    filtered = filtered.filter((p) => p.projectId !== excludeProjectId);
+    filtered = filtered.filter((p) => p.project_id !== excludeProjectId);
   }
 
   if (q) {
     const lower = q.toLowerCase();
     filtered = filtered.filter(
       (p) =>
-        p.name.toLowerCase().includes(lower) ||
-        p.description.toLowerCase().includes(lower)
+        (p.name as string).toLowerCase().includes(lower) ||
+        (p.description as string).toLowerCase().includes(lower)
     );
   }
 
   if (tag && tag !== "All") {
-    filtered = filtered.filter((p) => p.tags.includes(tag));
+    filtered = filtered.filter((p) => (p.tags as string[]).includes(tag));
   }
 
   return NextResponse.json(filtered.slice(offset, offset + limit));

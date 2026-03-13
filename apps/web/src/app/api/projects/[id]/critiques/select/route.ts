@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, stages, auditLogs, versions } from "@repo/db";
-import { eq, and, inArray } from "drizzle-orm";
+import type { Json } from "@repo/db";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -57,9 +55,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id: projectId } = await params;
 
   // Auth + ownership check
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -107,52 +108,59 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const critiques = (body.critiques as CritiqueDraftItem[] | undefined) ?? [];
   const selectedIds = (body.selectedIds as number[] | undefined) ?? [];
 
-  const stage8 = await db.query.stages.findFirst({
-    where: and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)),
-  });
+  const { data: stage8 } = await supabase
+    .from("stages")
+    .select()
+    .eq("project_id", projectId)
+    .eq("step_number", 8)
+    .single();
 
   const existingMetadata =
     stage8?.metadata && typeof stage8.metadata === "object" && !Array.isArray(stage8.metadata)
       ? stage8.metadata
       : {};
 
+  const now = new Date().toISOString();
+
   // Insert audit log with selected critiques in payload
-  await db.insert(auditLogs).values({
-    projectId,
-    userId: user.id,
+  await supabase.from("audit_logs").insert({
+    project_id: projectId,
+    user_id: user.id,
     action: "critique_selected",
-    stepNumber: 8,
+    step_number: 8,
     payload: { selectedCritiques, count: selectedCritiques.length },
   });
 
   // Update stage 8 to completed
-  await db
-    .update(stages)
-    .set({
+  await supabase
+    .from("stages")
+    .update({
       status: "completed",
-      completedAt: new Date(),
-      updatedAt: new Date(),
+      completed_at: now,
+      updated_at: now,
       metadata: {
-        ...existingMetadata,
+        ...(existingMetadata as Record<string, unknown>),
         selectedCritiquesCount: selectedCritiques.length,
         devilsAdvocateDraft: {
           critiques,
           selectedIds,
           selectedCritiques,
-          savedAt: new Date().toISOString(),
+          savedAt: now,
         },
-      },
+      } as unknown as Json,
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 8)));
+    .eq("project_id", projectId)
+    .eq("step_number", 8);
 
   if (selectedCritiques.length === 0) {
-    const carryForwardVersion = await db.query.versions.findFirst({
-      where: and(
-        eq(versions.projectId, projectId),
-        inArray(versions.versionType, [...CARRY_FORWARD_VERSION_TYPES])
-      ),
-      orderBy: (v, { desc }) => [desc(v.createdAt)],
-    });
+    const { data: carryForwardVersion } = await supabase
+      .from("versions")
+      .select()
+      .eq("project_id", projectId)
+      .in("version_type", [...CARRY_FORWARD_VERSION_TYPES])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
 
     if (!carryForwardVersion) {
       return NextResponse.json(
@@ -161,18 +169,19 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const [finalVersion] = await db
-      .insert(versions)
-      .values({
-        projectId,
-        producedByStep: 9,
-        versionType: "final",
-        internalLabel: "Final V6 (No Critiques Selected)",
+    const { data: finalVersion } = await supabase
+      .from("versions")
+      .insert({
+        project_id: projectId,
+        produced_by_step: 9,
+        version_type: "final",
+        internal_label: "Final V6 (No Critiques Selected)",
         content: carryForwardVersion.content,
-        wordCount: countWords(carryForwardVersion.content),
-        isClientVisible: false,
+        word_count: countWords(carryForwardVersion.content),
+        is_client_visible: false,
       })
-      .returning();
+      .select()
+      .single();
 
     if (!finalVersion) {
       return NextResponse.json(
@@ -182,31 +191,32 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     // Skip step 9 entirely when no critiques are selected
-    await db
-      .update(stages)
-      .set({
+    await supabase
+      .from("stages")
+      .update({
         status: "completed",
-        completedAt: new Date(),
-        updatedAt: new Date(),
+        completed_at: now,
+        updated_at: now,
         metadata: { reviewNotes: "Skipped Step 9 because no critiques were selected." },
       })
-      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 9)));
+      .eq("project_id", projectId)
+      .eq("step_number", 9);
 
-    await db
-      .update(projects)
-      .set({ currentStage: 10, activeVersionId: finalVersion.id, updatedAt: new Date() })
-      .where(eq(projects.id, projectId));
+    await supabase
+      .from("projects")
+      .update({ current_stage: 10, active_version_id: finalVersion.id, updated_at: now })
+      .eq("id", projectId);
 
-    await db.insert(auditLogs).values({
-      projectId,
-      userId: user.id,
+    await supabase.from("audit_logs").insert({
+      project_id: projectId,
+      user_id: user.id,
       action: "stage_completed",
-      stepNumber: 9,
+      step_number: 9,
       payload: {
         skipped: true,
         reason: "No critiques selected",
         carriedForwardFromVersionId: carryForwardVersion.id,
-        carriedForwardFromVersionType: carryForwardVersion.versionType,
+        carriedForwardFromVersionType: carryForwardVersion.version_type,
         finalVersionId: finalVersion.id,
       },
     });
@@ -215,10 +225,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
 
   // Advance project to stage 9
-  await db
-    .update(projects)
-    .set({ currentStage: 9, updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ current_stage: 9, updated_at: now })
+    .eq("id", projectId);
 
   return NextResponse.json({ ok: true, nextStep: 9, skippedStep9: false });
 }

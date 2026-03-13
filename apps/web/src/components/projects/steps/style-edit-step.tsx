@@ -50,7 +50,7 @@ export function StyleEditStep({
   const canonicalSourceVersion = synthesisVersion;
   const sourceContent = canonicalSourceVersion?.content ?? "";
   const versionId = canonicalSourceVersion?.id ?? "";
-  const wordCount = canonicalSourceVersion?.wordCount;
+  const wordCount = canonicalSourceVersion?.word_count;
   const hasContent = !!sourceContent;
   const sourceHash = `${versionId}:${sourceContent.length}:${sourceContent.slice(0, 200)}`;
   // ── sessionStorage keys ───────────────────────────────────────────────────

@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, versions } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -20,26 +17,26 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
-  if (!project) {
+  if (projectError || !project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const rows = await db.query.versions.findMany({
-    where: eq(versions.projectId, projectId),
-    orderBy: (v, { asc }) => [asc(v.createdAt)],
-    columns: {
-      id: true,
-      versionType: true,
-      producedByStep: true,
-      internalLabel: true,
-      wordCount: true,
-      createdAt: true,
-    },
-  });
+  const { data: rows, error: versionsError } = await supabase
+    .from("versions")
+    .select("id, version_type, produced_by_step, internal_label, word_count, created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+
+  if (versionsError) {
+    return NextResponse.json({ error: versionsError.message }, { status: 500 });
+  }
 
   return NextResponse.json(rows);
 }

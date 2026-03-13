@@ -1,11 +1,12 @@
 // apps/worker/src/jobs/handlers/suggest-personas.ts
-import { db, projects, stages, personas, auditLogs } from "@repo/db";
+import type { StageMetadata, Json } from "@repo/db";
 import {
   claude,
   buildPersonaSuggestionSystemPrompt,
   buildPersonaSuggestionUserMessage,
 } from "@repo/core";
-import { eq, and } from "drizzle-orm";
+import { createAdminClient } from "../../lib/supabase-admin";
+import { assertData } from "../../lib/db";
 
 interface PersonaSuggestion {
   name: string;
@@ -19,24 +20,27 @@ export async function suggestPersonas(
   userId: string,
   onChunk?: (chunk: string) => void,
 ): Promise<void> {
-  const project = await db.query.projects.findFirst({
-    where: eq(projects.id, projectId),
-  });
+  const supabase = createAdminClient();
 
-  if (!project) throw new Error(`Project ${projectId} not found`);
-  if (!project.masterPrompt) throw new Error(`Project ${projectId} has no master prompt`);
+  const project = assertData(
+    await supabase.from("projects").select().eq("id", projectId).single(),
+  );
 
-  await db
-    .update(stages)
-    .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 2)));
+  if (!project.master_prompt) throw new Error(`Project ${projectId} has no master prompt`);
+
+  await supabase
+    .from("stages")
+    .update({ status: "running", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("project_id", projectId)
+    .eq("step_number", 2)
+    .throwOnError();
 
   const startedAt = Date.now();
 
   const callOptions = {
     system: buildPersonaSuggestionSystemPrompt(),
     messages: [
-      { role: "user" as const, content: buildPersonaSuggestionUserMessage(project.masterPrompt) },
+      { role: "user" as const, content: buildPersonaSuggestionUserMessage(project.master_prompt) },
     ],
   };
 
@@ -58,40 +62,49 @@ export async function suggestPersonas(
   }
 
   if (suggestions.length > 0) {
-    await db.insert(personas).values(
-      suggestions.map((s) => ({
-        projectId,
-        name: s.name,
-        description: s.description,
-        systemPrompt: s.systemPrompt,
-        tags: s.tags ?? [],
-      }))
-    );
+    await supabase
+      .from("personas")
+      .insert(
+        suggestions.map((s) => ({
+          project_id: projectId,
+          name: s.name,
+          description: s.description,
+          system_prompt: s.systemPrompt,
+          tags: s.tags ?? [],
+        }))
+      )
+      .throwOnError();
   }
 
-  await db.insert(auditLogs).values({
-    projectId,
-    userId,
-    action: "agent_response_received",
-    stepNumber: 2,
+  await supabase
+    .from("audit_logs")
+    .insert({
+      project_id: projectId,
+      user_id: userId,
+      action: "agent_response_received",
+      step_number: 2,
+      model_id: result.model,
+      input_tokens: result.inputTokens,
+      output_tokens: result.outputTokens,
+      payload: { durationMs, personaCount: suggestions.length },
+    })
+    .throwOnError();
+
+  const metadata: StageMetadata = {
     modelId: result.model,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
-    payload: { durationMs, personaCount: suggestions.length },
-  });
-
-  await db
-    .update(stages)
-    .set({
+    durationMs,
+  };
+  await supabase
+    .from("stages")
+    .update({
       status: "awaiting_human",
-      completedAt: new Date(),
-      updatedAt: new Date(),
-      metadata: {
-        modelId: result.model,
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
-        durationMs,
-      },
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: metadata as unknown as Json,
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 2)));
+    .eq("project_id", projectId)
+    .eq("step_number", 2)
+    .throwOnError();
 }

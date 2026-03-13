@@ -1,4 +1,4 @@
-import { db, projects, stages, personas, versions, sourceChunks, sourceMaterials, auditLogs } from "@repo/db";
+import type { StageMetadata, Json } from "@repo/db";
 import {
   claude,
   buildPersonaDraftSystemPrompt,
@@ -7,7 +7,8 @@ import {
   getAvailableContextTokens,
   estimateTokens,
 } from "@repo/core";
-import { eq, and } from "drizzle-orm";
+import { createAdminClient } from "../../lib/supabase-admin";
+import { assertData } from "../../lib/db";
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).length;
@@ -18,41 +19,55 @@ export async function generatePersonaDrafts(
   userId: string,
   onChunk?: (chunk: string) => void,
 ): Promise<void> {
-  // 1. Fetch project
-  const project = await db.query.projects.findFirst({
-    where: eq(projects.id, projectId),
-  });
+  const supabase = createAdminClient();
 
-  if (!project) throw new Error(`Project ${projectId} not found`);
-  if (!project.masterPrompt) throw new Error(`Project ${projectId} has no master prompt`);
+  // 1. Fetch project
+  const project = assertData(
+    await supabase.from("projects").select().eq("id", projectId).single(),
+  );
+
+  if (!project.master_prompt) throw new Error(`Project ${projectId} has no master prompt`);
 
   onChunk?.("Preparing persona draft generation...\n");
 
   // 2. Update stage to running
-  await db
-    .update(stages)
-    .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 4)));
+  await supabase
+    .from("stages")
+    .update({ status: "running", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("project_id", projectId)
+    .eq("step_number", 4)
+    .throwOnError();
 
   const startedAt = Date.now();
 
   // 3. Clear any existing persona_draft versions so re-runs produce fresh opinions
-  const existingDrafts = await db.query.versions.findMany({
-    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "persona_draft")),
-  });
+  const existingDrafts = assertData(
+    await supabase
+      .from("versions")
+      .select()
+      .eq("project_id", projectId)
+      .eq("version_type", "persona_draft"),
+  );
 
   if (existingDrafts.length > 0) {
-    await db
-      .delete(versions)
-      .where(and(eq(versions.projectId, projectId), eq(versions.versionType, "persona_draft")));
+    await supabase
+      .from("versions")
+      .delete()
+      .eq("project_id", projectId)
+      .eq("version_type", "persona_draft")
+      .throwOnError();
     onChunk?.(`Cleared ${existingDrafts.length} previous persona drafts.\n`);
   }
 
   // 4. Fetch selected personas ordered by selectionOrder
-  const selectedPersonas = await db.query.personas.findMany({
-    where: and(eq(personas.projectId, projectId), eq(personas.isSelected, true)),
-    orderBy: (p, { asc }) => [asc(p.selectionOrder)],
-  });
+  const selectedPersonas = assertData(
+    await supabase
+      .from("personas")
+      .select()
+      .eq("project_id", projectId)
+      .eq("is_selected", true)
+      .order("selection_order", { ascending: true }),
+  );
 
   if (selectedPersonas.length === 0) {
     throw new Error(`Project ${projectId} has no selected personas`);
@@ -61,30 +76,33 @@ export async function generatePersonaDrafts(
   onChunk?.(`Found ${selectedPersonas.length} selected personas.\n`);
 
   // 5. Fetch all source chunks for this project (via source_materials)
-  const materials = await db.query.sourceMaterials.findMany({
-    where: eq(sourceMaterials.projectId, projectId),
-  });
+  const materials = assertData(
+    await supabase.from("source_materials").select().eq("project_id", projectId),
+  );
 
   const materialIds = materials.map((m) => m.id);
 
   let allChunks: Array<{ id: string; content: string; estimatedTokens: number; chunkIndex: number; summary?: string | null }> = [];
 
   if (materialIds.length > 0) {
-    const chunkRows = await db.query.sourceChunks.findMany({
-      where: (c, { inArray }) => inArray(c.materialId, materialIds),
-      orderBy: (c, { asc }) => [asc(c.chunkIndex)],
-    });
+    const chunkRows = assertData(
+      await supabase
+        .from("source_chunks")
+        .select()
+        .in("material_id", materialIds)
+        .order("chunk_index", { ascending: true }),
+    );
     allChunks = chunkRows.map((c) => ({
       id: c.id,
       content: c.content,
-      estimatedTokens: c.estimatedTokens,
-      chunkIndex: c.chunkIndex,
+      estimatedTokens: c.estimated_tokens,
+      chunkIndex: c.chunk_index,
       summary: c.summary,
     }));
   }
 
   // 5. Select chunks within token budget (leave room for master prompt + system + response)
-  const masterPromptTokens = estimateTokens(project.masterPrompt);
+  const masterPromptTokens = estimateTokens(project.master_prompt);
   const availableTokens = getAvailableContextTokens("claude-opus-4-6");
   const chunkBudget = availableTokens - masterPromptTokens - 4000; // reserve for system + response
   const selectedChunks = selectChunksForBudget(allChunks, chunkBudget);
@@ -102,11 +120,11 @@ export async function generatePersonaDrafts(
       (async () => {
         onChunk?.(`\n[${persona.name}] Generating opinion points...\n`);
         const result = await claude.call({
-          system: buildPersonaDraftSystemPrompt(persona.name, persona.systemPrompt),
+          system: buildPersonaDraftSystemPrompt(persona.name, persona.system_prompt),
           messages: [
             {
               role: "user",
-              content: buildPersonaDraftUserMessage(project.masterPrompt!, selectedChunks),
+              content: buildPersonaDraftUserMessage(project.master_prompt!, selectedChunks),
             },
           ],
           maxTokens: 1024,
@@ -127,44 +145,54 @@ export async function generatePersonaDrafts(
     const persona = selectedPersonas[i]!;
     const result = results[i]!;
 
-    await db.insert(versions).values({
-      projectId,
-      producedByStep: 4,
-      versionType: "persona_draft",
-      personaId: persona.id,
-      internalLabel: `Opinions – ${persona.name}`,
-      content: result.content,
-      wordCount: countWords(result.content),
-      isClientVisible: false,
-    });
+    await supabase
+      .from("versions")
+      .insert({
+        project_id: projectId,
+        produced_by_step: 4,
+        version_type: "persona_draft",
+        persona_id: persona.id,
+        internal_label: `Opinions – ${persona.name}`,
+        content: result.content,
+        word_count: countWords(result.content),
+        is_client_visible: false,
+      })
+      .throwOnError();
 
     // Audit log per draft
-    await db.insert(auditLogs).values({
-      projectId,
-      userId,
-      action: "agent_response_received",
-      stepNumber: 4,
-      modelId: result.model,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      payload: { personaName: persona.name, durationMs },
-    });
+    await supabase
+      .from("audit_logs")
+      .insert({
+        project_id: projectId,
+        user_id: userId,
+        action: "agent_response_received",
+        step_number: 4,
+        model_id: result.model,
+        input_tokens: result.inputTokens,
+        output_tokens: result.outputTokens,
+        payload: { personaName: persona.name, durationMs },
+      })
+      .throwOnError();
   }
 
   // 8. Update stage to completed
-  await db
-    .update(stages)
-    .set({
+  const metadata: StageMetadata = { durationMs };
+  await supabase
+    .from("stages")
+    .update({
       status: "completed",
-      completedAt: new Date(),
-      updatedAt: new Date(),
-      metadata: { durationMs },
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: metadata as unknown as Json,
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 4)));
+    .eq("project_id", projectId)
+    .eq("step_number", 4)
+    .throwOnError();
 
   // 9. Advance project to stage 5
-  await db
-    .update(projects)
-    .set({ currentStage: 5, updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ current_stage: 5, updated_at: new Date().toISOString() })
+    .eq("id", projectId)
+    .throwOnError();
 }

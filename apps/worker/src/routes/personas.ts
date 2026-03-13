@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { workerAuth } from "../middleware/auth";
 import { enqueueJob } from "../jobs/queue";
-import { runJob } from "../jobs/runner";
 
 const personasRoute = new Hono();
 
@@ -24,11 +23,7 @@ personasRoute.post("/generate", async (c) => {
     return c.json({ error: "Invalid request", details: parsed.error.flatten() }, 400);
   }
 
-  const job = enqueueJob("custom_persona", parsed.data);
-
-  void runJob(job.id).catch((err: unknown) => {
-    console.error(`Background persona job ${job.id} error:`, err);
-  });
+  const job = await enqueueJob("custom_persona", parsed.data);
 
   return c.json({ jobId: job.id, status: job.status });
 });

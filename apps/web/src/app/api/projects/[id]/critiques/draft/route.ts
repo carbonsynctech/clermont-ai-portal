@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
-import { db, projects, stages } from "@repo/db";
 import { createClient } from "@/lib/supabase/server";
+import type { Json } from "@repo/db";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -40,9 +39,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -78,38 +80,42 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     );
   }
 
-  const stage11 = await db.query.stages.findFirst({
-    where: and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)),
-  });
+  const { data: stage11 } = await supabase
+    .from("stages")
+    .select()
+    .eq("project_id", projectId)
+    .eq("step_number", 11)
+    .single();
 
   const existingMetadata =
     stage11?.metadata && typeof stage11.metadata === "object" && !Array.isArray(stage11.metadata)
       ? stage11.metadata
       : {};
 
-  const now = new Date();
+  const now = new Date().toISOString();
 
-  await db
-    .update(stages)
-    .set({
+  await supabase
+    .from("stages")
+    .update({
       metadata: {
-        ...existingMetadata,
+        ...(existingMetadata as Record<string, unknown>),
         devilsAdvocateDraft: {
           critiques: body.critiques,
           selectedIds: body.selectedIds,
           selectedCritiques: body.selectedCritiques,
-          savedAt: now.toISOString(),
+          savedAt: now,
         },
         selectedCritiquesCount: body.selectedCritiques.length,
-      },
-      updatedAt: now,
+      } as unknown as Json,
+      updated_at: now,
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
+    .eq("project_id", projectId)
+    .eq("step_number", 11);
 
-  await db
-    .update(projects)
-    .set({ updatedAt: now })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ updated_at: now })
+    .eq("id", projectId);
 
-  return NextResponse.json({ ok: true, savedAt: now.toISOString() });
+  return NextResponse.json({ ok: true, savedAt: now });
 }

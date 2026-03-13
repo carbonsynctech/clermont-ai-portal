@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, stages } from "@repo/db";
-import type { ProjectBriefData } from "@repo/db";
+import type { Json } from "@repo/db";
 import { SOP_STEP_NAMES } from "@repo/core";
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient();
@@ -20,17 +17,20 @@ export async function GET(req: NextRequest) {
   const status =
     statusParam === "trashed" || statusParam === "all" ? statusParam : "active";
 
-  const whereClause =
-    status === "trashed"
-      ? and(eq(projects.ownerId, user.id), isNotNull(projects.deletedAt))
-      : status === "all"
-      ? eq(projects.ownerId, user.id)
-      : and(eq(projects.ownerId, user.id), isNull(projects.deletedAt));
+  let query = supabase.from("projects").select().eq("owner_id", user.id);
 
-  const rows = await db.query.projects.findMany({
-    where: whereClause,
-    orderBy: (p, { desc }) => [desc(p.createdAt)],
-  });
+  if (status === "trashed") {
+    query = query.not("deleted_at", "is", null);
+  } else if (status === "active") {
+    query = query.is("deleted_at", null);
+  }
+  // status === "all" has no additional filter
+
+  const { data: rows, error } = await query.order("created_at", { ascending: false });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json(rows);
 }
@@ -52,31 +52,36 @@ export async function POST(req: NextRequest) {
       ? body.title.trim()
       : "Untitled Project";
 
-  const [project] = await db
-    .insert(projects)
-    .values({
-      ownerId: user.id,
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .insert({
+      owner_id: user.id,
       title,
-      briefData:
-        body.briefData != null ? (body.briefData as ProjectBriefData) : undefined,
+      brief_data:
+        body.briefData != null ? (body.briefData as unknown as Json) : undefined,
       status: "draft",
-      currentStage: 1,
+      current_stage: 1,
     })
-    .returning();
+    .select()
+    .single();
 
-  if (!project) {
-    return NextResponse.json({ error: "Failed to create project" }, { status: 500 });
+  if (projectError || !project) {
+    return NextResponse.json({ error: projectError?.message ?? "Failed to create project" }, { status: 500 });
   }
 
   // Create all 12 stage rows
   const stageRows = Array.from({ length: 12 }, (_, i) => ({
-    projectId: project.id,
-    stepNumber: i + 1,
-    stepName: SOP_STEP_NAMES[(i + 1) as keyof typeof SOP_STEP_NAMES],
+    project_id: project.id,
+    step_number: i + 1,
+    step_name: SOP_STEP_NAMES[(i + 1) as keyof typeof SOP_STEP_NAMES],
     status: "pending" as const,
   }));
 
-  await db.insert(stages).values(stageRows);
+  const { error: stagesError } = await supabase.from("stages").insert(stageRows);
+
+  if (stagesError) {
+    return NextResponse.json({ error: stagesError.message }, { status: 500 });
+  }
 
   return NextResponse.json(project, { status: 201 });
 }

@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, stages, versions, auditLogs } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -21,11 +18,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id: projectId } = await params;
 
   // Auth + ownership check
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
-  if (!project) {
+  if (projectError || !project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
@@ -40,35 +40,36 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const reviewNotes = typeof body.reviewNotes === "string" ? body.reviewNotes.trim() : "";
 
   // Insert human_reviewed version
-  const [newVersion] = await db
-    .insert(versions)
-    .values({
-      projectId,
-      producedByStep: 7,
-      versionType: "human_reviewed",
-      internalLabel: "Human Review V5",
+  const { data: newVersion, error: versionError } = await supabase
+    .from("versions")
+    .insert({
+      project_id: projectId,
+      produced_by_step: 7,
+      version_type: "human_reviewed",
+      internal_label: "Human Review V5",
       content,
-      wordCount,
-      isClientVisible: false,
+      word_count: wordCount,
+      is_client_visible: false,
     })
-    .returning();
+    .select()
+    .single();
 
-  if (!newVersion) {
-    return NextResponse.json({ error: "Failed to create version" }, { status: 500 });
+  if (versionError || !newVersion) {
+    return NextResponse.json({ error: versionError?.message ?? "Failed to create version" }, { status: 500 });
   }
 
   // Update activeVersionId
-  await db
-    .update(projects)
-    .set({ activeVersionId: newVersion.id, updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ active_version_id: newVersion.id, updated_at: new Date().toISOString() })
+    .eq("id", projectId);
 
   // Insert audit log
-  await db.insert(auditLogs).values({
-    projectId,
-    userId: user.id,
+  await supabase.from("audit_logs").insert({
+    project_id: projectId,
+    user_id: user.id,
     action: "human_review_approved",
-    stepNumber: 7,
+    step_number: 7,
     payload: {
       wordCount,
       ...(reviewNotes ? { reviewNotes } : {}),
@@ -76,27 +77,28 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   });
 
   // Update stage 7 to completed
-  await db
-    .update(stages)
-    .set({
+  await supabase
+    .from("stages")
+    .update({
       status: "completed",
-      completedAt: new Date(),
-      updatedAt: new Date(),
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       metadata: {
         reviewDraftContent: content,
         ...(reviewNotes ? { reviewNotes } : {}),
       },
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 7)));
+    .eq("project_id", projectId)
+    .eq("step_number", 7);
 
   // Advance project to stage 8 only if currently behind
-  await db
-    .update(projects)
-    .set({
-      currentStage: project.currentStage < 8 ? 8 : project.currentStage,
-      updatedAt: new Date()
+  await supabase
+    .from("projects")
+    .update({
+      current_stage: project.current_stage < 8 ? 8 : project.current_stage,
+      updated_at: new Date().toISOString(),
     })
-    .where(eq(projects.id, projectId));
+    .eq("id", projectId);
 
   return NextResponse.json({ ok: true });
 }

@@ -65,10 +65,10 @@ export function StyleGuideUpload({ projectId, existingStyleGuide }: StyleGuideUp
           <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
             <div className="flex items-center gap-2 min-w-0">
               <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-              <span className="truncate">{existingStyleGuide.originalFilename}</span>
+              <span className="truncate">{existingStyleGuide.original_filename}</span>
             </div>
             <span className="text-muted-foreground shrink-0">
-              {existingStyleGuide.isProcessed ? "Processed" : "Ready"}
+              {existingStyleGuide.is_processed ? "Processed" : "Ready"}
             </span>
           </div>
         </div>

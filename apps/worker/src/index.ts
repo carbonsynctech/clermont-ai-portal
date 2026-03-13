@@ -7,6 +7,7 @@ import { jobsRoute } from "./routes/jobs";
 import { stagesRoute } from "./routes/stages";
 import { exportRoute } from "./routes/export";
 import { personasRoute } from "./routes/personas";
+import { startQueueConsumer } from "./jobs/runner";
 
 const app = new Hono();
 
@@ -31,3 +32,6 @@ const port = Number(process.env["PORT"] ?? 3001);
 console.log(`Worker starting on port ${port}`);
 
 serve({ fetch: app.fetch, port });
+
+startQueueConsumer();
+console.log("PGMQ queue consumer started");

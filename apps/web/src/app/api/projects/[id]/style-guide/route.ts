@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, styleGuides, stages } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { sanitizeFilename } from "@/lib/sanitize-filename";
 
@@ -22,9 +19,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -57,30 +57,33 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
 
   // Insert style_guides row
-  const [styleGuide] = await db
-    .insert(styleGuides)
-    .values({
-      projectId,
-      originalFilename,
-      storagePath,
-      isProcessed: false,
+  const { data: styleGuide } = await supabase
+    .from("style_guides")
+    .insert({
+      project_id: projectId,
+      original_filename: originalFilename,
+      storage_path: storagePath,
+      is_processed: false,
     })
-    .returning();
+    .select()
+    .single();
 
   if (!styleGuide) {
     return NextResponse.json({ error: "Failed to create style guide record" }, { status: 500 });
   }
 
   // Mark stage 6 as completed (style guide uploaded = step 6 done)
-  await db
-    .update(stages)
-    .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 6)));
+  const now = new Date().toISOString();
+  await supabase
+    .from("stages")
+    .update({ status: "completed", completed_at: now, updated_at: now })
+    .eq("project_id", projectId)
+    .eq("step_number", 6);
 
-  await db
-    .update(projects)
-    .set({ updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ updated_at: now })
+    .eq("id", projectId);
 
   return NextResponse.json({ styleGuideId: styleGuide.id });
 }

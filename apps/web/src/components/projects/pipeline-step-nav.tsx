@@ -105,7 +105,7 @@ export function PipelineStepNav({
   stepStatusOverrides,
   completedStepOverrides,
 }: PipelineStepNavProps) {
-  const stageMap = new Map(stages.map((s) => [s.stepNumber, s]));
+  const stageMap = new Map(stages.map((s) => [s.step_number, s]));
 
   return (
     <div className="rounded-xl border bg-card p-4 h-fit sticky top-16">

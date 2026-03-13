@@ -1,6 +1,4 @@
-import { db } from "@repo/db";
-import { projects } from "@repo/db";
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { createClient } from "@/lib/supabase/server";
 import { DashboardExplorer } from "./dashboard-explorer";
 
 type ProjectListStatus = "active" | "trashed" | "all";
@@ -18,19 +16,25 @@ export async function ProjectList({
   status = "active",
   mode = "active",
 }: ProjectListProps) {
-  const whereClause =
-    status === "trashed"
-      ? and(eq(projects.ownerId, userId), isNotNull(projects.deletedAt))
-      : status === "all"
-      ? eq(projects.ownerId, userId)
-      : and(eq(projects.ownerId, userId), isNull(projects.deletedAt));
+  const supabase = await createClient();
 
-  const rows = await db.query.projects.findMany({
-    where: whereClause,
-    orderBy: (p, { desc }) => [desc(p.createdAt)],
-  });
+  let query = supabase
+    .from("projects")
+    .select()
+    .eq("owner_id", userId);
 
-  if (rows.length === 0 && mode === "trash") {
+  if (status === "trashed") {
+    query = query.not("deleted_at", "is", null);
+  } else if (status === "active") {
+    query = query.is("deleted_at", null);
+  }
+  // status === "all" needs no extra filter
+
+  const { data: rows } = await query.order("created_at", { ascending: false });
+
+  const allRows = rows ?? [];
+
+  if (allRows.length === 0 && mode === "trash") {
     return (
       <div className="rounded-lg border border-dashed p-12 text-center">
         <p className="text-muted-foreground text-sm">Trash is empty.</p>
@@ -44,14 +48,14 @@ export async function ProjectList({
   return (
     <DashboardExplorer
       mode={mode}
-      projects={rows.map((project) => ({
+      projects={allRows.map((project) => ({
         id: project.id,
         title: project.title,
         status: project.status,
-        currentStage: project.currentStage,
-        createdAt: project.createdAt.toISOString(),
-        updatedAt: project.updatedAt.toISOString(),
-        deletedAt: project.deletedAt?.toISOString(),
+        currentStage: project.current_stage,
+        createdAt: project.created_at,
+        updatedAt: project.updated_at,
+        deletedAt: project.deleted_at ?? undefined,
       }))}
     />
   );

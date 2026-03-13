@@ -6,9 +6,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "db:generate": "turbo run db:generate",
-    "db:migrate": "turbo run db:migrate",
-    "db:studio": "cd packages/db && pnpm drizzle-kit studio"
+    "db:gen-types": "cd packages/db && pnpm gen:types"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -2,17 +2,15 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { workerAuth } from "../middleware/auth";
 import { enqueueJob, getJob } from "../jobs/queue";
-import { runJob } from "../jobs/runner";
-import { db, versions, styleGuides } from "@repo/db";
-import { and, eq, desc } from "drizzle-orm";
+import { createAdminClient } from "../lib/supabase-admin";
 
 const jobsRoute = new Hono();
 
 jobsRoute.use("*", workerAuth);
 
-jobsRoute.get("/:id", (c) => {
+jobsRoute.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const job = getJob(id);
+  const job = await getJob(id);
 
   if (!job) {
     return c.json({ error: "Job not found" }, 404);
@@ -51,11 +49,7 @@ jobsRoute.post("/extract-material", async (c) => {
   }
 
   const { materialId } = parsed.data;
-  const job = enqueueJob("extract_material", { materialId });
-
-  void runJob(job.id).catch((err: unknown) => {
-    console.error(`Background job ${job.id} error:`, err);
-  });
+  const job = await enqueueJob("extract_material", { materialId });
 
   return c.json({ jobId: job.id, status: job.status });
 });
@@ -68,11 +62,7 @@ jobsRoute.post("/ask-ai", async (c) => {
     return c.json({ error: "Invalid request", details: parsed.error.flatten() }, 400);
   }
 
-  const job = enqueueJob("ask_ai", parsed.data);
-
-  void runJob(job.id).catch((err: unknown) => {
-    console.error(`Background job ${job.id} error:`, err);
-  });
+  const job = await enqueueJob("ask_ai", parsed.data);
 
   return c.json({ jobId: job.id, status: job.status });
 });
@@ -91,11 +81,7 @@ jobsRoute.post("/generate-cover-images", async (c) => {
     return c.json({ error: "Invalid request", details: parsed.error.flatten() }, 400);
   }
 
-  const job = enqueueJob("cover_images", parsed.data);
-
-  void runJob(job.id).catch((err: unknown) => {
-    console.error(`Background cover-images job ${job.id} error:`, err);
-  });
+  const job = await enqueueJob("cover_images", parsed.data);
 
   return c.json({ jobId: job.id, status: job.status });
 });
@@ -116,10 +102,15 @@ jobsRoute.post("/synthesis-fix", async (c) => {
 
   const { projectId, userId, userMessage } = parsed.data;
 
-  const synthesisVersion = await db.query.versions.findFirst({
-    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "synthesis")),
-    orderBy: [desc(versions.createdAt)],
-  });
+  const supabase = createAdminClient();
+  const { data: synthesisVersion } = await supabase
+    .from("versions")
+    .select()
+    .eq("project_id", projectId)
+    .eq("version_type", "synthesis")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
 
   if (!synthesisVersion) {
     return c.json({ error: "Synthesis version not found" }, 404);
@@ -151,11 +142,7 @@ jobsRoute.post("/synthesis-fix", async (c) => {
     "- Keep tone, style, and formality consistent with the original.",
   ].join("\n");
 
-  const job = enqueueJob("ask_ai", { prompt, userId });
-
-  void runJob(job.id).catch((err: unknown) => {
-    console.error(`Background job ${job.id} error:`, err);
-  });
+  const job = await enqueueJob("ask_ai", { prompt, userId });
 
   return c.json({ jobId: job.id, status: job.status });
 });
@@ -176,24 +163,30 @@ jobsRoute.post("/style-edit-fix", async (c) => {
 
   const { projectId, userId, userMessage } = parsed.data;
 
-  // Fetch latest synthesis version (Step 5 canonical source)
-  const synthesisVersion = await db.query.versions.findFirst({
-    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "synthesis")),
-    orderBy: [desc(versions.createdAt)],
-  });
+  const supabase = createAdminClient();
+  const { data: synthesisVersion } = await supabase
+    .from("versions")
+    .select()
+    .eq("project_id", projectId)
+    .eq("version_type", "synthesis")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
 
   if (!synthesisVersion) {
     return c.json({ error: "Synthesis version not found" }, 404);
   }
 
-  // Optionally fetch condensed style rules for context
-  const styleGuide = await db.query.styleGuides.findFirst({
-    where: eq(styleGuides.projectId, projectId),
-    orderBy: [desc(styleGuides.uploadedAt)],
-  });
+  const { data: styleGuide } = await supabase
+    .from("style_guides")
+    .select()
+    .eq("project_id", projectId)
+    .order("uploaded_at", { ascending: false })
+    .limit(1)
+    .single();
 
-  const rulesContext = styleGuide?.condensedRulesText
-    ? `\nStyle rules that were applied:\n---\n${styleGuide.condensedRulesText}\n---\n`
+  const rulesContext = styleGuide?.condensed_rules_text
+    ? `\nStyle rules that were applied:\n---\n${styleGuide.condensed_rules_text}\n---\n`
     : "";
 
   const prompt = [
@@ -224,11 +217,7 @@ jobsRoute.post("/style-edit-fix", async (c) => {
     "- Preserve all style guide conventions already applied.",
   ].join("\n");
 
-  const job = enqueueJob("ask_ai", { prompt, userId });
-
-  void runJob(job.id).catch((err: unknown) => {
-    console.error(`Background job ${job.id} error:`, err);
-  });
+  const job = await enqueueJob("ask_ai", { prompt, userId });
 
   return c.json({ jobId: job.id, status: job.status });
 });
@@ -249,22 +238,30 @@ jobsRoute.post("/final-style-fix", async (c) => {
 
   const { projectId, userId, userMessage } = parsed.data;
 
-  const finalStyledVersion = await db.query.versions.findFirst({
-    where: and(eq(versions.projectId, projectId), eq(versions.versionType, "final_styled")),
-    orderBy: [desc(versions.createdAt)],
-  });
+  const supabase = createAdminClient();
+  const { data: finalStyledVersion } = await supabase
+    .from("versions")
+    .select()
+    .eq("project_id", projectId)
+    .eq("version_type", "final_styled")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
 
   if (!finalStyledVersion) {
     return c.json({ error: "Final styled version not found" }, 404);
   }
 
-  const styleGuide = await db.query.styleGuides.findFirst({
-    where: eq(styleGuides.projectId, projectId),
-    orderBy: [desc(styleGuides.uploadedAt)],
-  });
+  const { data: styleGuide } = await supabase
+    .from("style_guides")
+    .select()
+    .eq("project_id", projectId)
+    .order("uploaded_at", { ascending: false })
+    .limit(1)
+    .single();
 
-  const rulesContext = styleGuide?.condensedRulesText
-    ? `\nStyle rules that were applied:\n---\n${styleGuide.condensedRulesText}\n---\n`
+  const rulesContext = styleGuide?.condensed_rules_text
+    ? `\nStyle rules that were applied:\n---\n${styleGuide.condensed_rules_text}\n---\n`
     : "";
 
   const prompt = [
@@ -295,11 +292,7 @@ jobsRoute.post("/final-style-fix", async (c) => {
     "- Preserve all style guide conventions already applied.",
   ].join("\n");
 
-  const job = enqueueJob("ask_ai", { prompt, userId });
-
-  void runJob(job.id).catch((err: unknown) => {
-    console.error(`Background job ${job.id} error:`, err);
-  });
+  const job = await enqueueJob("ask_ai", { prompt, userId });
 
   return c.json({ jobId: job.id, status: job.status });
 });

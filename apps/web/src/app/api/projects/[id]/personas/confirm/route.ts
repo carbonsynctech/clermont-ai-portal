@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, personas, stages, auditLogs } from "@repo/db";
-import { eq, and, inArray } from "drizzle-orm";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -22,9 +19,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const { id: projectId } = await params;
 
     // Verify ownership
-    const project = await db.query.projects.findFirst({
-      where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-    });
+    const { data: project } = await supabase
+      .from("projects")
+      .select()
+      .eq("id", projectId)
+      .eq("owner_id", user.id)
+      .single();
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -44,37 +44,39 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     console.log(`[confirm-personas] Starting for project ${projectId} with ${personaIds.length} personas`);
 
     // Clear any previously selected personas for this project
-    await db
-      .update(personas)
-      .set({ isSelected: false, selectionOrder: null })
-      .where(eq(personas.projectId, projectId));
+    await supabase
+      .from("personas")
+      .update({ is_selected: false, selection_order: null })
+      .eq("project_id", projectId);
     console.log(`[confirm-personas] Cleared previous selections`);
 
     // Fetch the selected personas to check which ones belong to this project
-    const selectedPersonaRows = await db.query.personas.findMany({
-      where: inArray(personas.id, personaIds),
-    });
+    const { data: selectedPersonaRows } = await supabase
+      .from("personas")
+      .select()
+      .in("id", personaIds);
 
     // Clone any personas that don't belong to this project (library/global personas)
     const idMapping = new Map<string, string>(); // old id -> new id (for cloned)
-    for (const persona of selectedPersonaRows) {
-      if (persona.projectId === projectId) {
+    for (const persona of selectedPersonaRows ?? []) {
+      if (persona.project_id === projectId) {
         idMapping.set(persona.id, persona.id);
       } else {
         // Clone into this project
-        const [cloned] = await db
-          .insert(personas)
-          .values({
-            projectId,
+        const { data: cloned } = await supabase
+          .from("personas")
+          .insert({
+            project_id: projectId,
             name: persona.name,
             description: persona.description,
-            systemPrompt: persona.systemPrompt,
-            sourceUrls: persona.sourceUrls,
+            system_prompt: persona.system_prompt,
+            source_urls: persona.source_urls,
             tags: persona.tags,
-            isSelected: false,
-            selectionOrder: null,
+            is_selected: false,
+            selection_order: null,
           })
-          .returning({ id: personas.id });
+          .select("id")
+          .single();
         if (cloned) {
           idMapping.set(persona.id, cloned.id);
           console.log(`[confirm-personas] Cloned library persona ${persona.id} -> ${cloned.id}`);
@@ -88,52 +90,57 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     // Mark selected personas with selectionOrder
     const updateResults = await Promise.all(
       resolvedIds.map((personaId, index) =>
-        db
-          .update(personas)
-          .set({ isSelected: true, selectionOrder: index })
-          .where(and(eq(personas.id, personaId), eq(personas.projectId, projectId)))
+        supabase
+          .from("personas")
+          .update({ is_selected: true, selection_order: index })
+          .eq("id", personaId)
+          .eq("project_id", projectId)
       )
     );
     console.log(`[confirm-personas] Updated ${updateResults.length} personas with selection`);
 
     // Verify personas were actually updated
-    const verifyPersonas = await db.query.personas.findMany({
-      where: and(eq(personas.projectId, projectId), eq(personas.isSelected, true)),
-    });
-    console.log(`[confirm-personas] Verification: ${verifyPersonas.length} personas marked as selected`);
+    const { data: verifyPersonas } = await supabase
+      .from("personas")
+      .select()
+      .eq("project_id", projectId)
+      .eq("is_selected", true);
+    console.log(`[confirm-personas] Verification: ${verifyPersonas?.length ?? 0} personas marked as selected`);
 
-    if (verifyPersonas.length !== 5) {
+    if (!verifyPersonas || verifyPersonas.length !== 5) {
       console.error(
-        `[confirm-personas] ERROR: Expected 5 selected personas but got ${verifyPersonas.length}. PersonaIds: ${JSON.stringify(personaIds)}`
+        `[confirm-personas] ERROR: Expected 5 selected personas but got ${verifyPersonas?.length ?? 0}. PersonaIds: ${JSON.stringify(personaIds)}`
       );
       return NextResponse.json(
-        { error: `Failed to update all personas. Expected 5, got ${verifyPersonas.length}` },
+        { error: `Failed to update all personas. Expected 5, got ${verifyPersonas?.length ?? 0}` },
         { status: 500 }
       );
     }
 
     // Audit log
-    await db.insert(auditLogs).values({
-      projectId,
-      userId: user.id,
+    await supabase.from("audit_logs").insert({
+      project_id: projectId,
+      user_id: user.id,
       action: "persona_selected",
-      stepNumber: 2,
+      step_number: 2,
       payload: { count: 5, personaIds: resolvedIds },
     });
     console.log(`[confirm-personas] Audit log created`);
 
     // Complete stage 2
-    await db
-      .update(stages)
-      .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 2)));
+    const now = new Date().toISOString();
+    await supabase
+      .from("stages")
+      .update({ status: "completed", completed_at: now, updated_at: now })
+      .eq("project_id", projectId)
+      .eq("step_number", 2);
     console.log(`[confirm-personas] Stage 2 marked completed`);
 
     // Advance project to stage 3
-    await db
-      .update(projects)
-      .set({ currentStage: 3, updatedAt: new Date() })
-      .where(eq(projects.id, projectId));
+    await supabase
+      .from("projects")
+      .update({ current_stage: 3, updated_at: now })
+      .eq("id", projectId);
     console.log(`[confirm-personas] Project advanced to stage 3`);
 
     console.log(`[confirm-personas] SUCCESS for project ${projectId}`);

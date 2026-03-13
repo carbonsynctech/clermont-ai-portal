@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, sourceMaterials, auditLogs } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 
 interface RouteParams {
   params: Promise<{ id: string; materialId: string }>;
@@ -22,20 +19,26 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     const { id: projectId, materialId } = await params;
 
     // Verify project ownership
-    const project = await db.query.projects.findFirst({
-      where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-    });
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select()
+      .eq("id", projectId)
+      .eq("owner_id", user.id)
+      .single();
 
-    if (!project) {
+    if (projectError || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     // Verify material belongs to project
-    const material = await db.query.sourceMaterials.findFirst({
-      where: and(eq(sourceMaterials.id, materialId), eq(sourceMaterials.projectId, projectId)),
-    });
+    const { data: material, error: materialError } = await supabase
+      .from("source_materials")
+      .select()
+      .eq("id", materialId)
+      .eq("project_id", projectId)
+      .single();
 
-    if (!material) {
+    if (materialError || !material) {
       return NextResponse.json({ error: "Material not found" }, { status: 404 });
     }
 
@@ -43,7 +46,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     const adminSupabase = createAdminClient();
     const { error: deleteError } = await adminSupabase.storage
       .from("source-materials")
-      .remove([material.storagePath]);
+      .remove([material.storage_path]);
 
     if (deleteError) {
       console.error("Failed to delete file from storage:", deleteError);
@@ -51,21 +54,21 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     }
 
     // Delete from database (do this first — it's the critical operation)
-    await db.delete(sourceMaterials).where(eq(sourceMaterials.id, materialId));
+    await supabase.from("source_materials").delete().eq("id", materialId);
 
     // Audit log + timestamp update (non-critical — don't fail the response if these error)
     try {
-      await db.insert(auditLogs).values({
-        projectId,
-        userId: user.id,
+      await supabase.from("audit_logs").insert({
+        project_id: projectId,
+        user_id: user.id,
         action: "source_deleted",
-        payload: { materialId, filename: material.originalFilename },
+        payload: { materialId, filename: material.original_filename },
       });
 
-      await db
-        .update(projects)
-        .set({ updatedAt: new Date() })
-        .where(eq(projects.id, projectId));
+      await supabase
+        .from("projects")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", projectId);
     } catch (auditError) {
       console.error("Failed to write audit log for source deletion:", auditError);
     }

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { db, projects, styleGuides } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 import { workerClient } from "@/lib/worker-client";
 
 interface RouteParams {
@@ -19,22 +17,32 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const styleGuide = await db.query.styleGuides.findFirst({
-    where: eq(styleGuides.projectId, projectId),
-    orderBy: (sg, { desc }) => [desc(sg.uploadedAt)],
-  });
+  const { data: styleGuide } = await supabase
+    .from("style_guides")
+    .select()
+    .eq("project_id", projectId)
+    .order("uploaded_at", { ascending: false })
+    .limit(1)
+    .single();
 
-  if (!styleGuide?.coverImages) {
+  if (!styleGuide?.cover_images) {
     return NextResponse.json({ images: [], selectedStyle: null, styleGuideId: styleGuide?.id ?? null });
   }
 
   const adminClient = createAdminClient();
-  const coverData = styleGuide.coverImages;
+  const coverData = styleGuide.cover_images as {
+    images: Array<{ style: string; storagePath: string; mimeType: string }>;
+    selectedStyle: string | null;
+    generatedAt: string;
+  };
 
   // Generate signed URLs (1 hour expiry)
   const imagesWithUrls = await Promise.all(
@@ -70,15 +78,21 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const styleGuide = await db.query.styleGuides.findFirst({
-    where: eq(styleGuides.projectId, projectId),
-    orderBy: (sg, { desc }) => [desc(sg.uploadedAt)],
-  });
+  const { data: styleGuide } = await supabase
+    .from("style_guides")
+    .select()
+    .eq("project_id", projectId)
+    .order("uploaded_at", { ascending: false })
+    .limit(1)
+    .single();
   if (!styleGuide) {
     return NextResponse.json({ error: "No style guide uploaded yet" }, { status: 400 });
   }
@@ -103,9 +117,12 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   let body: { selectedStyle?: unknown };
@@ -121,23 +138,32 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Invalid selectedStyle" }, { status: 400 });
   }
 
-  const styleGuide = await db.query.styleGuides.findFirst({
-    where: eq(styleGuides.projectId, projectId),
-    orderBy: (sg, { desc }) => [desc(sg.uploadedAt)],
-  });
-  if (!styleGuide?.coverImages) {
+  const { data: styleGuide } = await supabase
+    .from("style_guides")
+    .select()
+    .eq("project_id", projectId)
+    .order("uploaded_at", { ascending: false })
+    .limit(1)
+    .single();
+  if (!styleGuide?.cover_images) {
     return NextResponse.json({ error: "No cover images generated yet" }, { status: 400 });
   }
 
-  await db
-    .update(styleGuides)
-    .set({
-      coverImages: {
-        ...styleGuide.coverImages,
+  const coverImages = styleGuide.cover_images as {
+    images: Array<{ style: string; storagePath: string; mimeType: string }>;
+    selectedStyle: string | null;
+    generatedAt: string;
+  };
+
+  await supabase
+    .from("style_guides")
+    .update({
+      cover_images: {
+        ...coverImages,
         selectedStyle: body.selectedStyle as "corporate" | "modern" | "minimal" | "bold",
       },
     })
-    .where(eq(styleGuides.id, styleGuide.id));
+    .eq("id", styleGuide.id);
 
   return NextResponse.json({ ok: true });
 }

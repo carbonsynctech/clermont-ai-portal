@@ -31,8 +31,8 @@ export function SelectPersonasStep({
   const stage1Done = stage1Status === "completed";
 
   const alreadySelected = projectPersonas
-    .filter((p) => p.isSelected)
-    .sort((a, b) => (a.selectionOrder ?? 0) - (b.selectionOrder ?? 0))
+    .filter((p) => p.is_selected)
+    .sort((a, b) => (a.selection_order ?? 0) - (b.selection_order ?? 0))
     .map((p) => p.id);
 
   const [selectedIds, setSelectedIds] = useState<string[]>(alreadySelected);
@@ -106,8 +106,8 @@ export function SelectPersonasStep({
           </div>
           <div className="grid grid-cols-2 gap-2">
             {projectPersonas
-              .filter((p) => p.isSelected)
-              .sort((a, b) => (a.selectionOrder ?? 0) - (b.selectionOrder ?? 0))
+              .filter((p) => p.is_selected)
+              .sort((a, b) => (a.selection_order ?? 0) - (b.selection_order ?? 0))
               .map((p, i) => (
                 <div key={p.id} className="flex items-center gap-2 text-sm">
                   <Badge variant="outline" className="text-xs h-5 px-1.5 shrink-0">{i + 1}</Badge>

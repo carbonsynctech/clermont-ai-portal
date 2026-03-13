@@ -62,7 +62,7 @@ export function PersonaCard({ persona, isSelected, onToggle, disableToggle }: Pe
         </Button>
         {showPrompt && (
           <div className="rounded-md bg-muted/50 p-2 text-xs text-foreground leading-relaxed max-h-32 overflow-y-auto whitespace-pre-wrap">
-            {persona.systemPrompt}
+            {persona.system_prompt}
           </div>
         )}
       </CardContent>

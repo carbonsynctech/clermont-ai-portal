@@ -48,7 +48,7 @@ export function IntegrateCritiquesStep({
       <MarkdownVersionPanel
         title="Integrated Critiques — Final V6"
         content={finalVersion.content}
-        wordCount={finalVersion.wordCount ?? undefined}
+        wordCount={finalVersion.word_count ?? undefined}
       />
 
       <div className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 h-fit space-y-3">
@@ -56,7 +56,7 @@ export function IntegrateCritiquesStep({
           <Brain className="size-4 text-primary" />
           <h3 className="font-medium text-base">Critiques Integrated — Final V6</h3>
         </div>
-        <Badge variant="outline">{finalVersion.wordCount?.toLocaleString() ?? "?"} words</Badge>
+        <Badge variant="outline">{finalVersion.word_count?.toLocaleString() ?? "?"} words</Badge>
         <StepTriggerButton
           trigger={trigger}
           label="Re-run Critique Integration"

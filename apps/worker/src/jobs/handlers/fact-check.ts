@@ -1,45 +1,51 @@
-import { db, projects, stages, versions, auditLogs } from "@repo/db";
+import type { StageMetadata, Json } from "@repo/db";
 import { claude, gemini } from "@repo/core";
-import { eq, and } from "drizzle-orm";
+import { createAdminClient } from "../../lib/supabase-admin";
+import { assertData } from "../../lib/db";
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).length;
 }
 
 export async function factCheck(projectId: string, userId: string, onChunk?: (chunk: string) => void): Promise<void> {
-  // 1. Fetch project
-  const project = await db.query.projects.findFirst({
-    where: eq(projects.id, projectId),
-  });
+  const supabase = createAdminClient();
 
-  if (!project) throw new Error(`Project ${projectId} not found`);
+  // 1. Fetch project
+  const project = assertData(
+    await supabase.from("projects").select().eq("id", projectId).single(),
+  );
 
   onChunk?.("Fetching latest synthesis version…\n");
 
   // 2. Update stage to running
-  await db
-    .update(stages)
-    .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 6)));
+  await supabase
+    .from("stages")
+    .update({ status: "running", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("project_id", projectId)
+    .eq("step_number", 6)
+    .throwOnError();
 
   const startedAt = Date.now();
 
   // 3. Fetch latest synthesis version (Step 5 canonical source)
   let synthesisContent: string;
-  if (project.activeVersionId) {
-    const activeVersion = await db.query.versions.findFirst({
-      where: eq(versions.id, project.activeVersionId),
-    });
+  if (project.active_version_id) {
+    const activeVersion = assertData(
+      await supabase.from("versions").select().eq("id", project.active_version_id).single(),
+    );
     synthesisContent = activeVersion?.content ?? "";
   } else {
-    const latestSynthesis = await db.query.versions.findFirst({
-      where: and(
-        eq(versions.projectId, projectId),
-        eq(versions.versionType, "synthesis")
-      ),
-      orderBy: (v, { desc }) => [desc(v.createdAt)],
-    });
-    synthesisContent = latestSynthesis?.content ?? "";
+    const latestResults = assertData(
+      await supabase
+        .from("versions")
+        .select()
+        .eq("project_id", projectId)
+        .eq("version_type", "synthesis")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single(),
+    );
+    synthesisContent = latestResults?.content ?? "";
   }
 
   if (!synthesisContent) {
@@ -99,54 +105,63 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
   onChunk?.("\nSaving corrected version…\n");
 
   // 6. Insert fact-checked version
-  const [newVersion] = await db
-    .insert(versions)
-    .values({
-      projectId,
-      producedByStep: 6,
-      versionType: "fact_checked",
-      internalLabel: `Fact-Checked V3${issueCount > 0 ? ` (${issueCount} issue${issueCount !== 1 ? "s" : ""} found)` : ""}`,
-      content: geminiResult.correctedContent,
-      wordCount: countWords(geminiResult.correctedContent),
-      isClientVisible: false,
-    })
-    .returning();
+  const [newVersion] = assertData(
+    await supabase
+      .from("versions")
+      .insert({
+        project_id: projectId,
+        produced_by_step: 6,
+        version_type: "fact_checked",
+        internal_label: `Fact-Checked V3${issueCount > 0 ? ` (${issueCount} issue${issueCount !== 1 ? "s" : ""} found)` : ""}`,
+        content: geminiResult.correctedContent,
+        word_count: countWords(geminiResult.correctedContent),
+        is_client_visible: false,
+      })
+      .select()
+  );
 
   if (!newVersion) throw new Error("Failed to insert fact-checked version");
 
   // 7. Update activeVersionId
-  await db
-    .update(projects)
-    .set({ activeVersionId: newVersion.id, updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ active_version_id: newVersion.id, updated_at: new Date().toISOString() })
+    .eq("id", projectId)
+    .throwOnError();
 
   // 8. Audit log
-  await db.insert(auditLogs).values({
-    projectId,
-    userId,
-    action: "agent_response_received",
-    stepNumber: 6,
-    modelId: "gemini-2.5-pro+google-search",
-    payload: {
-      durationMs,
-      issueCount,
-      verified: geminiResult.verified,
-      claimsChecked: claims.length,
-      findingsWithSources: geminiResult.findings.filter((finding) => (finding.sources?.length ?? 0) > 0).length,
-    },
-  });
-
-  // 9. Update stage to awaiting human approval
-  await db
-    .update(stages)
-    .set({
-      status: "awaiting_human",
-      updatedAt: new Date(),
-      metadata: {
+  await supabase
+    .from("audit_logs")
+    .insert({
+      project_id: projectId,
+      user_id: userId,
+      action: "agent_response_received",
+      step_number: 6,
+      model_id: "gemini-2.5-pro+google-search",
+      payload: {
         durationMs,
-        factCheckIssues: geminiResult.issues,
-        factCheckFindings: geminiResult.findings,
+        issueCount,
+        verified: geminiResult.verified,
+        claimsChecked: claims.length,
+        findingsWithSources: geminiResult.findings.filter((finding) => (finding.sources?.length ?? 0) > 0).length,
       },
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 6)));
+    .throwOnError();
+
+  // 9. Update stage to awaiting human approval
+  const metadata: StageMetadata = {
+    durationMs,
+    factCheckIssues: geminiResult.issues,
+    factCheckFindings: geminiResult.findings,
+  };
+  await supabase
+    .from("stages")
+    .update({
+      status: "awaiting_human",
+      updated_at: new Date().toISOString(),
+      metadata: metadata as unknown as Json,
+    })
+    .eq("project_id", projectId)
+    .eq("step_number", 6)
+    .throwOnError();
 }

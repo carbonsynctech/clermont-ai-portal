@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { auditLogs, projects, stages, versions } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 import {
   Document,
   Paragraph,
@@ -59,7 +56,7 @@ async function inlineHtmlAssets(
   await Promise.all(
     [...urlSet].map(async (url) => {
       try {
-        // Same-origin assets → read from public/ directory (no HTTP needed)
+        // Same-origin assets -> read from public/ directory (no HTTP needed)
         if (origin && url.startsWith(origin + "/")) {
           const relativePath = url.slice(origin.length); // e.g. "/clermont-logo.png"
           const filePath = join(process.cwd(), "public", relativePath);
@@ -72,7 +69,7 @@ async function inlineHtmlAssets(
           return;
         }
 
-        // External assets → fetch with timeout
+        // External assets -> fetch with timeout
         const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) return;
         const buf = Buffer.from(await res.arrayBuffer());
@@ -99,7 +96,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /* ------------------------------------------------------------------ */
-/*  Markdown → DOCX                                                    */
+/*  Markdown -> DOCX                                                    */
 /* ------------------------------------------------------------------ */
 
 function markdownToDocx(markdown: string): Document {
@@ -181,21 +178,25 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const coverImageUrl = req.nextUrl.searchParams.get("coverImageUrl") ?? undefined;
 
   // Ownership check
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const finalVersion = await db.query.versions.findFirst({
-    where: and(
-      eq(versions.projectId, projectId),
-      eq(versions.versionType, "final")
-    ),
-    orderBy: (v, { desc }) => [desc(v.createdAt)],
-  });
+  const { data: finalVersion } = await supabase
+    .from("versions")
+    .select()
+    .eq("project_id", projectId)
+    .eq("version_type", "final")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
 
   if (!finalVersion) {
     return NextResponse.json(
@@ -217,28 +218,29 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   });
 
   async function markStep12Completed(exportFormat: string) {
-    const now = new Date();
+    const now = new Date().toISOString();
 
-    await db
-      .update(stages)
-      .set({
+    await supabase
+      .from("stages")
+      .update({
         status: "completed",
-        completedAt: now,
-        updatedAt: now,
-        errorMessage: null,
+        completed_at: now,
+        updated_at: now,
+        error_message: null,
       })
-      .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 12)));
+      .eq("project_id", projectId)
+      .eq("step_number", 12);
 
-    await db
-      .update(projects)
-      .set({ status: "completed", currentStage: 12, updatedAt: now })
-      .where(eq(projects.id, projectId));
+    await supabase
+      .from("projects")
+      .update({ status: "completed", current_stage: 12, updated_at: now })
+      .eq("id", projectId);
 
-    await db.insert(auditLogs).values({
-      projectId,
-      userId,
+    await supabase.from("audit_logs").insert({
+      project_id: projectId,
+      user_id: userId,
       action: "export_requested",
-      stepNumber: 12,
+      step_number: 12,
       payload: { format: exportFormat },
     });
   }

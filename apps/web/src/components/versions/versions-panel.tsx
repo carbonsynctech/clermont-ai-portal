@@ -94,13 +94,13 @@ export function VersionsPanel({ versions }: VersionsPanelProps) {
             >
               <div className="flex items-center gap-2 min-w-0">
                 <Badge variant="secondary" className="text-xs h-5 px-1.5 shrink-0 capitalize">
-                  {VERSION_TYPE_LABELS[v.versionType] ?? v.versionType}
+                  {VERSION_TYPE_LABELS[v.version_type] ?? v.version_type}
                 </Badge>
-                <span className="truncate text-foreground">{v.internalLabel}</span>
+                <span className="truncate text-foreground">{v.internal_label}</span>
               </div>
               <div className="flex items-center gap-1 shrink-0 ml-2">
-                {v.wordCount != null && (
-                  <span className="text-muted-foreground">{v.wordCount.toLocaleString()}w</span>
+                {v.word_count != null && (
+                  <span className="text-muted-foreground">{v.word_count.toLocaleString()}w</span>
                 )}
                 {compareMode ? (
                   <Button
@@ -131,7 +131,7 @@ export function VersionsPanel({ versions }: VersionsPanelProps) {
       <Dialog open={viewingId !== null} onOpenChange={(open: boolean) => { if (!open) setViewingId(null); }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle className="text-base">{viewingVersion?.internalLabel}</DialogTitle>
+            <DialogTitle className="text-base">{viewingVersion?.internal_label}</DialogTitle>
           </DialogHeader>
           {viewingVersion && <VersionViewer version={viewingVersion} />}
         </DialogContent>

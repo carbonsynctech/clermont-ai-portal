@@ -1,10 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, stages, personas, sourceMaterials, versions, styleGuides, auditLogs } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 import { PipelineView } from "@/components/projects/pipeline-view";
-import type { FactCheckFinding, FactCheckSource } from "@repo/db";
+import type { FactCheckFinding, FactCheckSource, StageMetadata, CoverImagesData } from "@repo/db";
 import type { CritiqueItem } from "@/components/review/critique-selector";
 import { summarizeTokenUsage } from "@/lib/token-usage-cost";
 
@@ -47,52 +44,70 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const sp = await searchParams;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, id), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) notFound();
 
-  const [stageRows, personaRows, materialRows, versionRows, styleGuideRows, usageRows] = await Promise.all([
-    db.query.stages.findMany({
-      where: eq(stages.projectId, id),
-      orderBy: (s, { asc }) => [asc(s.stepNumber)],
-    }),
-    db.query.personas.findMany({
-      where: eq(personas.projectId, id),
-      orderBy: (p, { asc }) => [asc(p.createdAt)],
-    }),
-    db.query.sourceMaterials.findMany({
-      where: eq(sourceMaterials.projectId, id),
-      orderBy: (m, { asc }) => [asc(m.uploadedAt)],
-    }),
-    db.query.versions.findMany({
-      where: eq(versions.projectId, id),
-      orderBy: (v, { asc }) => [asc(v.createdAt)],
-    }),
-    db.query.styleGuides.findMany({
-      where: eq(styleGuides.projectId, id),
-      orderBy: (sg, { desc }) => [desc(sg.uploadedAt)],
-    }),
-    db.query.auditLogs.findMany({
-      where: eq(auditLogs.projectId, id),
-      columns: {
-        modelId: true,
-        inputTokens: true,
-        outputTokens: true,
-      },
-    }),
+  const [stageResult, personaResult, materialResult, versionResult, styleGuideResult, usageResult] = await Promise.all([
+    supabase
+      .from("stages")
+      .select()
+      .eq("project_id", id)
+      .order("step_number", { ascending: true }),
+    supabase
+      .from("personas")
+      .select()
+      .eq("project_id", id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("source_materials")
+      .select()
+      .eq("project_id", id)
+      .order("uploaded_at", { ascending: true }),
+    supabase
+      .from("versions")
+      .select()
+      .eq("project_id", id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("style_guides")
+      .select()
+      .eq("project_id", id)
+      .order("uploaded_at", { ascending: false }),
+    supabase
+      .from("audit_logs")
+      .select("model_id, input_tokens, output_tokens")
+      .eq("project_id", id),
   ]);
 
-  const usageSummary = summarizeTokenUsage(usageRows);
+  const stageRows = stageResult.data ?? [];
+  const personaRows = personaResult.data ?? [];
+  const materialRows = materialResult.data ?? [];
+  const versionRows = versionResult.data ?? [];
+  const styleGuideRows = styleGuideResult.data ?? [];
+  const usageRows = usageResult.data ?? [];
+
+  const usageSummary = summarizeTokenUsage(
+    usageRows.map((row) => ({
+      modelId: row.model_id,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+    })),
+  );
 
   const stepParam = typeof sp["step"] === "string" ? Number(sp["step"]) : NaN;
   const initialStep = Number.isFinite(stepParam) && stepParam >= 1 && stepParam <= 12
     ? stepParam
-    : project.currentStage;
-  const step8Stage = stageRows.find((stage) => stage.stepNumber === 8);
+    : project.current_stage;
+  const step8Stage = stageRows.find((stage) => stage.step_number === 8);
+  const step8Metadata = step8Stage?.metadata as StageMetadata | null;
   const factCheckFindings = (() => {
-    const rawFindings = step8Stage?.metadata?.factCheckFindings;
+    const rawFindings = step8Metadata?.factCheckFindings;
     if (Array.isArray(rawFindings)) {
       const parsedFindings = rawFindings.filter(isFactCheckFinding);
       if (parsedFindings.length > 0) {
@@ -100,7 +115,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       }
     }
 
-    const rawIssues = step8Stage?.metadata?.factCheckIssues;
+    const rawIssues = step8Metadata?.factCheckIssues;
     if (Array.isArray(rawIssues)) {
       return rawIssues
         .filter((issue): issue is string => typeof issue === "string")
@@ -114,26 +129,27 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
     return null;
   })();
   const factCheckApprovedFindingIds = (() => {
-    const rawIds = step8Stage?.metadata?.factCheckApprovedFindingIds;
+    const rawIds = step8Metadata?.factCheckApprovedFindingIds;
     if (!Array.isArray(rawIds)) return null;
     const ids = rawIds.filter((value): value is string => typeof value === "string");
     return ids.length > 0 ? ids : null;
   })();
   const factCheckApprovedIssues = (() => {
-    const rawIssues = step8Stage?.metadata?.factCheckApprovedIssues;
+    const rawIssues = step8Metadata?.factCheckApprovedIssues;
     if (!Array.isArray(rawIssues)) return null;
     const issues = rawIssues.filter((value): value is string => typeof value === "string");
     return issues.length > 0 ? issues : null;
   })();
   const factCheckAppliedCorrections =
-    typeof step8Stage?.metadata?.factCheckAppliedCorrections === "number"
-      ? step8Stage.metadata.factCheckAppliedCorrections
+    typeof step8Metadata?.factCheckAppliedCorrections === "number"
+      ? step8Metadata.factCheckAppliedCorrections
       : null;
 
   // Extract Step 11 critiques from stage metadata (server-side, like persona DB fetch)
-  const step11Stage = stageRows.find((stage) => stage.stepNumber === 11);
+  const step11Stage = stageRows.find((stage) => stage.step_number === 11);
+  const step11Metadata = step11Stage?.metadata as StageMetadata | null;
   const step11Critiques: CritiqueItem[] = (() => {
-    const draft = step11Stage?.metadata?.devilsAdvocateDraft;
+    const draft = step11Metadata?.devilsAdvocateDraft;
     if (!draft || !Array.isArray(draft.critiques)) return [];
     return draft.critiques
       .filter((c): c is { id: number; title: string; detail: string; isCustom?: boolean } =>
@@ -142,7 +158,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
       .map((c) => ({ id: c.id, title: c.title, detail: c.detail, isCustom: c.isCustom }));
   })();
   const step11SelectedIds: number[] = (() => {
-    const draft = step11Stage?.metadata?.devilsAdvocateDraft;
+    const draft = step11Metadata?.devilsAdvocateDraft;
     if (!draft || !Array.isArray(draft.selectedIds)) return [];
     return draft.selectedIds.filter((v): v is number => typeof v === "number");
   })();
@@ -150,9 +166,10 @@ export default async function ProjectPage({ params, searchParams }: PageProps) {
   // Fetch selected cover image signed URL for the styled document preview
   let coverImageUrl: string | undefined;
   const latestStyleGuide = styleGuideRows[0];
-  if (latestStyleGuide?.coverImages?.selectedStyle) {
-    const selectedImg = latestStyleGuide.coverImages.images.find(
-      (img) => img.style === latestStyleGuide.coverImages!.selectedStyle,
+  const coverImages = latestStyleGuide?.cover_images as CoverImagesData | null;
+  if (coverImages?.selectedStyle) {
+    const selectedImg = coverImages.images.find(
+      (img) => img.style === coverImages.selectedStyle,
     );
     if (selectedImg) {
       const adminSupabase = createAdminClient();

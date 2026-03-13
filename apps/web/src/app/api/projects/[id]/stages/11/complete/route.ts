@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
-import { db, auditLogs, projects, stages } from "@repo/db";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -19,38 +17,42 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
 
   const { id: projectId } = await params;
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  const now = new Date();
+  const now = new Date().toISOString();
 
-  await db
-    .update(stages)
-    .set({
+  await supabase
+    .from("stages")
+    .update({
       status: "completed",
-      completedAt: now,
-      updatedAt: now,
+      completed_at: now,
+      updated_at: now,
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
+    .eq("project_id", projectId)
+    .eq("step_number", 11);
 
-  await db
-    .update(projects)
-    .set({
-      currentStage: project.currentStage < 12 ? 12 : project.currentStage,
-      updatedAt: now,
+  await supabase
+    .from("projects")
+    .update({
+      current_stage: project.current_stage < 12 ? 12 : project.current_stage,
+      updated_at: now,
     })
-    .where(eq(projects.id, projectId));
+    .eq("id", projectId);
 
-  await db.insert(auditLogs).values({
-    projectId,
-    userId: user.id,
+  await supabase.from("audit_logs").insert({
+    project_id: projectId,
+    user_id: user.id,
     action: "stage_completed",
-    stepNumber: 11,
+    step_number: 11,
     payload: {
       source: "manual_continue",
       fromStep: 11,

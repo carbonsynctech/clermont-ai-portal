@@ -236,7 +236,7 @@ export function SynthesisStep({
       <MarkdownVersionPanel
         title="Synthesis V1"
         content={displayContent}
-        wordCount={synthesisVersion.wordCount ?? undefined}
+        wordCount={synthesisVersion.word_count ?? undefined}
       />
 
       {/* Right – re-synth banner + chat panel (sticky) */}

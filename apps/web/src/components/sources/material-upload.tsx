@@ -114,16 +114,16 @@ export function MaterialUpload({ projectId, materials, onNavigate }: MaterialUpl
         ...prev,
         {
           id: materialId,
-          projectId,
-          materialType: "other",
-          originalFilename: selectedFile.name,
-          storagePath,
-          mimeType: selectedFile.type || "application/octet-stream",
-          fileSizeBytes: selectedFile.size,
-          chunkCount: 0,
-          ndaAcknowledged: true,
-          extractedMetadata: null,
-          uploadedAt: new Date(),
+          project_id: projectId,
+          material_type: "other",
+          original_filename: selectedFile.name,
+          storage_path: storagePath,
+          mime_type: selectedFile.type || "application/octet-stream",
+          file_size_bytes: selectedFile.size,
+          chunk_count: 0,
+          nda_acknowledged: true,
+          extracted_metadata: null,
+          uploaded_at: new Date().toISOString(),
         },
       ]);
 
@@ -222,11 +222,11 @@ export function MaterialUpload({ projectId, materials, onNavigate }: MaterialUpl
               className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <span className="truncate">{m.originalFilename}</span>
+                <span className="truncate">{m.original_filename}</span>
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-2">
-                {m.chunkCount > 0 && (
-                  <span className="text-muted-foreground">{m.chunkCount} chunks</span>
+                {m.chunk_count > 0 && (
+                  <span className="text-muted-foreground">{m.chunk_count} chunks</span>
                 )}
                 <Button
                   variant="ghost"

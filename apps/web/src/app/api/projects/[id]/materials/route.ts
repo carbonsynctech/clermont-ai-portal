@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { projects, sourceMaterials, auditLogs } from "@repo/db";
 import { workerClient } from "@/lib/worker-client";
-import { eq, and } from "drizzle-orm";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -33,11 +30,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id: projectId } = await params;
 
   // Verify ownership
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", projectId)
+    .eq("owner_id", user.id)
+    .single();
 
-  if (!project) {
+  if (projectError || !project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
@@ -70,35 +70,36 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       : "other";
 
   // Insert source_materials row
-  const [material] = await db
-    .insert(sourceMaterials)
-    .values({
-      projectId,
-      materialType,
-      originalFilename,
-      storagePath,
-      mimeType,
-      fileSizeBytes,
-      ndaAcknowledged: true,
+  const { data: material, error: materialError } = await supabase
+    .from("source_materials")
+    .insert({
+      project_id: projectId,
+      material_type: materialType,
+      original_filename: originalFilename,
+      storage_path: storagePath,
+      mime_type: mimeType,
+      file_size_bytes: fileSizeBytes,
+      nda_acknowledged: true,
     })
-    .returning();
+    .select()
+    .single();
 
-  if (!material) {
-    return NextResponse.json({ error: "Failed to create material record" }, { status: 500 });
+  if (materialError || !material) {
+    return NextResponse.json({ error: materialError?.message ?? "Failed to create material record" }, { status: 500 });
   }
 
   // Audit log
-  await db.insert(auditLogs).values({
-    projectId,
-    userId: user.id,
+  await supabase.from("audit_logs").insert({
+    project_id: projectId,
+    user_id: user.id,
     action: "source_uploaded",
     payload: { materialId: material.id, filename: originalFilename, materialType },
   });
 
-  await db
-    .update(projects)
-    .set({ updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", projectId);
 
   // Dispatch extraction job (fire and forget)
   void workerClient.extractMaterial(material.id, projectId).catch((err: unknown) => {

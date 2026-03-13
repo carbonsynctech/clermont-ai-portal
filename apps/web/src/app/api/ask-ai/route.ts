@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
-import { db, projects } from "@repo/db";
 import { createClient } from "@/lib/supabase/server";
 import { workerClient } from "@/lib/worker-client";
 
@@ -50,9 +48,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (projectId) {
-    const project = await db.query.projects.findFirst({
-      where: and(eq(projects.id, projectId), eq(projects.ownerId, user.id)),
-    });
+    const { data: project } = await supabase
+      .from("projects")
+      .select()
+      .eq("id", projectId)
+      .eq("owner_id", user.id)
+      .single();
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });

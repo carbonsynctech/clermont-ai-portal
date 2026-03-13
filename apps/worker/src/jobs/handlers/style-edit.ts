@@ -1,52 +1,60 @@
 import { PDFParse } from "pdf-parse";
-import { db, projects, stages, versions, styleGuides, auditLogs } from "@repo/db";
 import {
   claude,
   buildStyleEditSystemPrompt,
   buildStyleEditUserMessage,
   parseStyleEditResponse,
 } from "@repo/core";
-import { eq, and, desc } from "drizzle-orm";
+import type { ProjectBriefData, Json } from "@repo/db";
 import { createAdminClient } from "../../lib/supabase-admin";
+import { assertData } from "../../lib/db";
 
 export async function styleEdit(projectId: string, userId: string, onChunk?: (chunk: string) => void): Promise<void> {
-  // 1. Fetch project
-  const project = await db.query.projects.findFirst({
-    where: eq(projects.id, projectId),
-  });
+  const supabase = createAdminClient();
 
-  if (!project) throw new Error(`Project ${projectId} not found`);
+  // 1. Fetch project
+  const project = assertData(
+    await supabase.from("projects").select().eq("id", projectId).single(),
+  );
 
   // 2. Update stage 11 to running
-  await db
-    .update(stages)
-    .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
+  await supabase
+    .from("stages")
+    .update({
+      status: "running",
+      started_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("project_id", projectId)
+    .eq("step_number", 11)
+    .throwOnError();
 
   const startedAt = Date.now();
 
   // Step 6: Extract style guide text
   // 3. Fetch most recent style guide
-  const styleGuide = await db.query.styleGuides.findFirst({
-    where: eq(styleGuides.projectId, projectId),
-    orderBy: (sg, { desc }) => [desc(sg.uploadedAt)],
-  });
-
-  if (!styleGuide) throw new Error(`Project ${projectId} has no style guide`);
+  const styleGuide = assertData(
+    await supabase
+      .from("style_guides")
+      .select()
+      .eq("project_id", projectId)
+      .order("uploaded_at", { ascending: false })
+      .limit(1)
+      .single(),
+  );
 
   // 4. Get style guide text — either from preset rules or by downloading file
   let styleGuideText: string;
-  const isPreset = styleGuide.storagePath.startsWith("preset:");
+  const isPreset = styleGuide.storage_path.startsWith("preset:");
 
-  if (isPreset && styleGuide.condensedRulesText) {
+  if (isPreset && styleGuide.condensed_rules_text) {
     // Preset style: use pre-defined condensed rules directly
-    styleGuideText = styleGuide.condensedRulesText;
+    styleGuideText = styleGuide.condensed_rules_text;
   } else {
     // File-based style guide: download and parse
-    const adminSupabase = createAdminClient();
-    const { data: fileData, error: downloadError } = await adminSupabase.storage
+    const { data: fileData, error: downloadError } = await supabase.storage
       .from("source-materials")
-      .download(styleGuide.storagePath);
+      .download(styleGuide.storage_path);
 
     if (downloadError ?? !fileData) {
       throw new Error(`Failed to download style guide: ${String(downloadError?.message)}`);
@@ -56,7 +64,7 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
     const buffer = Buffer.from(arrayBuffer);
 
     if (
-      styleGuide.originalFilename.toLowerCase().endsWith(".pdf") ||
+      styleGuide.original_filename.toLowerCase().endsWith(".pdf") ||
       buffer[0] === 0x25 // PDF magic byte %
     ) {
       const parser = new PDFParse({ data: new Uint8Array(buffer) });
@@ -69,21 +77,24 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
   }
 
   // Step 7: Fetch synthesis version to edit
-  // 5. Get synthesis version (activeVersionId or latest synthesis)
+  // 5. Get synthesis version (active_version_id or latest synthesis)
   let synthesisContent: string;
-  if (project.activeVersionId) {
-    const activeVersion = await db.query.versions.findFirst({
-      where: eq(versions.id, project.activeVersionId),
-    });
+  if (project.active_version_id) {
+    const activeVersion = assertData(
+      await supabase.from("versions").select().eq("id", project.active_version_id).single(),
+    );
     synthesisContent = activeVersion?.content ?? "";
   } else {
-    const latestSynthesis = await db.query.versions.findFirst({
-      where: and(
-        eq(versions.projectId, projectId),
-        eq(versions.versionType, "synthesis")
-      ),
-      orderBy: (v, { desc }) => [desc(v.createdAt)],
-    });
+    const latestSynthesis = assertData(
+      await supabase
+        .from("versions")
+        .select()
+        .eq("project_id", projectId)
+        .eq("version_type", "synthesis")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single(),
+    );
     synthesisContent = latestSynthesis?.content ?? "";
   }
 
@@ -114,51 +125,59 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
   const { rules } = parseStyleEditResponse(result.content);
 
   // 8. Update style guide with extracted rules
-  await db
-    .update(styleGuides)
-    .set({
-      condensedRulesText: rules,
-      isProcessed: true,
+  await supabase
+    .from("style_guides")
+    .update({
+      condensed_rules_text: rules,
+      is_processed: true,
     })
-    .where(eq(styleGuides.id, styleGuide.id));
+    .eq("id", styleGuide.id)
+    .throwOnError();
 
   // 9. Keep active version unchanged (Step 7 is display/style metadata only)
-  await db
-    .update(projects)
-    .set({ updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", projectId)
+    .throwOnError();
 
   // 11. Audit log
-  await db.insert(auditLogs).values({
-    projectId,
-    userId,
-    action: "agent_response_received",
-    stepNumber: 11,
-    modelId: result.model,
-    inputTokens: result.inputTokens,
-    outputTokens: result.outputTokens,
-    payload: { durationMs },
-  });
+  await supabase
+    .from("audit_logs")
+    .insert({
+      project_id: projectId,
+      user_id: userId,
+      action: "agent_response_received",
+      step_number: 11,
+      model_id: result.model,
+      input_tokens: result.inputTokens,
+      output_tokens: result.outputTokens,
+      payload: { durationMs },
+    })
+    .throwOnError();
 
   // 12. Update stage 11 to completed
-  await db
-    .update(stages)
-    .set({
+  await supabase
+    .from("stages")
+    .update({
       status: "completed",
-      completedAt: new Date(),
-      updatedAt: new Date(),
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       metadata: {
         modelId: result.model,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
         durationMs,
-      },
+      } as unknown as Json,
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 11)));
+    .eq("project_id", projectId)
+    .eq("step_number", 11)
+    .throwOnError();
 
   // 13. Advance project to stage 12
-  await db
-    .update(projects)
-    .set({ currentStage: 12, updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+  await supabase
+    .from("projects")
+    .update({ current_stage: 12, updated_at: new Date().toISOString() })
+    .eq("id", projectId)
+    .throwOnError();
 }

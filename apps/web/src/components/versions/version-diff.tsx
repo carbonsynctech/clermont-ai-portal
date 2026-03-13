@@ -50,10 +50,10 @@ export function VersionDiff({ versionA, versionB }: VersionDiffProps) {
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">
-            {versionA.internalLabel}
+            {versionA.internal_label}
           </Badge>
           <span className="text-xs text-muted-foreground">
-            Step {versionA.producedByStep}
+            Step {versionA.produced_by_step}
           </span>
         </div>
         <ScrollArea className="h-[55vh] rounded-md border">
@@ -68,10 +68,10 @@ export function VersionDiff({ versionA, versionB }: VersionDiffProps) {
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">
-            {versionB.internalLabel}
+            {versionB.internal_label}
           </Badge>
           <span className="text-xs text-muted-foreground">
-            Step {versionB.producedByStep}
+            Step {versionB.produced_by_step}
           </span>
         </div>
         <ScrollArea className="h-[55vh] rounded-md border">

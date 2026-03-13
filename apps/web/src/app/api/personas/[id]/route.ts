@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { db, personas, projects, auditLogs } from "@repo/db";
-import { eq, and } from "drizzle-orm";
 
 export async function GET(
   _req: NextRequest,
@@ -14,9 +12,11 @@ export async function GET(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const persona = await db.query.personas.findFirst({
-    where: eq(personas.id, id),
-  });
+  const { data: persona } = await supabase
+    .from("personas")
+    .select()
+    .eq("id", id)
+    .single();
 
   if (!persona) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -34,30 +34,35 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const persona = await db.query.personas.findFirst({
-    where: eq(personas.id, id),
-  });
+  const { data: persona } = await supabase
+    .from("personas")
+    .select()
+    .eq("id", id)
+    .single();
 
   if (!persona) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!persona.projectId) {
+  if (!persona.project_id) {
     return NextResponse.json({ error: "Cannot delete global persona" }, { status: 403 });
   }
 
-  const project = await db.query.projects.findFirst({
-    where: and(eq(projects.id, persona.projectId), eq(projects.ownerId, user.id)),
-  });
+  const { data: project } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", persona.project_id)
+    .eq("owner_id", user.id)
+    .single();
 
   if (!project) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await db.delete(personas).where(eq(personas.id, id));
+  await supabase.from("personas").delete().eq("id", id);
 
-  await db.insert(auditLogs).values({
-    projectId: persona.projectId,
-    userId: user.id,
+  await supabase.from("audit_logs").insert({
+    project_id: persona.project_id,
+    user_id: user.id,
     action: "persona_selected",
-    stepNumber: 2,
+    step_number: 2,
     payload: { event: "persona_deleted", personaId: id, name: persona.name },
   });
 

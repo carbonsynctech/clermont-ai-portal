@@ -45,9 +45,9 @@ export function PersonaDrawer({
               </SheetDescription>
             </SheetHeader>
 
-            {persona.sourceUrls.length > 0 && (
+            {persona.source_urls.length > 0 && (
               <div className="mb-4 flex flex-wrap gap-2">
-                {persona.sourceUrls.map((url) => (
+                {persona.source_urls.map((url) => (
                   <a
                     key={url}
                     href={url}
@@ -74,7 +74,7 @@ export function PersonaDrawer({
                 [&_strong]:font-semibold
                 [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-1">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {persona.systemPrompt}
+                  {persona.system_prompt}
                 </ReactMarkdown>
               </div>
             </div>

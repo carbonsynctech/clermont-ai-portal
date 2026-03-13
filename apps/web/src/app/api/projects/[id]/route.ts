@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { db } from "@repo/db";
-import { auditLogs, projects, sourceMaterials, styleGuides } from "@repo/db";
 import type { ProjectBriefData } from "@repo/db";
-import { and, eq } from "drizzle-orm";
 import { estimateTokens } from "@repo/core";
 
 export async function PATCH(
@@ -27,29 +24,38 @@ export async function PATCH(
     masterPrompt?: unknown;
   };
 
-  const existing = await db.query.projects.findFirst({
-    where: and(eq(projects.id, id), eq(projects.ownerId, user.id)),
-  });
+  const { data: existing, error: fetchError } = await supabase
+    .from("projects")
+    .select()
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
 
-  if (!existing) {
+  if (fetchError || !existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   if (typeof body.action === "string") {
     if (body.action === "trash") {
-      if (existing.deletedAt) {
+      if (existing.deleted_at) {
         return NextResponse.json(existing);
       }
 
-      const [trashed] = await db
-        .update(projects)
-        .set({ deletedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(projects.id, id), eq(projects.ownerId, user.id)))
-        .returning();
+      const { data: trashed, error: trashError } = await supabase
+        .from("projects")
+        .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("owner_id", user.id)
+        .select()
+        .single();
 
-      await db.insert(auditLogs).values({
-        projectId: id,
-        userId: user.id,
+      if (trashError) {
+        return NextResponse.json({ error: trashError.message }, { status: 500 });
+      }
+
+      await supabase.from("audit_logs").insert({
+        project_id: id,
+        user_id: user.id,
         action: "project_trashed",
         payload: { retentionDays: 30 },
       });
@@ -58,19 +64,25 @@ export async function PATCH(
     }
 
     if (body.action === "restore") {
-      if (!existing.deletedAt) {
+      if (!existing.deleted_at) {
         return NextResponse.json(existing);
       }
 
-      const [restored] = await db
-        .update(projects)
-        .set({ deletedAt: null, updatedAt: new Date() })
-        .where(and(eq(projects.id, id), eq(projects.ownerId, user.id)))
-        .returning();
+      const { data: restored, error: restoreError } = await supabase
+        .from("projects")
+        .update({ deleted_at: null, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("owner_id", user.id)
+        .select()
+        .single();
 
-      await db.insert(auditLogs).values({
-        projectId: id,
-        userId: user.id,
+      if (restoreError) {
+        return NextResponse.json({ error: restoreError.message }, { status: 500 });
+      }
+
+      await supabase.from("audit_logs").insert({
+        project_id: id,
+        user_id: user.id,
         action: "project_restored",
         payload: { restoredAt: new Date().toISOString() },
       });
@@ -79,21 +91,24 @@ export async function PATCH(
     }
 
     if (body.action === "purge") {
-      const [materials, guides] = await Promise.all([
-        db.query.sourceMaterials.findMany({
-          where: eq(sourceMaterials.projectId, id),
-          columns: { storagePath: true },
-        }),
-        db.query.styleGuides.findMany({
-          where: eq(styleGuides.projectId, id),
-          columns: { storagePath: true },
-        }),
+      const [materialsResult, guidesResult] = await Promise.all([
+        supabase
+          .from("source_materials")
+          .select("storage_path")
+          .eq("project_id", id),
+        supabase
+          .from("style_guides")
+          .select("storage_path")
+          .eq("project_id", id),
       ]);
+
+      const materials = materialsResult.data ?? [];
+      const guides = guidesResult.data ?? [];
 
       const storagePaths = Array.from(
         new Set(
           [...materials, ...guides]
-            .map((item) => item.storagePath)
+            .map((item) => item.storage_path)
             .filter((value): value is string => typeof value === "string" && value.length > 0)
         )
       );
@@ -110,11 +125,15 @@ export async function PATCH(
         }
       }
 
-      await db.delete(projects).where(and(eq(projects.id, id), eq(projects.ownerId, user.id)));
+      await supabase
+        .from("projects")
+        .delete()
+        .eq("id", id)
+        .eq("owner_id", user.id);
 
-      await db.insert(auditLogs).values({
-        projectId: id,
-        userId: user.id,
+      await supabase.from("audit_logs").insert({
+        project_id: id,
+        user_id: user.id,
         action: "project_purged",
         payload: { source: "manual" },
       });
@@ -125,8 +144,8 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
-  const updates: Partial<{ title: string; briefData: ProjectBriefData; masterPrompt: string; updatedAt: Date }> = {
-    updatedAt: new Date(),
+  const updates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
   };
 
   if (typeof body.title === "string" && body.title.trim() !== "") {
@@ -134,31 +153,37 @@ export async function PATCH(
   }
 
   if (body.briefData != null) {
-    updates.briefData = body.briefData as ProjectBriefData;
+    updates.brief_data = body.briefData as ProjectBriefData;
   }
 
   if (typeof body.masterPrompt === "string") {
     if (body.masterPrompt.trim() === "") {
       return NextResponse.json({ error: "Master prompt cannot be empty" }, { status: 400 });
     }
-    updates.masterPrompt = body.masterPrompt;
+    updates.master_prompt = body.masterPrompt;
   }
 
-  const [updated] = await db
-    .update(projects)
-    .set(updates)
-    .where(and(eq(projects.id, id), eq(projects.ownerId, user.id)))
-    .returning();
+  const { data: updated, error: updateError } = await supabase
+    .from("projects")
+    .update(updates)
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .select()
+    .single();
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
 
   // Log master prompt edits
-  if (typeof body.masterPrompt === "string" && existing.masterPrompt !== body.masterPrompt) {
-    await db.insert(auditLogs).values({
-      projectId: id,
-      userId: user.id,
+  if (typeof body.masterPrompt === "string" && existing.master_prompt !== body.masterPrompt) {
+    await supabase.from("audit_logs").insert({
+      project_id: id,
+      user_id: user.id,
       action: "master_prompt_edited",
-      stepNumber: 1,
+      step_number: 1,
       payload: {
-        previousTokens: existing.masterPrompt ? estimateTokens(existing.masterPrompt) : 0,
+        previousTokens: existing.master_prompt ? estimateTokens(existing.master_prompt) : 0,
         newTokens: estimateTokens(body.masterPrompt),
       },
     });

@@ -1,8 +1,7 @@
-import { db, projects, styleGuides, auditLogs } from "@repo/db";
 import { gemini } from "@repo/core";
-import { eq, and } from "drizzle-orm";
+import type { CoverImagesData, CoverImageEntry, Json } from "@repo/db";
 import { createAdminClient } from "../../lib/supabase-admin";
-import type { CoverImagesData, CoverImageEntry } from "@repo/db";
+import { assertData } from "../../lib/db";
 
 export interface CoverImagesPayload {
   projectId: string;
@@ -113,19 +112,23 @@ function buildPrompt(style: CoverStyle, ctx: ProjectContext): string {
 
 export async function generateCoverImages(payload: CoverImagesPayload): Promise<void> {
   const { projectId, userId, styleGuideId } = payload;
+  const supabase = createAdminClient();
 
   // 1. Fetch project + style guide
-  const project = await db.query.projects.findFirst({
-    where: eq(projects.id, projectId),
-  });
-  if (!project) throw new Error(`Project ${projectId} not found`);
+  const project = assertData(
+    await supabase.from("projects").select().eq("id", projectId).single(),
+  );
 
-  const styleGuide = await db.query.styleGuides.findFirst({
-    where: and(eq(styleGuides.id, styleGuideId), eq(styleGuides.projectId, projectId)),
-  });
-  if (!styleGuide) throw new Error(`Style guide ${styleGuideId} not found`);
+  const styleGuide = assertData(
+    await supabase
+      .from("style_guides")
+      .select()
+      .eq("id", styleGuideId)
+      .eq("project_id", projectId)
+      .single(),
+  );
 
-  const ctx = buildContext(project.title, project.briefData as Record<string, unknown> | null);
+  const ctx = buildContext(project.title, project.brief_data as Record<string, unknown> | null);
 
   // 2. Build 4 prompts
   const prompts = STYLES.map((style) => buildPrompt(style, ctx));
@@ -135,7 +138,6 @@ export async function generateCoverImages(payload: CoverImagesPayload): Promise<
   const results = await gemini.generateImages(prompts, "2:3");
 
   // 4. Upload each non-null result to Supabase Storage
-  const adminClient = createAdminClient();
   const timestamp = Date.now();
 
   const entries: CoverImageEntry[] = [];
@@ -153,7 +155,7 @@ export async function generateCoverImages(payload: CoverImagesPayload): Promise<
       const storagePath = `${userId}/${projectId}/covers/${style}-${timestamp}.${ext}`;
       const imageBuffer = Buffer.from(result.imageData, "base64");
 
-      const { error } = await adminClient.storage
+      const { error } = await supabase.storage
         .from("source-materials")
         .upload(storagePath, imageBuffer, { contentType: mimeType, upsert: true });
 
@@ -177,24 +179,28 @@ export async function generateCoverImages(payload: CoverImagesPayload): Promise<
     generatedAt: new Date().toISOString(),
   };
 
-  await db
-    .update(styleGuides)
-    .set({ coverImages: coverImagesData })
-    .where(eq(styleGuides.id, styleGuideId));
+  await supabase
+    .from("style_guides")
+    .update({ cover_images: coverImagesData as unknown as Json })
+    .eq("id", styleGuideId)
+    .throwOnError();
 
   // 6. Audit log
-  await db.insert(auditLogs).values({
-    projectId,
-    userId,
-    action: "agent_response_received",
-    stepNumber: 6,
-    modelId: process.env["NANO_BANANA_MODEL"] ?? "gemini-2.5-flash-image",
-    inputTokens: 0,
-    outputTokens: 0,
-    payload: {
-      durationMs: Date.now() - startedAt,
-      coverImagesGenerated: entries.length,
-      styles: entries.map((e) => e.style),
-    },
-  });
+  await supabase
+    .from("audit_logs")
+    .insert({
+      project_id: projectId,
+      user_id: userId,
+      action: "agent_response_received",
+      step_number: 6,
+      model_id: process.env["NANO_BANANA_MODEL"] ?? "gemini-2.5-flash-image",
+      input_tokens: 0,
+      output_tokens: 0,
+      payload: {
+        durationMs: Date.now() - startedAt,
+        coverImagesGenerated: entries.length,
+        styles: entries.map((e) => e.style),
+      },
+    })
+    .throwOnError();
 }

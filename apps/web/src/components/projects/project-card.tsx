@@ -14,7 +14,7 @@ const STATUS_COLORS: Record<Project["status"], string> = {
 
 export function ProjectCard({ project }: { project: Project }) {
   const stepName =
-    SOP_STEP_NAMES[project.currentStage as keyof typeof SOP_STEP_NAMES] ??
+    SOP_STEP_NAMES[project.current_stage as keyof typeof SOP_STEP_NAMES] ??
     "Unknown";
 
   return (
@@ -35,10 +35,10 @@ export function ProjectCard({ project }: { project: Project }) {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground">
-            Step {project.currentStage}: {stepName}
+            Step {project.current_stage}: {stepName}
           </p>
           <p className="text-xs text-muted-foreground/60 mt-1">
-            {new Date(project.createdAt).toLocaleDateString()}
+            {new Date(project.created_at).toLocaleDateString()}
           </p>
         </CardContent>
       </Card>

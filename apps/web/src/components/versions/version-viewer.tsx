@@ -38,14 +38,14 @@ export function VersionViewer({ version }: VersionViewerProps) {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="secondary" className="text-sm capitalize">
-            {VERSION_TYPE_LABELS[version.versionType] ?? version.versionType}
+            {VERSION_TYPE_LABELS[version.version_type] ?? version.version_type}
           </Badge>
           <Badge variant="outline" className="text-sm">
-            Step {version.producedByStep}
+            Step {version.produced_by_step}
           </Badge>
-          {version.wordCount != null && (
+          {version.word_count != null && (
             <span className="text-sm text-muted-foreground">
-              {version.wordCount.toLocaleString()} words
+              {version.word_count.toLocaleString()} words
             </span>
           )}
         </div>
@@ -65,7 +65,7 @@ export function VersionViewer({ version }: VersionViewerProps) {
       </div>
 
       <div className="text-sm text-muted-foreground" suppressHydrationWarning>
-        {version.internalLabel} · {new Date(version.createdAt).toLocaleString()}
+        {version.internal_label} · {new Date(version.created_at).toLocaleString()}
       </div>
 
       {/* Content */}
