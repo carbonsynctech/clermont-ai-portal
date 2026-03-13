@@ -1,4 +1,3 @@
-import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import { parse as csvParse } from "csv-parse/sync";
 import { chunkText, claude } from "@repo/core";
@@ -32,6 +31,7 @@ export async function extractAndChunk(materialId: string): Promise<void> {
   // 4. Extract text
   let text: string;
   if (material.mime_type === "application/pdf") {
+    const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
     const result = await parser.getText();
     text = result.text;

@@ -1,4 +1,3 @@
-import { PDFParse } from "pdf-parse";
 import {
   claude,
   buildStyleEditSystemPrompt,
@@ -67,6 +66,7 @@ export async function styleEdit(projectId: string, userId: string, onChunk?: (ch
       styleGuide.original_filename.toLowerCase().endsWith(".pdf") ||
       buffer[0] === 0x25 // PDF magic byte %
     ) {
+      const { PDFParse } = await import("pdf-parse");
       const parser = new PDFParse({ data: new Uint8Array(buffer) });
       const result = await parser.getText();
       styleGuideText = result.text;
