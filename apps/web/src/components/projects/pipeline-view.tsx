@@ -34,6 +34,7 @@ import type {
 import type { ProjectBriefData } from "@repo/db";
 import { type DocumentColors, DEFAULT_COLORS } from "./steps/document-template";
 import type { TokenUsageSummary } from "@/lib/token-usage-cost";
+import { emitTokenUsage } from "@/lib/project-save-events";
 
 const STEP_TITLES: Record<number, string> = {
   1: "Define Task",
@@ -202,10 +203,23 @@ export function PipelineView({
     setStep7IsApproving(true);
     try {
       await editorRef.current.approve();
+      // Navigate to step 8 after successful approval
+      setActiveStep(8);
+      router.push(`/projects/${project.id}?step=8`);
     } finally {
       setStep7IsApproving(false);
     }
   }
+
+  useEffect(() => {
+    emitTokenUsage({
+      projectId: project.id,
+      totalInputTokens: tokenUsageSummary.totalInputTokens,
+      totalOutputTokens: tokenUsageSummary.totalOutputTokens,
+      totalTokens: tokenUsageSummary.totalTokens,
+      estimatedCostUsd: tokenUsageSummary.estimatedCostUsd,
+    });
+  }, [project.id, tokenUsageSummary]);
 
   useEffect(() => {
     document.documentElement.classList.add("hide-page-scrollbar");
@@ -496,22 +510,23 @@ export function PipelineView({
         const redReportContent = persistedDraft ? "" : (getLatestVersion("red_report")?.content ?? "");
         const shouldShowSelector = status === "awaiting_human" || status === "completed" || Boolean(persistedDraft);
         return (
-          <div className="rounded-xl border bg-card p-6 space-y-4">
-            <StepTrigger
-              projectId={project.id}
-              stepNumber={8}
-              label="Generate Devil's Advocate Critiques"
-              currentStatus={status}
-              disabled={!canRunStep8}
-              disabledReason="Complete Step 7 to run this step."
+          <div className="space-y-4">
+            <div className="rounded-xl border bg-card p-6 space-y-4">
+              <StepTrigger
+                projectId={project.id}
+                stepNumber={8}
+                label="Generate Devil's Advocate Critiques"
+                currentStatus={status}
+                disabled={!canRunStep8}
+                disabledReason="Complete Step 7 to run this step."
 
-              onRunningChange={setStep8Running}
-              hideButton
-            />
+                onRunningChange={setStep8Running}
+              />
+            </div>
             {shouldShowSelector && (
-              <>
+              <div className="rounded-xl border bg-card p-6 space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Select critiques to integrate into Step 9. You can continue with none selected, and Step 9 will be skipped automatically.
+                  Select the critiques you want integrated into the final document. Click a card to select or deselect it. You can also add custom critiques below.
                 </p>
                 <CritiqueSelector
                   projectId={project.id}
@@ -529,7 +544,7 @@ export function PipelineView({
                     persistStep8Draft(draft);
                   }}
                 />
-              </>
+              </div>
             )}
           </div>
         );
@@ -663,30 +678,6 @@ export function PipelineView({
 
         {/* Right: active step content */}
         <div>
-          <div className="mb-4 rounded-lg border bg-card px-4 py-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Token Usage</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Input {tokenUsageSummary.totalInputTokens.toLocaleString()} -?Output {tokenUsageSummary.totalOutputTokens.toLocaleString()}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-muted-foreground">Estimated Cost</p>
-                <p className="text-lg font-semibold">{formatUsd(tokenUsageSummary.estimatedCostUsd)}</p>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Total {tokenUsageSummary.totalTokens.toLocaleString()} tokens across {tokenUsageSummary.models.length.toLocaleString()} model
-              {tokenUsageSummary.models.length === 1 ? "" : "s"}
-              {tokenUsageSummary.unpricedInputTokens + tokenUsageSummary.unpricedOutputTokens > 0
-                ? ` -?${(
-                    tokenUsageSummary.unpricedInputTokens + tokenUsageSummary.unpricedOutputTokens
-                  ).toLocaleString()} tokens are not priced yet`
-                : ""}
-            </p>
-          </div>
-
           {/* Step header */}
           <div className="mb-6">
             <p className="text-sm text-muted-foreground mb-1">
@@ -741,7 +732,7 @@ export function PipelineView({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  {activeStep === 7 && activeStatus !== "completed" && (
+                  {activeStep === 7 && (
                     <>
                       <Button
                         variant="ghost"

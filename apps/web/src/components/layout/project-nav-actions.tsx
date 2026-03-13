@@ -18,8 +18,10 @@ import {
 import {
   PROJECT_SAVED_EVENT,
   PROJECT_COST_EVENT,
+  PROJECT_TOKEN_USAGE_EVENT,
   type ProjectSavedEventDetail,
   type ProjectCostEventDetail,
+  type ProjectTokenUsageDetail,
   emitSaveRequest,
 } from "@/lib/project-save-events";
 import {
@@ -115,6 +117,17 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
     return () => window.removeEventListener(PROJECT_COST_EVENT, onCostUpdate);
   }, [projectId]);
 
+  React.useEffect(() => {
+    const onTokenUsageUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<ProjectTokenUsageDetail>;
+      if (!customEvent.detail || customEvent.detail.projectId !== projectId) return;
+      setEstimatedCost(customEvent.detail.estimatedCostUsd);
+    };
+
+    window.addEventListener(PROJECT_TOKEN_USAGE_EVENT, onTokenUsageUpdate);
+    return () => window.removeEventListener(PROJECT_TOKEN_USAGE_EVENT, onTokenUsageUpdate);
+  }, [projectId]);
+
   function handleSaveClick() {
     setIsSaving(true);
     setSavedAt(new Date()); // optimistic update
@@ -150,7 +163,7 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
     return `$${value.toFixed(2)}`;
   }
 
-  const costText = estimatedCost !== null ? ` · Est. cost: ${formatCost(estimatedCost)}` : "";
+  const costText = estimatedCost !== null ? ` · Total cost: ${formatCost(estimatedCost)}` : "";
 
   // Removed unused actionGroups and isOpen/setIsOpen
 

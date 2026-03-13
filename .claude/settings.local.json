@@ -56,7 +56,10 @@
       "Bash(sips:*)",
       "Read(//tmp/**)",
       "Bash(rm /tmp/env-check)",
-      "Bash(brew install:*)"
+      "Bash(brew install:*)",
+      "Bash(ls -la /Users/gel/Desktop/Github/ai-content-portal/apps/web/src/app/\\\\\\(app\\\\\\)/projects/\\\\[id\\\\]/)",
+      "Bash(cat /Users/gel/Desktop/Github/ai-content-portal/apps/web/src/app/\\\\\\(app\\\\\\)/projects/\\\\[id\\\\]/page.tsx)",
+      "Bash(grep -r \"getLatestVersion\\\\|human_reviewed\" /Users/gel/Desktop/Github/ai-content-portal/apps/web/src/app/\\\\\\(app\\\\\\)/projects/\\\\[id\\\\] --include=\"*.tsx\" --include=\"*.ts\" | head -10)"
     ]
   },
   "defaultMode": "bypassPermissions"

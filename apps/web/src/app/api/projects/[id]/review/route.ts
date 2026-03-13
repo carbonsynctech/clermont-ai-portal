@@ -44,7 +44,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     .insert(versions)
     .values({
       projectId,
-      producedByStep: 10,
+      producedByStep: 7,
       versionType: "human_reviewed",
       internalLabel: "Human Review V5",
       content,
@@ -68,14 +68,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     projectId,
     userId: user.id,
     action: "human_review_approved",
-    stepNumber: 10,
+    stepNumber: 7,
     payload: {
       wordCount,
       ...(reviewNotes ? { reviewNotes } : {}),
     },
   });
 
-  // Update stage 10 to completed
+  // Update stage 7 to completed
   await db
     .update(stages)
     .set({
@@ -87,13 +87,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         ...(reviewNotes ? { reviewNotes } : {}),
       },
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 10)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 7)));
 
-  // Advance project to stage 11 only if currently behind
+  // Advance project to stage 8 only if currently behind
   await db
     .update(projects)
     .set({
-      currentStage: project.currentStage < 11 ? 11 : project.currentStage,
+      currentStage: project.currentStage < 8 ? 8 : project.currentStage,
       updatedAt: new Date()
     })
     .where(eq(projects.id, projectId));

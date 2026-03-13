@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, MoreHorizontal, Pencil, Trash2, AlertCircle } from "lucide-react";
 import { parseCritiques } from "@repo/core";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -312,9 +313,12 @@ export function CritiqueSelector({
 
       {/* Critique cards grid */}
       {critiques.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No structured critiques were generated. You can add custom critiques below, or confirm with none selected to skip Step 12.
-        </p>
+        <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-50">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            No structured critiques were generated. You can add custom critiques below, or confirm with none selected to skip Step 12.
+          </AlertDescription>
+        </Alert>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {critiques.map((critique) => {
@@ -422,19 +426,11 @@ export function CritiqueSelector({
                       {critique.detail}
                     </p>
 
-                    <div className="flex items-center gap-2 pt-1">
-                      <Button
-                        size="sm"
-                        variant={selected ? "default" : "outline"}
-                        className="h-8 text-sm flex-1"
-                        onClick={(event) => { event.stopPropagation(); toggleCritique(critique.id); }}
-                      >
-                        {selected ? "Deselect" : "Select"}
-                      </Button>
+                    {critique.detail.length > 100 && (
                       <Button
                         size="sm"
                         variant="secondary"
-                        className="h-8 text-sm flex-1"
+                        className="h-8 text-sm w-full"
                         onClick={(event) => {
                           event.stopPropagation();
                           toggleExpanded(critique.id);
@@ -452,7 +448,7 @@ export function CritiqueSelector({
                           </>
                         )}
                       </Button>
-                    </div>
+                    )}
                   </>
                 )}
               </div>

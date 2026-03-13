@@ -36,13 +36,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const now = new Date();
 
-  const stage10 = await db.query.stages.findFirst({
-    where: and(eq(stages.projectId, projectId), eq(stages.stepNumber, 10)),
+  const stage7 = await db.query.stages.findFirst({
+    where: and(eq(stages.projectId, projectId), eq(stages.stepNumber, 7)),
   });
 
   const existingMetadata =
-    stage10?.metadata && typeof stage10.metadata === "object" && !Array.isArray(stage10.metadata)
-      ? stage10.metadata
+    stage7?.metadata && typeof stage7.metadata === "object" && !Array.isArray(stage7.metadata)
+      ? stage7.metadata
       : {};
 
   await db
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       },
       updatedAt: now,
     })
-    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 10)));
+    .where(and(eq(stages.projectId, projectId), eq(stages.stepNumber, 7)));
 
   await db
     .update(projects)
