@@ -13,7 +13,7 @@ import { StyleEditStep } from "./steps/style-edit-step";
 import { IntegrateCritiquesStep } from "./steps/integrate-critiques-step";
 import { MarkdownVersionPanel } from "./markdown-version-panel";
 import { MaterialUpload } from "@/components/sources/material-upload";
-import { StyleGuideUpload } from "@/components/sources/style-guide-upload";
+import { StylePresetSelector } from "@/components/sources/style-preset-selector";
 import { StyleGuidePreview } from "@/components/sources/style-guide-preview";
 import { VersionsPanel } from "@/components/versions/versions-panel";
 import { InlineEditor, type InlineEditorHandle } from "@/components/review/inline-editor";
@@ -32,7 +32,7 @@ import type {
   FactCheckFinding,
 } from "@repo/db";
 import type { ProjectBriefData } from "@repo/db";
-import { type DocumentColors, DEFAULT_COLORS } from "./steps/document-template";
+import { type DocumentColors, DEFAULT_COLORS, STYLE_PRESETS, type StylePreset } from "./steps/document-template";
 import type { TokenUsageSummary } from "@/lib/token-usage-cost";
 import { emitTokenUsage } from "@/lib/project-save-events";
 
@@ -189,7 +189,34 @@ export function PipelineView({
     setLiveCoverImageUrl(coverImageUrl);
   }, [coverImageUrl]);
 
-  
+  // Resolve initial preset from style guide originalFilename (format: "preset:<id>")
+  const serverPresetId = (() => {
+    const filename = latestStyleGuide?.originalFilename;
+    if (filename?.startsWith("preset:")) {
+      return filename.slice("preset:".length);
+    }
+    return null;
+  })();
+
+  const [localPresetId, setLocalPresetId] = useState<string | null>(serverPresetId);
+  const resolvedPresetId = localPresetId ?? serverPresetId;
+
+  // Set initial colors from preset
+  useEffect(() => {
+    if (resolvedPresetId) {
+      const preset = STYLE_PRESETS.find((p) => p.id === resolvedPresetId);
+      if (preset) {
+        setDocumentColors(preset.colors);
+      }
+    }
+  }, [resolvedPresetId]);
+
+  const handlePresetSelect = useCallback((preset: StylePreset) => {
+    setLocalPresetId(preset.id);
+    setDocumentColors(preset.colors);
+  }, []);
+
+
 
   // Step 7 editor ref + state (for floating bar actions)
   const editorRef = useRef<InlineEditorHandle | null>(null);
@@ -244,7 +271,6 @@ export function PipelineView({
 
   const sourceSynthesisVersion = getLatestVersion("synthesis");
   const factCheckVersion = versions.filter((v) => v.versionType === "fact_checked").at(-1);
-  const finalStyledVersion = getLatestVersion("final_styled");
 
   const persistStep8Draft = useCallback(
     (draft: Step8DraftPayload) => {
@@ -491,11 +517,10 @@ export function PipelineView({
               projectId={project.id}
               initialContent={
                 getLatestVersion("human_reviewed")?.content
-                ?? finalStyledVersion?.content
                 ?? factCheckVersion?.content
                 ?? ""
               }
-              compareContent={finalStyledVersion?.content ?? factCheckVersion?.content}
+              compareContent={factCheckVersion?.content ?? ""}
               versionLabel="Final Styled V4"
               hideActions
               onContentChange={handleStep7ContentChange}
@@ -533,7 +558,6 @@ export function PipelineView({
                   redReport={redReportContent}
                   step10Markdown={
                     getLatestVersion("human_reviewed")?.content
-                    ?? getLatestVersion("final_styled")?.content
                     ?? ""
                   }
                   onSelectedCritiquesChange={setStep8SelectedCritiques}
@@ -563,35 +587,29 @@ export function PipelineView({
 
       case 10:
         return (
-          <div className="space-y-0">
-            <div className="rounded-xl border bg-card p-6">
-              {status === "completed" && latestStyleGuide ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 mb-3">
-                    <BookOpen className="size-4 text-muted-foreground" />
-                    <h3 className="font-medium text-base text-foreground">Uploaded Style Guide</h3>
-                  </div>
-                  <div className="flex items-center justify-between text-base">
-                    <span className="truncate text-foreground">{latestStyleGuide.originalFilename}</span>
-                    <span className="text-muted-foreground shrink-0 ml-2">
-                      {latestStyleGuide.isProcessed ? "Processed" : "Ready"}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <StyleGuideUpload projectId={project.id} existingStyleGuide={latestStyleGuide} />
-              )}
-            </div>
-            {status === "completed" && latestStyleGuide && (
-              <StyleGuidePreview
+          <div className="space-y-3">
+            <div className="rounded-xl border bg-card p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <BookOpen className="size-4 text-muted-foreground" />
+                <h3 className="font-medium text-base text-foreground">Document Style</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Choose a visual style for your investment memo. This sets the colour palette, typography, and writing tone.
+              </p>
+              <StylePresetSelector
                 projectId={project.id}
-                projectTitle={project.title}
-                companyName={brief?.companyName}
-                onGeneratingChange={setCoverImagesGenerating}
-
-                onCoverImageChange={setLiveCoverImageUrl}
+                selectedPresetId={resolvedPresetId}
+                onSelect={handlePresetSelect}
               />
-            )}
+            </div>
+
+            <StyleGuidePreview
+              projectId={project.id}
+              projectTitle={project.title}
+              companyName={brief?.companyName}
+              onGeneratingChange={setCoverImagesGenerating}
+              onCoverImageChange={setLiveCoverImageUrl}
+            />
           </div>
         );
 
@@ -604,7 +622,7 @@ export function PipelineView({
             dealType={brief?.dealType}
             stage5Status={stageMap[5]?.status ?? "pending"}
             stage7Status={status}
-            synthesisVersion={getLatestVersion("synthesis")}
+            synthesisVersion={getLatestVersion("final")}
             latestStyleGuide={latestStyleGuide}
             coverImageUrl={liveCoverImageUrl}
             colors={documentColors}
