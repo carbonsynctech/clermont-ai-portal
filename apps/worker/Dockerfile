@@ -2,7 +2,7 @@
 #
 # Worker service — Node.js 22 + Python 3 (for linkedin_scraper + Playwright)
 # Build context: repo root
-# Railway config: Dockerfile path = apps/worker/Dockerfile
+# DigitalOcean App Platform: Dockerfile path = apps/worker/Dockerfile
 
 FROM node:22-slim
 
