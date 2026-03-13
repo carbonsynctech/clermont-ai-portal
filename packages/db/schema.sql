@@ -214,6 +214,21 @@ RETURNS boolean AS $$
 $$ LANGUAGE sql SECURITY DEFINER;
 
 -- ============================================================
+-- Document Types (admin-managed)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS document_types (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL UNIQUE,
+  description text,
+  fields jsonb NOT NULL DEFAULT '[]'::jsonb,
+  prompt_template text,
+  is_active boolean NOT NULL DEFAULT true,
+  display_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- ============================================================
 -- Row Level Security
 -- ============================================================
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -283,6 +298,13 @@ CREATE POLICY "audit_logs_select_own" ON audit_logs
 
 -- jobs: no direct user access (service role only)
 CREATE POLICY "jobs_service_only" ON jobs
+  FOR ALL USING (false);
+
+-- document_types: read = any authenticated user, write = service role only (admin via API)
+ALTER TABLE document_types ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "document_types_select_authenticated" ON document_types
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "document_types_write_service_only" ON document_types
   FOR ALL USING (false);
 
 -- ============================================================

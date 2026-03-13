@@ -11,9 +11,11 @@ import { integrateCritiques } from "./handlers/integrate-critiques";
 import { askAi } from "./handlers/ask-ai";
 import { generateCustomPersona } from "./handlers/generate-custom-persona";
 import { generateCoverImages } from "./handlers/generate-cover-images";
+import { generateToc } from "./handlers/generate-toc";
 import type { StageRunPayload, AskAiPayload } from "@repo/core";
 import type { CustomPersonaPayload } from "./handlers/generate-custom-persona";
 import type { CoverImagesPayload } from "./handlers/generate-cover-images";
+import type { GenerateTocPayload } from "./handlers/generate-toc";
 import { createAdminClient } from "../lib/supabase-admin";
 
 const POLL_INTERVAL_MS = 1000;
@@ -57,6 +59,9 @@ export async function runJob(jobId: string): Promise<void> {
     } else if (job.type === "extract_material") {
       const payload = job.payload as { materialId: string };
       await extractAndChunk(payload.materialId);
+    } else if (job.type === "generate_toc") {
+      const payload = job.payload as GenerateTocPayload;
+      await generateToc(payload, onChunk);
     } else if (job.type === "ask_ai") {
       const payload = job.payload as AskAiPayload;
       await askAi(payload, onChunk);
@@ -83,9 +88,7 @@ export async function runJob(jobId: string): Promise<void> {
         case 8:
           await devilsAdvocate(projectId, userId, onChunk);
           break;
-        case 9:
-          await integrateCritiques(projectId, userId, onChunk);
-          break;
+        // Step 9 removed — Red Report is annex only, auto-skipped by devils-advocate handler
         case 11:
           await styleEdit(projectId, userId, onChunk);
           break;
@@ -134,8 +137,9 @@ export function startQueueConsumer(): void {
         });
 
         if (messages && messages.length > 0) {
-          for (const msg of messages) {
-            const payload = msg.message as { job_id?: string };
+          for (const raw of messages) {
+            const msg = raw as { msg_id: number; message: { job_id?: string } };
+            const payload = msg.message;
             if (payload.job_id) {
               try {
                 await runJob(payload.job_id);

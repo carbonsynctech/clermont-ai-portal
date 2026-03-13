@@ -47,6 +47,28 @@ export interface ProjectBriefData {
   systemProductName?: string;
   techStack?: string;
   specType?: string;
+
+  // Table of Contents (generated after Step 1)
+  tableOfContents?: TocEntry[];
+}
+
+// ── Table of Contents ───────────────────────────────────────────
+export interface TocEntry {
+  id: string;
+  title: string;
+  level: number; // 1 = top-level section, 2 = sub-section
+  description?: string;
+}
+
+// ── Document Type field definitions ─────────────────────────────
+export interface DocumentTypeFieldDef {
+  type: "text" | "number" | "radio";
+  key: string;
+  label: string;
+  required?: boolean;
+  placeholder?: string;
+  options?: string[];
+  columns?: number;
 }
 
 // ── stages.metadata ──────────────────────────────────────────

@@ -67,6 +67,24 @@ jobsRoute.post("/ask-ai", async (c) => {
   return c.json({ jobId: job.id, status: job.status });
 });
 
+const generateTocSchema = z.object({
+  projectId: z.string().uuid(),
+  userId: z.string().uuid(),
+});
+
+jobsRoute.post("/generate-toc", async (c) => {
+  const body = await c.req.json();
+  const parsed = generateTocSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json({ error: "Invalid request", details: parsed.error.flatten() }, 400);
+  }
+
+  const job = await enqueueJob("generate_toc", parsed.data);
+
+  return c.json({ jobId: job.id, status: job.status });
+});
+
 const coverImagesSchema = z.object({
   projectId: z.string().uuid(),
   userId: z.string().uuid(),

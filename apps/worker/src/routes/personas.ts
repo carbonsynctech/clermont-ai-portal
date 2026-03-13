@@ -9,7 +9,6 @@ personasRoute.use("*", workerAuth);
 
 const generatePersonaSchema = z.object({
   name: z.string().min(1),
-  linkedinUrl: z.string().url().optional(),
   context: z.string().optional(),
   projectId: z.string().uuid(),
   userId: z.string().uuid(),

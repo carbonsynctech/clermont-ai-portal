@@ -1,5 +1,5 @@
 import type { StageMetadata, Json } from "@repo/db";
-import { claude, gemini } from "@repo/core";
+import { openai, gemini } from "@repo/core";
 import { createAdminClient } from "../../lib/supabase-admin";
 import { assertData } from "../../lib/db";
 
@@ -55,7 +55,7 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
   onChunk?.("Extracting factual claims…\n");
 
   // 4. Extract factual claims via Claude
-  const claimsResult = await claude.call({
+  const claimsResult = await openai.call({
     system: 'You are an expert at extracting specific factual claims from investment content. Extract all specific factual claims (numbers, dates, names, statistics, percentages, financial figures) from the provided content. Return ONLY a valid JSON array of strings — one claim per item. Example: ["Company X generated $50M revenue in 2024", "Industry growth rate is 15% annually"]. Do not include any other text, preamble, or explanation.',
     messages: [{ role: "user", content: synthesisContent }],
     maxTokens: 2048,

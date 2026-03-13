@@ -1,6 +1,6 @@
-import type { StageMetadata, Json } from "@repo/db";
+import type { StageMetadata, Json, ProjectBriefData, TocEntry } from "@repo/db";
 import {
-  claude,
+  openai,
   buildPersonaDraftSystemPrompt,
   buildPersonaDraftUserMessage,
   selectChunksForBudget,
@@ -105,7 +105,7 @@ export async function generatePersonaDrafts(
 
   // 5. Select chunks within token budget (leave room for master prompt + system + response)
   const masterPromptTokens = estimateTokens(project.master_prompt);
-  const availableTokens = getAvailableContextTokens("claude-sonnet-4-6");
+  const availableTokens = getAvailableContextTokens("gpt-4o");
   const chunkBudget = availableTokens - masterPromptTokens - 4000; // reserve for system + response
   const selectedChunks = selectChunksForBudget(allChunks, chunkBudget);
 
@@ -116,17 +116,21 @@ export async function generatePersonaDrafts(
     )} token budget).\n\nStarting parallel persona draft generation...\n`,
   );
 
+  // Extract TOC from brief data if available
+  const briefData = project.brief_data as ProjectBriefData & { tableOfContents?: TocEntry[] } | null;
+  const tableOfContents = briefData?.tableOfContents;
+
   // 6. Run all 5 persona drafts in parallel
   const results = await Promise.all(
     selectedPersonas.map((persona) =>
       (async () => {
         onChunk?.(`\n[${persona.name}] Generating opinion points...\n`);
-        const result = await claude.call({
+        const result = await openai.callWithWebSearch({
           system: buildPersonaDraftSystemPrompt(persona.name, persona.system_prompt),
           messages: [
             {
               role: "user",
-              content: buildPersonaDraftUserMessage(project.master_prompt!, selectedChunks),
+              content: buildPersonaDraftUserMessage(project.master_prompt!, selectedChunks, tableOfContents),
             },
           ],
           maxTokens: 1024,

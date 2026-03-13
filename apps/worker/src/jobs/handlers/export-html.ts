@@ -1,5 +1,5 @@
 import {
-  claude,
+  openai,
   buildHtmlExportSystemPrompt,
   buildHtmlExportUserMessage,
 } from "@repo/core";
@@ -30,7 +30,17 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
       .single(),
   );
 
-  // 3. Update stage 12 to running
+  // 3. Fetch Red Report version (if exists) to append as annex
+  const { data: redReportVersion } = await supabase
+    .from("versions")
+    .select()
+    .eq("project_id", projectId)
+    .eq("version_type", "red_report")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  // 4. Update stage 12 to running
   await supabase
     .from("stages")
     .update({
@@ -44,25 +54,31 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
 
   const startedAt = Date.now();
 
-  // 4. Call Claude to generate HTML
-  const result = await claude.call({
+  // 5. Build memo content with Red Report annex if available
+  let memoContent = finalVersion.content;
+  if (redReportVersion?.content) {
+    memoContent += `\n\n---\n\n# Appendix: Critical Assessment (Red Report)\n\n${redReportVersion.content}`;
+  }
+
+  // 6. Call OpenAI to generate HTML
+  const result = await openai.call({
     system: buildHtmlExportSystemPrompt(),
     messages: [
       {
         role: "user",
-        content: buildHtmlExportUserMessage(finalVersion.content, {
+        content: buildHtmlExportUserMessage(memoContent, {
           companyName: brief.companyName ?? brief.organizationName ?? brief.systemProductName ?? "Document",
           dealType: brief.dealType ?? brief.documentType ?? "",
           targetAudience: brief.targetAudience,
         }),
       },
     ],
-    maxTokens: 8192,
+    maxTokens: 16384,
   });
 
   const durationMs = Date.now() - startedAt;
 
-  // 5. Seal the previous active version before creating a new one
+  // 7. Seal the previous active version before creating a new one
   if (project.active_version_id) {
     await supabase
       .from("versions")
@@ -71,7 +87,7 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
       .throwOnError();
   }
 
-  // 6. Insert exported_html version (client-visible)
+  // 8. Insert exported_html version (client-visible)
   const [newVersion] = assertData(
     await supabase
       .from("versions")
@@ -89,14 +105,14 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
 
   if (!newVersion) throw new Error("Failed to insert exported_html version");
 
-  // 6. Update active_version_id
+  // 9. Update active_version_id
   await supabase
     .from("projects")
     .update({ active_version_id: newVersion.id, updated_at: new Date().toISOString() })
     .eq("id", projectId)
     .throwOnError();
 
-  // 7. Insert audit log
+  // 10. Insert audit log
   await supabase
     .from("audit_logs")
     .insert({
@@ -107,11 +123,11 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
       model_id: result.model,
       input_tokens: result.inputTokens,
       output_tokens: result.outputTokens,
-      payload: { durationMs },
+      payload: { durationMs, hasRedReport: Boolean(redReportVersion) },
     })
     .throwOnError();
 
-  // 8. Update stage 12 to completed
+  // 11. Update stage 12 to completed
   await supabase
     .from("stages")
     .update({
@@ -129,7 +145,7 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
     .eq("step_number", 12)
     .throwOnError();
 
-  // 9. Mark project as completed
+  // 12. Mark project as completed
   await supabase
     .from("projects")
     .update({ status: "completed", current_stage: 12, updated_at: new Date().toISOString() })

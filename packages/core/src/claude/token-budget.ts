@@ -10,6 +10,9 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   "claude-sonnet-4-6": 200000,
   "claude-opus-4-6": 200000,
   "claude-haiku-4-5": 200000,
+  "gpt-4o": 128000,
+  "o3": 200000,
+  "o4-mini": 200000,
 };
 
 const RESPONSE_RESERVE = 8192;

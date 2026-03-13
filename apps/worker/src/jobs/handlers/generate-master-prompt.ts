@@ -1,5 +1,5 @@
 import type { StageMetadata, Json, ProjectBriefData } from "@repo/db";
-import { claude, buildMasterPromptSystemPrompt, buildMasterPromptUserMessage } from "@repo/core";
+import { openai, buildMasterPromptSystemPrompt, buildMasterPromptUserMessage } from "@repo/core";
 import { createAdminClient } from "../../lib/supabase-admin";
 import { assertData } from "../../lib/db";
 
@@ -33,8 +33,8 @@ export async function generateMasterPrompt(
     messages: [{ role: "user" as const, content: buildMasterPromptUserMessage(project.brief_data as unknown as ProjectBriefData) }],
   };
   const result = onChunk
-    ? await claude.stream(callOptions, onChunk)
-    : await claude.call(callOptions);
+    ? await openai.stream(callOptions, onChunk)
+    : await openai.call(callOptions);
 
   const durationMs = Date.now() - startedAt;
 

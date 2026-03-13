@@ -1,5 +1,7 @@
 export { claude } from "./claude/client";
 export type { ClaudeCallOptions, ClaudeCallResult, ClaudeThinkingResult } from "./claude/client";
+export { openai } from "./openai/client";
+export type { OpenAICallOptions, OpenAICallResult, OpenAIReasoningResult } from "./openai/client";
 export { gemini } from "./gemini/client";
 export {
   getAvailableContextTokens,
@@ -59,3 +61,7 @@ export {
   buildAskAiSystemPrompt,
   buildAskAiUserMessage,
 } from "./prompts/ask-ai";
+export {
+  buildTocSystemPrompt,
+  buildTocUserMessage,
+} from "./prompts/toc";

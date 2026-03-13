@@ -4,6 +4,8 @@ export type { Database, Json, Tables, TablesInsert, TablesUpdate, Enums } from "
 // Re-export hand-written JSONB interfaces
 export type {
   ProjectBriefData,
+  TocEntry,
+  DocumentTypeFieldDef,
   FactCheckSource,
   FactCheckFinding,
   StageMetadata,
@@ -25,3 +27,4 @@ export type Stage = Tables<"stages">;
 export type StyleGuide = Tables<"style_guides">;
 export type User = Tables<"users">;
 export type Version = Tables<"versions">;
+export type DocumentType = Tables<"document_types">;

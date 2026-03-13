@@ -1,7 +1,7 @@
 // apps/worker/src/jobs/handlers/suggest-personas.ts
 import type { StageMetadata, Json } from "@repo/db";
 import {
-  claude,
+  openai,
   buildPersonaSuggestionSystemPrompt,
   buildPersonaSuggestionUserMessage,
 } from "@repo/core";
@@ -45,8 +45,8 @@ export async function suggestPersonas(
   };
 
   const result = onChunk
-    ? await claude.stream(callOptions, onChunk)
-    : await claude.call(callOptions);
+    ? await openai.stream(callOptions, onChunk)
+    : await openai.call(callOptions);
 
   const durationMs = Date.now() - startedAt;
 

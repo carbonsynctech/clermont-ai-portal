@@ -4,16 +4,13 @@ import { SelectPersonasStep } from "./steps/select-personas-step";
 import { SynthesisStep } from "./steps/synthesis-step";
 import { ExportStep } from "./steps/export-step";
 import { StyleEditStep } from "./steps/style-edit-step";
-import { IntegrateCritiquesStep } from "./steps/integrate-critiques-step";
 import { MarkdownVersionPanel } from "./markdown-version-panel";
 import { MaterialUpload } from "@/components/sources/material-upload";
 import { StylePresetSelector } from "@/components/sources/style-preset-selector";
 import { StyleGuidePreview } from "@/components/sources/style-guide-preview";
 import { InlineEditor } from "@/components/review/inline-editor";
-import { CritiqueSelector } from "@/components/review/critique-selector";
 import { FactCheckReviewStep } from "@/components/review/fact-check-review";
 import { Users, BookOpen, Eye } from "lucide-react";
-import { getStep8DraftFromMetadata } from "./pipeline-constants";
 import type { PipelineViewProps } from "./pipeline-constants";
 import type { PipelineState } from "./use-pipeline-state";
 import type { ProjectBriefData } from "@repo/db";
@@ -28,9 +25,8 @@ export function PipelineStepContent({ props, state }: PipelineStepContentProps) 
   const {
     activeStep, stageMap, brief, getLatestVersion, sourceSynthesisVersion, factCheckVersion,
     setStep1Running, setStep4Running, setStep5Running, setStep6Running,
-    setStep8Running, setStep9Running,
+    setStep8Running,
     editorRef, handleStep7ContentChange,
-    setStep8SelectedCritiques, setStep8Draft, persistStep8Draft,
     documentColors, liveCoverImageUrl, setLiveCoverImageUrl,
     resolvedPresetId, handlePresetSelect,
     step11FormatRunId,
@@ -172,43 +168,26 @@ export function PipelineStepContent({ props, state }: PipelineStepContentProps) 
 
     case 8: {
       const canRunStep8 = stageMap[7]?.status === "completed";
-      const persistedDraft = getStep8DraftFromMetadata(stageMap[8]?.metadata);
-      const redReportContent = persistedDraft ? "" : (getLatestVersion("red_report")?.content ?? "");
-      const shouldShowSelector = status === "awaiting_human" || status === "completed" || Boolean(persistedDraft);
+      const redReportVersion = getLatestVersion("red_report");
       return (
         <div className="space-y-4">
           <div className="rounded-xl border bg-card p-6 space-y-4">
             <StepTrigger
               projectId={project.id}
               stepNumber={8}
-              label="Generate Devil's Advocate Critiques"
+              label="Generate Red Report"
               currentStatus={status}
               disabled={!canRunStep8}
               disabledReason="Complete Step 7 to run this step."
               onRunningChange={setStep8Running}
             />
           </div>
-          {shouldShowSelector && (
-            <div className="rounded-xl border bg-card p-6 space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Select the critiques you want integrated into the final document. Click a card to select or deselect it. You can also add custom critiques below.
-              </p>
-              <CritiqueSelector
-                projectId={project.id}
-                redReport={redReportContent}
-                step10Markdown={
-                  getLatestVersion("human_reviewed")?.content
-                  ?? ""
-                }
-                onSelectedCritiquesChange={setStep8SelectedCritiques}
-                initialCritiques={persistedDraft?.critiques}
-                initialSelectedIds={persistedDraft?.selectedIds}
-                onDraftChange={(draft) => {
-                  setStep8Draft(draft);
-                  persistStep8Draft(draft);
-                }}
-              />
-            </div>
+          {redReportVersion && (status === "completed") && (
+            <MarkdownVersionPanel
+              title="Red Report — Critical Assessment"
+              content={redReportVersion.content}
+              wordCount={redReportVersion.word_count ?? undefined}
+            />
           )}
         </div>
       );
@@ -216,13 +195,11 @@ export function PipelineStepContent({ props, state }: PipelineStepContentProps) 
 
     case 9:
       return (
-        <IntegrateCritiquesStep
-          projectId={project.id}
-          finalVersion={getLatestVersion("final")}
-          stage11Status={stageMap[8]?.status ?? "pending"}
-          stage12Status={status}
-          onRunningChange={setStep9Running}
-        />
+        <div className="rounded-xl border bg-card p-6 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            This step has been removed. The Red Report is now automatically appended as an appendix to the final export. No critique selection or integration is needed.
+          </p>
+        </div>
       );
 
     case 10:

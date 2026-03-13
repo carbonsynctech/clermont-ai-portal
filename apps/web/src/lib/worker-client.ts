@@ -63,7 +63,6 @@ export const workerClient = {
 
   generatePersona: async (opts: {
     name: string;
-    linkedinUrl?: string;
     context?: string;
     projectId: string;
     userId: string;
@@ -89,6 +88,12 @@ export const workerClient = {
     workerFetch("/jobs/final-style-fix", {
       method: "POST",
       body: JSON.stringify({ projectId, userId, userMessage }),
+    }) as Promise<{ jobId: string; status: string }>,
+
+  generateToc: async (projectId: string, userId: string) =>
+    workerFetch("/jobs/generate-toc", {
+      method: "POST",
+      body: JSON.stringify({ projectId, userId }),
     }) as Promise<{ jobId: string; status: string }>,
 
   generateCoverImages: async (projectId: string, userId: string, styleGuideId: string) =>

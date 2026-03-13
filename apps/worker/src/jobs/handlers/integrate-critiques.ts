@@ -1,5 +1,5 @@
 import {
-  claude,
+  openai,
   buildCritiqueIntegrationSystemPrompt,
   buildCritiqueIntegrationUserMessage,
 } from "@repo/core";
@@ -72,24 +72,7 @@ export async function integrateCritiques(
     onChunk?.("No critiques selected, carrying forward Step 7 output as Final V6.\n");
   }
   const result = hasSelectedCritiques
-    ? await (onChunk
-      ? claude.streamWithThinking(
-        {
-          system: buildCritiqueIntegrationSystemPrompt(),
-          messages: [
-            {
-              role: "user",
-              content: buildCritiqueIntegrationUserMessage(
-                humanReviewedVersion.content,
-                selectedCritiques
-              ),
-            },
-          ],
-          maxTokens: 18192, // 8192 output + 10000 thinking budget
-        },
-        onChunk,
-      )
-      : claude.callWithThinking({
+    ? await openai.callWithReasoning({
         system: buildCritiqueIntegrationSystemPrompt(),
         messages: [
           {
@@ -100,8 +83,8 @@ export async function integrateCritiques(
             ),
           },
         ],
-        maxTokens: 18192, // 8192 output + 10000 thinking budget
-      }))
+        maxTokens: 16384,
+      })
     : null;
 
   const durationMs = Date.now() - startedAt;
@@ -153,7 +136,7 @@ export async function integrateCritiques(
         model_id: result.model,
         input_tokens: result.inputTokens,
         output_tokens: result.outputTokens,
-        payload: { durationMs, thinkingLength: result.thinking.length },
+        payload: { durationMs, reasoningLength: result.reasoning.length },
       })
       .throwOnError();
   } else {

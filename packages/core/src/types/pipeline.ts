@@ -30,5 +30,5 @@ export const SOP_STEP_NAMES: Record<SopStepNumber, string> = {
   12: "Export HTML→PDF",
 };
 
-export const HUMAN_CHECKPOINT_STEPS: SopStepNumber[] = [2, 3, 7, 8, 9];
-export const AI_AGENT_STEPS: SopStepNumber[] = [1, 2, 4, 5, 6, 8, 9, 11, 12];
+export const HUMAN_CHECKPOINT_STEPS: SopStepNumber[] = [2, 3, 7];
+export const AI_AGENT_STEPS: SopStepNumber[] = [1, 2, 4, 5, 6, 8, 11, 12];

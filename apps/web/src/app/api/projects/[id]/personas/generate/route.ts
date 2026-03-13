@@ -29,13 +29,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  let body: { name?: unknown; linkedinUrl?: unknown; context?: unknown };
+  let body: { name?: unknown; context?: unknown };
   try {
     const raw: unknown = await req.json();
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
-    body = raw as { name?: unknown; linkedinUrl?: unknown; context?: unknown };
+    body = raw as { name?: unknown; context?: unknown };
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -47,7 +47,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
     const result = await workerClient.generatePersona({
       name: body.name.trim(),
-      linkedinUrl: typeof body.linkedinUrl === "string" ? body.linkedinUrl : undefined,
       context: typeof body.context === "string" ? body.context : undefined,
       projectId,
       userId: user.id,

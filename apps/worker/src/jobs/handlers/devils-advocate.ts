@@ -1,12 +1,15 @@
 import {
-  claude,
+  openai,
   buildDevilsAdvocateSystemPrompt,
   buildDevilsAdvocateUserMessage,
-  parseCritiques,
 } from "@repo/core";
 import type { Json } from "@repo/db";
 import { createAdminClient } from "../../lib/supabase-admin";
 import { assertData } from "../../lib/db";
+
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).length;
+}
 
 export async function devilsAdvocate(
   projectId: string,
@@ -48,7 +51,7 @@ export async function devilsAdvocate(
 
   const startedAt = Date.now();
 
-  // 4. Call Claude (streaming when callback is provided)
+  // 4. Call OpenAI to generate full Red Report (streaming when callback is provided)
   const callOptions = {
     system: buildDevilsAdvocateSystemPrompt(),
     messages: [
@@ -60,23 +63,33 @@ export async function devilsAdvocate(
         ),
       },
     ],
-    maxTokens: 4096,
+    maxTokens: 8192,
   };
   const result = onChunk
-    ? await claude.stream(callOptions, onChunk)
-    : await claude.call(callOptions);
+    ? await openai.stream(callOptions, onChunk)
+    : await openai.call(callOptions);
 
   const durationMs = Date.now() - startedAt;
 
-  const parsedCritiques = parseCritiques(result.content).map((critique) => ({
-    id: critique.id,
-    title: critique.title,
-    detail: critique.detail,
-    isCustom: false,
-  }));
-  const savedAt = new Date().toISOString();
+  // 5. Store as a red_report version
+  const [redReportVersion] = assertData(
+    await supabase
+      .from("versions")
+      .insert({
+        project_id: projectId,
+        produced_by_step: 8,
+        version_type: "red_report",
+        internal_label: "Red Report — Critical Assessment",
+        content: result.content,
+        word_count: countWords(result.content),
+        is_client_visible: false,
+      })
+      .select(),
+  );
 
-  // 5. Insert audit log
+  if (!redReportVersion) throw new Error("Failed to insert red_report version");
+
+  // 6. Insert audit log
   await supabase
     .from("audit_logs")
     .insert({
@@ -87,39 +100,46 @@ export async function devilsAdvocate(
       model_id: result.model,
       input_tokens: result.inputTokens,
       output_tokens: result.outputTokens,
-      payload: { durationMs, generatedCritiquesCount: parsedCritiques.length },
+      payload: { durationMs },
       response_snapshot: result.content,
     })
     .throwOnError();
 
-  // 6. Update stage 8 to awaiting_human (critique selection checkpoint)
+  // 7. Update stage 8 to completed (no longer awaiting_human — Red Report is annex only)
   await supabase
     .from("stages")
     .update({
-      status: "awaiting_human",
+      status: "completed",
+      completed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       metadata: {
         modelId: result.model,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
         durationMs,
-        selectedCritiquesCount: 0,
-        devilsAdvocateDraft: {
-          critiques: parsedCritiques,
-          selectedIds: [],
-          selectedCritiques: [],
-          savedAt,
-        },
       } as unknown as Json,
     })
     .eq("project_id", projectId)
     .eq("step_number", 8)
     .throwOnError();
 
-  // 7. Stay at current_stage = 8 (user must select critiques before advancing)
+  // 8. Auto-skip step 9 (no longer needed — Red Report is annex only)
+  await supabase
+    .from("stages")
+    .update({
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: { skipped: true, reason: "Red Report is annex only; critique integration removed" } as unknown as Json,
+    })
+    .eq("project_id", projectId)
+    .eq("step_number", 9)
+    .throwOnError();
+
+  // 9. Advance project past step 9 to step 10
   await supabase
     .from("projects")
-    .update({ current_stage: 8, updated_at: new Date().toISOString() })
+    .update({ current_stage: 10, updated_at: new Date().toISOString() })
     .eq("id", projectId)
     .throwOnError();
 }

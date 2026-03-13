@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2, FileText, Target, Users, MessageSquare,
@@ -30,11 +30,22 @@ import {
   PROJECT_SAVE_REQUEST_EVENT,
   type ProjectSaveRequestDetail,
 } from "@/lib/project-save-events";
-import type { ProjectBriefData } from "@repo/db";
+import type { ProjectBriefData, TocEntry, DocumentTypeFieldDef } from "@repo/db";
+import { TocReview } from "@/components/brief/toc-review";
 
-// ─── Option lists ─────────────────────────────────────────────────────────────
+// ─── Fetched document type shape ──────────────────────────────────────────────
 
-const DOCUMENT_TYPES = [
+interface FetchedDocumentType {
+  id: string;
+  name: string;
+  description: string | null;
+  fields: DocumentTypeFieldDef[];
+  is_active: boolean;
+}
+
+// ─── Fallback option lists (used when API is unavailable) ─────────────────────
+
+const FALLBACK_DOCUMENT_TYPES = [
   "Investment Memorandum",
   "Strategy Playbook",
   "Policy Document",
@@ -139,7 +150,7 @@ type RadioField = {
 };
 type FieldDef = TextField | RadioField;
 
-const DOC_TYPE_FIELDS: Record<string, FieldDef[]> = {
+const FALLBACK_DOC_TYPE_FIELDS: Record<string, FieldDef[]> = {
   "Investment Memorandum": [
     { type: "radio",  key: "sector",       label: "Sector",         required: true, options: SECTORS,    columns: 5 },
     { type: "radio",  key: "dealType",     label: "Deal Type",      required: true, options: DEAL_TYPES, columns: 5 },
@@ -288,6 +299,42 @@ export function DefineTaskStep({
   const router = useRouter();
   const step1Trigger = useStepTrigger(projectId, 1, stage1Status);
 
+  // Fetch document types from API (fallback to hardcoded)
+  const [fetchedDocTypes, setFetchedDocTypes] = useState<FetchedDocumentType[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/document-types");
+        if (!res.ok) return;
+        const data = (await res.json()) as FetchedDocumentType[];
+        if (!cancelled && Array.isArray(data) && data.length > 0) {
+          setFetchedDocTypes(data.filter((d) => d.is_active));
+        }
+      } catch {
+        // Fallback to hardcoded types
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const documentTypeNames = useMemo(() => {
+    if (fetchedDocTypes) return fetchedDocTypes.map((d) => d.name);
+    return FALLBACK_DOCUMENT_TYPES;
+  }, [fetchedDocTypes]);
+
+  const docTypeFieldsMap = useMemo(() => {
+    if (!fetchedDocTypes) return FALLBACK_DOC_TYPE_FIELDS;
+    const map: Record<string, FieldDef[]> = {};
+    for (const dt of fetchedDocTypes) {
+      if (Array.isArray(dt.fields) && dt.fields.length > 0) {
+        map[dt.name] = dt.fields as FieldDef[];
+      }
+    }
+    return map;
+  }, [fetchedDocTypes]);
+
   useEffect(() => {
     onRunningChange?.(step1Trigger.isRunning);
   }, [step1Trigger.isRunning, onRunningChange]);
@@ -297,6 +344,14 @@ export function DefineTaskStep({
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptSaveError, setPromptSaveError] = useState<string | null>(null);
+
+  // TOC state
+  const [tocEntries, setTocEntries] = useState<TocEntry[]>(
+    (briefData as ProjectBriefData & { tableOfContents?: TocEntry[] } | null)?.tableOfContents ?? []
+  );
+  const [isTocGenerating, setIsTocGenerating] = useState(false);
+  const [tocJobId, setTocJobId] = useState<string | null>(null);
+  const [tocError, setTocError] = useState<string | null>(null);
 
   // Sync if the server refreshes with a new master prompt (e.g. after generation)
   useEffect(() => {
@@ -349,10 +404,10 @@ export function DefineTaskStep({
 
   const requiredContextKeys = useMemo(() => {
     if (!documentType) return [];
-    return (DOC_TYPE_FIELDS[documentType] ?? [])
+    return (docTypeFieldsMap[documentType] ?? [])
       .filter((f) => f.required)
       .map((f) => f.key);
-  }, [documentType]);
+  }, [documentType, docTypeFieldsMap]);
 
   const isFormValid =
     (title.trim() !== "" || projectTitle !== "Untitled Project") &&
@@ -484,10 +539,69 @@ export function DefineTaskStep({
     return () => window.removeEventListener(PROJECT_SAVE_REQUEST_EVENT, onSaveRequest);
   }, [projectId, isFormValid, isSaving]);
 
+  async function handleGenerateToc() {
+    setIsTocGenerating(true);
+    setTocError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/toc`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string };
+        throw new Error(body.error ?? "Failed to start TOC generation");
+      }
+      const data = (await res.json()) as { jobId?: string };
+      if (data.jobId) {
+        setTocJobId(data.jobId);
+        // Poll for completion
+        for (let attempt = 0; attempt < 60; attempt++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const jobRes = await fetch(`/api/jobs/${data.jobId}`);
+          if (!jobRes.ok) continue;
+          const job = (await jobRes.json()) as { status?: string; error?: string };
+          if (job.status === "completed") {
+            // Refresh to get updated brief_data with TOC
+            router.refresh();
+            // Also fetch the updated project to get TOC entries
+            const projRes = await fetch(`/api/projects/${projectId}`);
+            if (projRes.ok) {
+              const proj = (await projRes.json()) as { brief_data?: { tableOfContents?: TocEntry[] } };
+              if (proj.brief_data?.tableOfContents) {
+                setTocEntries(proj.brief_data.tableOfContents);
+              }
+            }
+            break;
+          }
+          if (job.status === "failed") {
+            throw new Error(job.error ?? "TOC generation failed");
+          }
+        }
+      }
+    } catch (err) {
+      setTocError(err instanceof Error ? err.message : "Failed to generate TOC");
+    } finally {
+      setIsTocGenerating(false);
+      setTocJobId(null);
+    }
+  }
+
+  async function handleSaveToc(entries: TocEntry[]) {
+    setTocEntries(entries);
+    try {
+      await fetch(`/api/projects/${projectId}/toc`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableOfContents: entries }),
+      });
+    } catch {
+      // Best-effort save — TOC will be persisted on next full save
+    }
+  }
+
   // Render panels for the selected doc type's context fields.
   // Consecutive text/number fields are paired side-by-side; radio fields are full-width.
   function renderContextFields(): React.ReactNode[] {
-    const fields = DOC_TYPE_FIELDS[documentType];
+    const fields = docTypeFieldsMap[documentType];
     if (!fields || fields.length === 0) return [];
 
     const nodes: React.ReactNode[] = [];
@@ -614,7 +728,7 @@ export function DefineTaskStep({
       {/* Document Type */}
       <SectionCard icon={Layers} title="Document Type" required>
         <CardRadioGroup
-          options={DOCUMENT_TYPES}
+          options={documentTypeNames}
           value={documentType}
           onChange={handleDocumentTypeChange}
           columns={3}
@@ -813,6 +927,46 @@ export function DefineTaskStep({
 
           {promptSaveError && (
             <p className="text-xs text-destructive">{promptSaveError}</p>
+          )}
+        </div>
+      )}
+
+      {/* TOC Generation & Review (after master prompt is generated) */}
+      {stage1Status === "completed" && (
+        <div className="rounded-xl border bg-card p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Target className="size-4 text-muted-foreground" />
+              <h3 className="font-medium text-base text-foreground">Table of Contents</h3>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isTocGenerating}
+              onClick={() => void handleGenerateToc()}
+            >
+              {isTocGenerating ? (
+                <><Loader2 className="size-3 mr-1.5 animate-spin" />Generating...</>
+              ) : tocEntries.length > 0 ? (
+                "Regenerate TOC"
+              ) : (
+                "Generate TOC"
+              )}
+            </Button>
+          </div>
+
+          {tocError && <p className="text-sm text-destructive">{tocError}</p>}
+
+          {tocEntries.length > 0 ? (
+            <TocReview
+              projectId={projectId}
+              tocEntries={tocEntries}
+              onTocChange={handleSaveToc}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Generate a table of contents to structure your document. You can edit, reorder, add, or remove sections after generation.
+            </p>
           )}
         </div>
       )}

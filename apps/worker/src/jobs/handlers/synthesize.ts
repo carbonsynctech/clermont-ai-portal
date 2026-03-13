@@ -1,6 +1,6 @@
-import type { StageMetadata, Json } from "@repo/db";
+import type { StageMetadata, Json, ProjectBriefData, TocEntry } from "@repo/db";
 import {
-  claude,
+  openai,
   buildSynthesisSystemPrompt,
   buildSynthesisUserMessage,
   estimateTokens,
@@ -118,7 +118,7 @@ export async function synthesize(
   // 6. Calculate token budget for source chunks
   const opinionsTokens = opinions.reduce((sum, o) => sum + estimateTokens(o.content), 0);
   const masterPromptTokens = estimateTokens(project.master_prompt);
-  const availableTokens = getAvailableContextTokens("claude-sonnet-4-6");
+  const availableTokens = getAvailableContextTokens("gpt-4o");
   const chunkBudget = availableTokens - masterPromptTokens - opinionsTokens - 4000;
   const selectedChunks = selectChunksForBudget(allChunks, chunkBudget);
 
@@ -126,18 +126,22 @@ export async function synthesize(
     `Selected ${selectedChunks.length} source chunks (${Math.max(chunkBudget, 0)} token budget).\n`,
   );
 
-  onChunk?.("Writing investment memo with Claude extended thinking...\n");
+  // Extract TOC from brief data if available
+  const briefData = project.brief_data as ProjectBriefData & { tableOfContents?: TocEntry[] } | null;
+  const tableOfContents = briefData?.tableOfContents;
 
-  // 7. Call Claude with extended thinking
-  const result = await claude.callWithThinking({
+  onChunk?.("Writing document with OpenAI reasoning...\n");
+
+  // 7. Call OpenAI with reasoning (o3)
+  const result = await openai.callWithReasoning({
     system: buildSynthesisSystemPrompt(),
     messages: [
       {
         role: "user",
-        content: buildSynthesisUserMessage(project.master_prompt, opinions, selectedChunks),
+        content: buildSynthesisUserMessage(project.master_prompt, opinions, selectedChunks, tableOfContents),
       },
     ],
-    maxTokens: 18192, // 8192 output + 10000 thinking budget
+    maxTokens: 16384,
   });
 
   const durationMs = Date.now() - startedAt;
@@ -181,7 +185,7 @@ export async function synthesize(
       model_id: result.model,
       input_tokens: result.inputTokens,
       output_tokens: result.outputTokens,
-      payload: { durationMs, thinkingLength: result.thinking.length },
+      payload: { durationMs, reasoningLength: result.reasoning.length },
     })
     .throwOnError();
 
