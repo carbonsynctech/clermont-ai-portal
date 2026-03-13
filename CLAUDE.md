@@ -3,7 +3,7 @@
 Read this fully before making any changes.
 
 ## Project Purpose
-AI-powered investment memo creation portal automating a 13-step SOP using Claude (primary) and Gemini (fact-checking only). Monorepo: Turborepo + pnpm.
+AI-powered investment memo creation portal automating a 12-step SOP using OpenAI (primary pipeline), Claude (Ask AI + chunk summarisation), and Gemini (fact-checking + cover images). Monorepo: Turborepo + pnpm.
 
 ## Reference Documents
 - `docs/proposal.pdf` – original project proposal from the client (Wesley); product scope and business context
@@ -16,15 +16,15 @@ AI-powered investment memo creation portal automating a 13-step SOP using Claude
 - `apps/web/` – Next.js 16 App Router frontend → Vercel
 - `apps/worker/` – Hono HTTP server, PGMQ queue consumer, long-running AI jobs → Railway
 - `packages/db/` – Supabase generated types (`database.types.ts`), hand-written JSONB interfaces (`json-types.ts`), row aliases
-- `packages/core/` – Claude/Gemini wrappers, prompt templates, pipeline types
+- `packages/core/` – OpenAI/Claude/Gemini wrappers, prompt templates, pipeline types
 
 ## Critical Architecture Rules
 
 ### 1. Context Window Management (NON-NEGOTIABLE)
-NEVER pass a raw uploaded file into a Claude message. All uploads MUST be:
+NEVER pass a raw uploaded file into an AI message. All uploads MUST be:
 1. Chunked → stored in `source_chunks` table (~1,500 token chunks)
 2. AI-summarized per chunk
-3. Selected at generation time via `selectChunksForBudget()` in `packages/core/src/claude/token-budget.ts`
+3. Selected at generation time via `selectChunksForBudget()` in `packages/core/src/claude/token-budget.ts` (covers OpenAI models: gpt-4o 128k, o3 200k)
 
 ### 2. Versions Are Immutable and Hidden by Default
 - `versions.is_client_visible` defaults to `false`. Never show version history in UI unless explicitly navigated.
@@ -37,10 +37,13 @@ Next.js API routes have a 60s Vercel timeout. Any AI call goes:
 Routes dispatch and return `jobId`. Client polls `/api/jobs/:jobId`. Jobs are persisted in the `jobs` table.
 
 ### 4. AI Model Assignment (follow exactly)
-- **Claude `claude-sonnet-4-6`**: ALL steps EXCEPT fact-checking
-- **Gemini**: Step 8 ONLY (fact-check)
-- **Extended Thinking** (10k budget): Steps 5 (synthesis) and 12 (critique integration)
-- Steps 6+7 are ONE combined Claude call (style guide + editing) to save tokens
+- **OpenAI `gpt-4o`**: Steps 1, 2, 4, 10+11 (style), 12 (export), TOC generation
+- **OpenAI `gpt-4o` with web search**: Step 4 (persona drafts use Responses API `web_search_preview`)
+- **OpenAI `o3` (reasoning)**: Steps 5 (synthesis) and 9 (critique integration)
+- **Claude `claude-haiku-4-5-20251001`**: Chunk summarisation (extract-and-chunk)
+- **Claude Opus**: Ask AI only (not a pipeline step)
+- **Gemini**: Step 6 (fact-check) and cover image generation
+- Steps 10+11 are ONE combined OpenAI call (style guide + editing) to save tokens
 
 ### 5. Audit Every Action
 Every AI call, human decision, and stage transition MUST write an `audit_logs` row. No exceptions.
@@ -58,7 +61,7 @@ All 12 stage rows are created when a project is created. Always update existing 
 - JSONB interfaces (`ProjectBriefData`, `StageMetadata`, etc.) use camelCase (hand-written).
 - Never `UPDATE` a sealed version. Never `DELETE` any version row.
 - Schema changes: edit `packages/db/schema.sql`, run in Supabase SQL Editor, then `pnpm db:gen-types`
-- 10 tables: `audit_logs`, `jobs`, `personas`, `projects`, `source_chunks`, `source_materials`, `stages`, `style_guides`, `users`, `versions`
+- 11 tables: `audit_logs`, `document_types`, `jobs`, `personas`, `projects`, `source_chunks`, `source_materials`, `stages`, `style_guides`, `users`, `versions`
 
 ## TypeScript Rules
 - `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`
@@ -79,16 +82,17 @@ apps/worker/src/
 │                      synthesize, style-edit, fact-check,
 │                      devils-advocate, integrate-critiques,
 │                      export-html, ask-ai, generate-custom-persona,
-│                      generate-cover-images
+│                      generate-cover-images, generate-toc
 └── lib/
     ├── supabase-admin.ts → createAdminClient<Database>()
     └── db.ts             → assertData() helper
 
 apps/web/src/app/
-├── (app)/           → dashboard/, projects/, projects/[id]/, projects/[id]/audit/
+├── (app)/           → dashboard/, projects/, projects/[id]/, projects/[id]/audit/, admin/
 ├── api/projects/[id]/ → materials/, personas/, stages/, style-guide/,
                          versions/, review/, critiques/, export/
-└── components/      → brief/, layout/, personas/, projects/,
+├── api/document-types/ → CRUD for document types
+└── components/      → brief/ (incl. toc-review.tsx), layout/, personas/, projects/,
                        review/, sources/, versions/
 
 packages/db/src/
@@ -97,24 +101,23 @@ packages/db/src/
 └── index.ts          → re-exports + row aliases (Project, Stage, Version, etc.)
 
 packages/core/src/prompts/
-    → brief, personas, drafts, synthesis, style, critique, final-style, export
+    → brief, personas, drafts, synthesis, style, critique, final-style, export, toc
 ```
 
-## 13-Step SOP Reference
+## 12-Step SOP Reference
 | Step | Name | Agent | Checkpoint |
 |------|------|-------|-----------|
-| 1 | Define Task & Prompt | Claude | No |
-| 2 | Select Expert Personas | Claude | Yes – pick 5 |
+| 1 | Define Task & Prompt (+TOC) | OpenAI | No |
+| 2 | Select Expert Personas | OpenAI | Yes – pick 5 |
 | 3 | Gather Source Material | Upload | Yes – NDA |
-| 4 | Generate Persona Drafts | Claude ×5 parallel | No |
-| 5 | Synthesize V1 | Claude + thinking | No |
-| 6+7 | Style Guide + Edit V2 | Claude (combined) | No |
-| 8 | Fact-Check V3 | Gemini | No |
-| 9 | Final Style Pass V4 | Claude | No |
-| 10 | Human Review V5 | – | Yes – inline |
-| 11 | Devil's Advocate | Claude | Yes – select critiques |
-| 12 | Integrate Critiques | Claude + thinking | No |
-| 13 | Export HTML→PDF | Claude + Puppeteer | No |
+| 4 | Generate Persona Drafts | OpenAI ×5 (web search) | No |
+| 5 | Synthesize V1 | OpenAI o3 (reasoning) | No |
+| 6 | Fact-Check V3 | Gemini | No |
+| 7 | Human Review V5 | – | Yes – inline |
+| 8 | Devil's Advocate (Red Report) | OpenAI | No (auto-completes) |
+| 9 | Integrate Critiques | Auto-skipped (Red Report is annex) | No |
+| 10+11 | Style Guide + Edit V2 | OpenAI (combined) | No |
+| 12 | Export HTML→PDF | OpenAI + Puppeteer | No |
 
 ## Commands
 ```bash
@@ -129,14 +132,16 @@ See `.claude/mcp.json`. Active: Supabase (DB inspection + migrations), GitHub (P
 
 ## Pitfalls
 1. Never import `@repo/db` runtime values in client components — types only (`import type`)
-2. Never store ANTHROPIC_API_KEY or GOOGLE_GEMINI_API_KEY in web app env – worker only
+2. Never store OPENAI_API_KEY, ANTHROPIC_API_KEY, or GOOGLE_GEMINI_API_KEY in web app env – worker only
 3. Never call AI APIs directly from Next.js API routes
 4. Never mutate a sealed version
 5. Never skip writing audit_logs
 6. Use `pnpm shadcn init` (local devDependency), NOT `pnpm dlx shadcn` — Node 22 compat issue
-7. `selectedCritiques` (Step 11) are stored in `audit_logs.payload`; Step 12 fetches via audit_logs query where `action = "critique_selected"`
+7. Step 9 (Integrate Critiques) is auto-skipped. The Red Report is generated at Step 8 and appended as an annex during export. No critique selection flow.
 8. PDF download: Next.js `/api/projects/[id]/export` proxies to worker to keep WORKER_SECRET server-side
 9. For shadcn components that fail with `pnpm shadcn add`, install from `@radix-ui` directly (e.g. checkbox)
 10. All DB column access is **snake_case** — Supabase JS returns raw column names, no camelCase mapping
 11. JSONB interfaces (`ProjectBriefData`, `StageMetadata`, etc.) remain **camelCase** — cast from `Json` as needed
 12. `packages/db` has no runtime dependencies — only type exports. Do NOT add `drizzle-orm`, `postgres`, or any DB driver.
+13. Document types are managed via admin UI (`/admin/document-types`). The `define-task-step.tsx` fetches types from `/api/document-types` at runtime with hardcoded fallback.
+14. TOC is stored in `projects.brief_data.tableOfContents` and injected into persona drafts and synthesis prompts.
