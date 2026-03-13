@@ -10,8 +10,8 @@ build/
 
 # Environment files
 .env
+.env.*
 .env.local
-.env.*.local
 
 # Drizzle
 packages/db/migrations/meta/
@@ -25,6 +25,9 @@ packages/db/migrations/meta/
 # OS
 .DS_Store
 Thumbs.db
+
+# DigitalOcean (contains secrets)
+.do/app.yaml
 
 # Turbo
 .turbo/
