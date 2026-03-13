@@ -227,7 +227,6 @@ export async function lookupPerson(
   }
 
   if (allResults.length === 0) {
-    console.log(`[person-lookup] No results found for "${name}"`);
     return null;
   }
 

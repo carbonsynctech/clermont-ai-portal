@@ -40,23 +40,25 @@ export async function generatePersonaDrafts(
 
   const startedAt = Date.now();
 
-  // 3. Clear any existing persona_draft versions so re-runs produce fresh opinions
+  // 3. Hide any existing persona_draft versions so re-runs produce fresh opinions (never delete versions)
   const existingDrafts = assertData(
     await supabase
       .from("versions")
-      .select()
+      .select("id, is_sealed")
       .eq("project_id", projectId)
       .eq("version_type", "persona_draft"),
   );
 
   if (existingDrafts.length > 0) {
-    await supabase
-      .from("versions")
-      .delete()
-      .eq("project_id", projectId)
-      .eq("version_type", "persona_draft")
-      .throwOnError();
-    onChunk?.(`Cleared ${existingDrafts.length} previous persona drafts.\n`);
+    const unsealed = existingDrafts.filter((v) => !v.is_sealed);
+    if (unsealed.length > 0) {
+      await supabase
+        .from("versions")
+        .update({ is_client_visible: false, updated_at: new Date().toISOString() })
+        .in("id", unsealed.map((v) => v.id))
+        .throwOnError();
+    }
+    onChunk?.(`Hid ${unsealed.length} previous persona drafts.\n`);
   }
 
   // 4. Fetch selected personas ordered by selectionOrder
@@ -103,7 +105,7 @@ export async function generatePersonaDrafts(
 
   // 5. Select chunks within token budget (leave room for master prompt + system + response)
   const masterPromptTokens = estimateTokens(project.master_prompt);
-  const availableTokens = getAvailableContextTokens("claude-opus-4-6");
+  const availableTokens = getAvailableContextTokens("claude-sonnet-4-6");
   const chunkBudget = availableTokens - masterPromptTokens - 4000; // reserve for system + response
   const selectedChunks = selectChunksForBudget(allChunks, chunkBudget);
 

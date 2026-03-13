@@ -107,7 +107,16 @@ export async function integrateCritiques(
   const durationMs = Date.now() - startedAt;
   const finalContent = result?.content ?? humanReviewedVersion.content;
 
-  // 6. Insert final version
+  // 6. Seal the previous active version before creating a new one
+  if (project.active_version_id) {
+    await supabase
+      .from("versions")
+      .update({ is_sealed: true, updated_at: new Date().toISOString() })
+      .eq("id", project.active_version_id)
+      .throwOnError();
+  }
+
+  // 7. Insert final version
   const [newVersion] = assertData(
     await supabase
       .from("versions")

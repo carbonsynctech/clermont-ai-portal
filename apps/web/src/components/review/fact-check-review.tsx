@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { ShieldCheck, SkipForward } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -250,7 +251,7 @@ export function FactCheckReviewStep({
 
       router.refresh();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to restart fact-check");
+      toast.error(err instanceof Error ? err.message : "Failed to restart fact-check");
     } finally {
       setIsStartingOver(false);
     }
@@ -296,7 +297,7 @@ export function FactCheckReviewStep({
       });
       router.refresh();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to apply accepted corrections");
+      toast.error(err instanceof Error ? err.message : "Failed to apply accepted corrections");
     } finally {
       setIsApplyingCorrections(false);
     }
@@ -330,7 +331,7 @@ export function FactCheckReviewStep({
       });
       router.refresh();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to skip fact-check");
+      toast.error(err instanceof Error ? err.message : "Failed to skip fact-check");
     } finally {
       setIsSkipping(false);
     }

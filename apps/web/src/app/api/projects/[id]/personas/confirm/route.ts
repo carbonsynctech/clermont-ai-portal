@@ -41,14 +41,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     const personaIds = body.personaIds as string[];
-    console.log(`[confirm-personas] Starting for project ${projectId} with ${personaIds.length} personas`);
 
     // Clear any previously selected personas for this project
     await supabase
       .from("personas")
       .update({ is_selected: false, selection_order: null })
       .eq("project_id", projectId);
-    console.log(`[confirm-personas] Cleared previous selections`);
 
     // Fetch the selected personas to check which ones belong to this project
     const { data: selectedPersonaRows } = await supabase
@@ -79,7 +77,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           .single();
         if (cloned) {
           idMapping.set(persona.id, cloned.id);
-          console.log(`[confirm-personas] Cloned library persona ${persona.id} -> ${cloned.id}`);
         }
       }
     }
@@ -97,7 +94,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           .eq("project_id", projectId)
       )
     );
-    console.log(`[confirm-personas] Updated ${updateResults.length} personas with selection`);
 
     // Verify personas were actually updated
     const { data: verifyPersonas } = await supabase
@@ -105,7 +101,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       .select()
       .eq("project_id", projectId)
       .eq("is_selected", true);
-    console.log(`[confirm-personas] Verification: ${verifyPersonas?.length ?? 0} personas marked as selected`);
 
     if (!verifyPersonas || verifyPersonas.length !== 5) {
       console.error(
@@ -125,7 +120,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       step_number: 2,
       payload: { count: 5, personaIds: resolvedIds },
     });
-    console.log(`[confirm-personas] Audit log created`);
 
     // Complete stage 2
     const now = new Date().toISOString();
@@ -134,16 +128,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       .update({ status: "completed", completed_at: now, updated_at: now })
       .eq("project_id", projectId)
       .eq("step_number", 2);
-    console.log(`[confirm-personas] Stage 2 marked completed`);
 
     // Advance project to stage 3
     await supabase
       .from("projects")
       .update({ current_stage: 3, updated_at: now })
       .eq("id", projectId);
-    console.log(`[confirm-personas] Project advanced to stage 3`);
 
-    console.log(`[confirm-personas] SUCCESS for project ${projectId}`);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[confirm-personas] Error:", error instanceof Error ? error.message : String(error));

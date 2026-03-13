@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -140,7 +141,7 @@ export const InlineEditor = forwardRef<InlineEditorHandle, InlineEditorProps>(
         onApproveSuccess?.();
       } catch (err) {
         console.error("Review save error:", err);
-        alert(err instanceof Error ? err.message : "Failed to save review. Please try again.");
+        toast.error(err instanceof Error ? err.message : "Failed to save review. Please try again.");
       } finally {
         setIsApproving(false);
         isApprovingRef.current = false;

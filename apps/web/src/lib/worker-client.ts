@@ -3,7 +3,6 @@ const WORKER_SECRET = process.env.WORKER_SECRET ?? "";
 
 async function workerFetch(path: string, init?: RequestInit) {
   const url = `${WORKER_URL}${path}`;
-  console.log(`[workerFetch] ${init?.method ?? "GET"} ${url}`);
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -20,7 +19,6 @@ async function workerFetch(path: string, init?: RequestInit) {
   }
 
   const data = await res.json() as unknown;
-  console.log(`[workerFetch] Response OK from ${path}:`, JSON.stringify(data).slice(0, 300));
   return data;
 }
 

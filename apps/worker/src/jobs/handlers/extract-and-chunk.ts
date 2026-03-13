@@ -99,8 +99,6 @@ export async function extractAndChunk(materialId: string): Promise<void> {
     .eq("id", materialId)
     .throwOnError();
 
-  console.log(`Extracted ${chunks.length} chunks from material ${materialId}`);
-
   // 8. Summarize each chunk with Claude Haiku so selectChunksForBudget() can
   //    fall back to summaries when the full source material exceeds the token budget.
   if (chunks.length > 0) {
@@ -157,6 +155,5 @@ export async function extractAndChunk(materialId: string): Promise<void> {
       })
       .throwOnError();
 
-    console.log(`Summarized ${insertedChunks.length} chunks from material ${materialId}`);
   }
 }

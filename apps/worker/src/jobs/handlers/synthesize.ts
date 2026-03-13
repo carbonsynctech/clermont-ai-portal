@@ -40,22 +40,25 @@ export async function synthesize(
 
   const startedAt = Date.now();
 
-  // 3. Clear any existing synthesis versions so re-runs produce a fresh memo
+  // 3. Hide any existing synthesis versions so re-runs produce a fresh memo (never delete versions)
   const existingSynthesis = assertData(
     await supabase
       .from("versions")
-      .select()
-      .eq("project_id", projectId)
-      .eq("version_type", "synthesis"),
-  );
-  if (existingSynthesis.length > 0) {
-    await supabase
-      .from("versions")
-      .delete()
+      .select("id, is_sealed")
       .eq("project_id", projectId)
       .eq("version_type", "synthesis")
-      .throwOnError();
-    onChunk?.(`Cleared ${existingSynthesis.length} previous synthesis version(s).\n`);
+      .eq("is_client_visible", true),
+  );
+  if (existingSynthesis.length > 0) {
+    const unsealed = existingSynthesis.filter((v) => !v.is_sealed);
+    if (unsealed.length > 0) {
+      await supabase
+        .from("versions")
+        .update({ is_client_visible: false, updated_at: new Date().toISOString() })
+        .in("id", unsealed.map((v) => v.id))
+        .throwOnError();
+    }
+    onChunk?.(`Hid ${unsealed.length} previous synthesis version(s).\n`);
   }
 
   // 4. Fetch persona opinion versions with persona names

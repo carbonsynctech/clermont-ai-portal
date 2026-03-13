@@ -97,7 +97,7 @@ export async function runJob(jobId: string): Promise<void> {
     await flushChunks();
     await updateJob(jobId, { status: "completed", completedAt: new Date() });
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
+    const error = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
     console.error(`Job ${jobId} failed:`, error);
     await flushChunks();
     await updateJob(jobId, { status: "failed", error, completedAt: new Date() });

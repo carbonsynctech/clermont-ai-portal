@@ -35,7 +35,6 @@ export function useJobStatus(jobId: string | null): UseJobStatusResult {
       return;
     }
 
-    console.log(`[useJobStatus] Starting poll for jobId=${jobId}`);
     setIsPolling(true);
     consecutiveErrorsRef.current = 0;
     startTimeRef.current = Date.now();
@@ -48,7 +47,6 @@ export function useJobStatus(jobId: string | null): UseJobStatusResult {
     }, 1000);
 
     const stopPolling = (terminalError?: string) => {
-      console.log(`[useJobStatus] stopPolling called, terminalError=${terminalError ?? "none"}`);
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
       setIsPolling(false);
@@ -58,7 +56,6 @@ export function useJobStatus(jobId: string | null): UseJobStatusResult {
     const poll = async () => {
       try {
         const res = await fetch(`/api/jobs/${jobId}`);
-        console.log(`[useJobStatus] Poll response: status=${res.status}`);
 
         // 404 = job was lost (worker restart) — treat as terminal
         if (res.status === 404) {
@@ -81,13 +78,11 @@ export function useJobStatus(jobId: string | null): UseJobStatusResult {
 
         consecutiveErrorsRef.current = 0;
         const data = (await res.json()) as WorkerJob;
-        console.log(`[useJobStatus] Poll data: status=${data.status}, hasResult=${!!data.result}, resultKeys=${data.result ? Object.keys(data.result as Record<string, unknown>).join(",") : "none"}, partialOutputLen=${(data.partialOutput ?? "").length}`);
         setJob(data);
         setStatus(data.status);
         setError(data.error ?? null);
 
         if (data.status === "completed" || data.status === "failed") {
-          console.log(`[useJobStatus] Terminal status: ${data.status}, result=`, data.result);
           stopPolling();
         }
       } catch (err) {

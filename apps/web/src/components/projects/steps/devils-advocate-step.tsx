@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { parseCritiques } from "@repo/core";
 import { Button } from "@/components/ui/button";
@@ -146,7 +147,7 @@ export const DevilsAdvocateStep = forwardRef<DevilsAdvocateHandle, DevilsAdvocat
       router.refresh();
     } catch (error) {
       console.error("Step 11 continue error:", error);
-      alert(error instanceof Error ? error.message : "Failed to continue to Step 12");
+      toast.error(error instanceof Error ? error.message : "Failed to continue to Step 12");
     }
   }
 

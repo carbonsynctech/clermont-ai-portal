@@ -62,7 +62,16 @@ export async function exportHtml(projectId: string, userId: string): Promise<voi
 
   const durationMs = Date.now() - startedAt;
 
-  // 5. Insert exported_html version (client-visible)
+  // 5. Seal the previous active version before creating a new one
+  if (project.active_version_id) {
+    await supabase
+      .from("versions")
+      .update({ is_sealed: true, updated_at: new Date().toISOString() })
+      .eq("id", project.active_version_id)
+      .throwOnError();
+  }
+
+  // 6. Insert exported_html version (client-visible)
   const [newVersion] = assertData(
     await supabase
       .from("versions")

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { PipelineStepNav } from "./pipeline-step-nav";
 import { DefineTaskStep } from "./steps/define-task-step";
 import { StepTrigger } from "./step-trigger";
@@ -322,7 +323,7 @@ export function PipelineView({
         }
       } catch (error) {
         console.error(`Step ${activeStep} completion error:`, error);
-        alert(error instanceof Error ? error.message : `Failed to complete Step ${activeStep}`);
+        toast.error(error instanceof Error ? error.message : `Failed to complete Step ${activeStep}`);
         return;
       } finally {
         setOptionalStepCompleting(null);
@@ -361,7 +362,7 @@ export function PipelineView({
       router.refresh();
     } catch (error) {
       console.error("Step 8 continue error:", error);
-      alert(error instanceof Error ? error.message : "Failed to continue to Step 9");
+      toast.error(error instanceof Error ? error.message : "Failed to continue to Step 9");
     } finally {
       setStep8Submitting(false);
     }
@@ -384,7 +385,7 @@ export function PipelineView({
       router.refresh();
     } catch (error) {
       console.error("Step 9 skip error:", error);
-      alert(error instanceof Error ? error.message : "Failed to continue to Step 10");
+      toast.error(error instanceof Error ? error.message : "Failed to continue to Step 10");
     } finally {
       setStep9Skipping(false);
     }

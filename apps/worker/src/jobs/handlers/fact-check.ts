@@ -104,7 +104,16 @@ export async function factCheck(projectId: string, userId: string, onChunk?: (ch
   onChunk?.(`\n${geminiResult.correctedContent}\n`);
   onChunk?.("\nSaving corrected version…\n");
 
-  // 6. Insert fact-checked version
+  // 6. Seal the previous active version before creating a new one
+  if (project.active_version_id) {
+    await supabase
+      .from("versions")
+      .update({ is_sealed: true, updated_at: new Date().toISOString() })
+      .eq("id", project.active_version_id)
+      .throwOnError();
+  }
+
+  // 7. Insert fact-checked version
   const [newVersion] = assertData(
     await supabase
       .from("versions")

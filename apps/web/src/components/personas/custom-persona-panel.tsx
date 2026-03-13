@@ -47,46 +47,22 @@ export function CustomPersonaPanel({
 
   const { status, job, isPolling, elapsedSeconds, partialOutput } = useJobStatus(jobId);
 
-  // Debug: log every status change
-  useEffect(() => {
-    console.log(`[custom-persona] Status changed: status=${status}, jobId=${jobId}, isPolling=${isPolling}, hasJob=${!!job}, hasResult=${!!job?.result}`);
-    if (job?.result) {
-      console.log("[custom-persona] job.result =", JSON.stringify(job.result));
-    }
-  }, [status, jobId, isPolling, job]);
-
   // When job completes, fetch the new persona, auto-select it, and hide output
   const completedPersonaId = status === "completed" && job?.result
     ? (job.result as { personaId?: string }).personaId ?? null
     : null;
 
-  console.log(`[custom-persona] Render: completedPersonaId=${completedPersonaId}, handledResultRef=${handledResultRef.current}, generatedPersonas=${generatedPersonas.length}, outputDismissed=${outputDismissed}`);
-
   useEffect(() => {
-    console.log(`[custom-persona] Completion effect: completedPersonaId=${completedPersonaId}, alreadyHandled=${handledResultRef.current === completedPersonaId}`);
-    if (!completedPersonaId) {
-      console.log("[custom-persona] No completedPersonaId, skipping");
-      return;
-    }
-    if (handledResultRef.current === completedPersonaId) {
-      console.log("[custom-persona] Already handled this personaId, skipping");
-      return;
-    }
+    if (!completedPersonaId) return;
+    if (handledResultRef.current === completedPersonaId) return;
     handledResultRef.current = completedPersonaId;
-    console.log(`[custom-persona] Fetching persona: /api/personas/${completedPersonaId}`);
 
     void (async () => {
       try {
         const r = await fetch(`/api/personas/${completedPersonaId}`);
-        console.log(`[custom-persona] Fetch persona response: status=${r.status}, ok=${r.ok}`);
         if (r.ok) {
           const p = (await r.json()) as Persona;
-          console.log(`[custom-persona] Got persona: id=${p.id}, name=${p.name}`);
-          setGeneratedPersonas((prev) => {
-            console.log(`[custom-persona] Adding to generatedPersonas, prev count=${prev.length}`);
-            return [p, ...prev];
-          });
-          console.log("[custom-persona] Calling onPersonaGenerated and onSelect");
+          setGeneratedPersonas((prev) => [p, ...prev]);
           onPersonaGeneratedRef.current(p);
           onSelectRef.current(p);
         } else {
@@ -97,7 +73,6 @@ export function CustomPersonaPanel({
         console.error("[custom-persona] Failed to fetch persona:", err);
       }
       // Always dismiss output and reset form
-      console.log("[custom-persona] Dismissing output and resetting form");
       setJobId(null);
       setOutputDismissed(true);
       setName("");
@@ -130,7 +105,6 @@ export function CustomPersonaPanel({
 
   async function handleGenerate() {
     if (!name.trim()) return;
-    console.log(`[custom-persona] handleGenerate: name="${name.trim()}", projectId=${projectId}`);
     setIsDispatching(true);
     setDispatchError(null);
     setOutputDismissed(false);
@@ -138,7 +112,6 @@ export function CustomPersonaPanel({
 
     try {
       const url = `/api/projects/${projectId}/personas/generate`;
-      console.log(`[custom-persona] POST ${url}`);
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -148,8 +121,6 @@ export function CustomPersonaPanel({
         }),
       });
 
-      console.log(`[custom-persona] Dispatch response: status=${res.status}, ok=${res.ok}`);
-
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
         console.error(`[custom-persona] Dispatch error: ${body.error}`);
@@ -158,7 +129,6 @@ export function CustomPersonaPanel({
       }
 
       const data = (await res.json()) as { jobId?: string };
-      console.log(`[custom-persona] Dispatch success: jobId=${data.jobId}`);
       if (data.jobId) setJobId(data.jobId);
     } catch (err) {
       console.error("[custom-persona] Dispatch network error:", err);

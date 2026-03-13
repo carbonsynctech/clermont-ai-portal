@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
 import {
   ArrowDown,
   ArrowUp,
@@ -57,12 +58,12 @@ export function ProjectNavActions({ projectId, createdAt, updatedAt }: ProjectNa
     const [moveOpen, setMoveOpen] = React.useState(false);
     function handleMoveTo(folderId: string) {
       // TODO: Replace with real move logic (API/local state)
-      alert(`Project moved to folder: ${folders.find(f => f.id === folderId)?.name}`);
+      toast.success(`Project moved to folder: ${folders.find(f => f.id === folderId)?.name}`);
       setMoveOpen(false);
     }
     function handleUndo() {
       // TODO: Implement undo logic
-      alert("Undo last action (not implemented)");
+      toast.info("Undo last action (not implemented)");
     }
   const [isSaving, setIsSaving] = React.useState(false);
   const [isFavorite, setIsFavorite] = React.useState(false);
