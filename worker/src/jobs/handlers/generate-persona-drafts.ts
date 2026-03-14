@@ -125,7 +125,7 @@ export async function generatePersonaDrafts(
     selectedPersonas.map((persona) =>
       (async () => {
         onChunk?.(`\n[${persona.name}] Generating opinion points...\n`);
-        const result = await openai.callWithWebSearch({
+        const result = await openai.callWithDeepResearch({
           system: buildPersonaDraftSystemPrompt(persona.name, persona.system_prompt),
           messages: [
             {
@@ -133,7 +133,7 @@ export async function generatePersonaDrafts(
               content: buildPersonaDraftUserMessage(project.master_prompt!, selectedChunks, tableOfContents),
             },
           ],
-          maxTokens: 1024,
+          maxTokens: 4096,
         });
         onChunk?.(
           `[${persona.name}] Completed (${result.outputTokens} output tokens).\n`,

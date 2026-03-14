@@ -2,7 +2,7 @@ import OpenAI from "openai";
 
 const DEFAULT_MODEL = "gpt-4o";
 const REASONING_MODEL = "o3";
-const WEB_SEARCH_MODEL = "gpt-4o";
+const DEEP_RESEARCH_MODEL = "o4-mini-deep-research";
 const DEFAULT_MAX_TOKENS = 8192;
 
 export interface OpenAICallOptions {
@@ -176,12 +176,12 @@ class OpenAIClient {
    * Use the OpenAI Responses API with web_search tool.
    * For persona drafts (Point 2) — web-grounded research.
    */
-  async callWithWebSearch(options: OpenAICallOptions): Promise<OpenAICallResult> {
+  async callWithDeepResearch(options: OpenAICallOptions): Promise<OpenAICallResult> {
     const {
       system,
       messages,
       maxTokens = DEFAULT_MAX_TOKENS,
-      model = WEB_SEARCH_MODEL,
+      model = DEEP_RESEARCH_MODEL,
       onComplete,
     } = options;
 
@@ -195,7 +195,6 @@ class OpenAIClient {
           role: m.role,
           content: m.content,
         })),
-        tools: [{ type: "web_search_preview" }],
         max_output_tokens: maxTokens,
       } as Parameters<typeof client.responses.create>[0]);
 

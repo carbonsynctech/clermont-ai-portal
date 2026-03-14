@@ -38,7 +38,7 @@ Routes dispatch and return `jobId`. Client polls `/api/jobs/:jobId`. Jobs are pe
 
 ### 4. AI Model Assignment (follow exactly)
 - **OpenAI `gpt-4o`**: Steps 1, 2, 4, 10+11 (style), 12 (export), TOC generation
-- **OpenAI `gpt-4o` with web search**: Step 4 (persona drafts use Responses API `web_search_preview`)
+- **OpenAI `o4-mini-deep-research`**: Step 4 (persona drafts use Responses API deep research)
 - **OpenAI `o3` (reasoning)**: Steps 5 (synthesis) and 9 (critique integration)
 - **Claude `claude-haiku-4-5-20251001`**: Chunk summarisation (extract-and-chunk)
 - **Claude Opus**: Ask AI only (not a pipeline step)
@@ -110,7 +110,7 @@ lib/src/prompts/
 | 1 | Define Task & Prompt (+TOC) | OpenAI | No |
 | 2 | Select Expert Personas | OpenAI | Yes – pick 5 |
 | 3 | Gather Source Material | Upload | Yes – NDA |
-| 4 | Generate Persona Drafts | OpenAI ×5 (web search) | No |
+| 4 | Generate Persona Drafts | OpenAI o4-mini-deep-research ×5 | No |
 | 5 | Synthesize V1 | OpenAI o3 (reasoning) | No |
 | 6 | Fact-Check V3 | Gemini | No |
 | 7 | Human Review V5 | – | Yes – inline |
