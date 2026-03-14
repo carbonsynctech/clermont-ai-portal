@@ -100,10 +100,11 @@ export async function runJob(jobId: string): Promise<void> {
     await flushChunks();
     await updateJob(jobId, { status: "completed", completedAt: new Date() });
   } catch (err) {
-    const error = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
-    console.error(`Job ${jobId} failed:`, error);
+    const fullError = err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err);
+    console.error(`Job ${jobId} failed:`, fullError);
     await flushChunks();
-    await updateJob(jobId, { status: "failed", error, completedAt: new Date() });
+    const userMessage = err instanceof Error ? err.message : String(err);
+    await updateJob(jobId, { status: "failed", error: userMessage, completedAt: new Date() });
 
     // Reset any DB stage that got stuck in "running" so the UI doesn't hang permanently.
     const payload = job.payload as Partial<StageRunPayload>;
