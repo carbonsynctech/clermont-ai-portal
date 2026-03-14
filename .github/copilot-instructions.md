@@ -3,38 +3,38 @@
 This guide enables AI coding agents to work productively in the Clermont AI Portal monorepo. Follow these conventions and rules to ensure code quality and architectural consistency.
 
 ## Big Picture Architecture
-- **Monorepo**: Turborepo + pnpm. Four main packages:
-  - `apps/web`: Next.js 16 frontend (App Router)
-  - `apps/worker`: Hono HTTP server for long-running AI jobs
-  - `packages/db`: Drizzle ORM schema for Supabase PostgreSQL
-  - `packages/core`: Claude/Gemini wrappers, prompt templates, pipeline types
+- **Monorepo**: npm workspaces. Four main packages:
+  - `web`: Next.js 16 frontend (App Router)
+  - `worker`: Hono HTTP server for long-running AI jobs
+  - `database`: Drizzle ORM schema for Supabase PostgreSQL
+  - `lib`: Claude/Gemini wrappers, prompt templates, pipeline types
 - **13-step SOP pipeline**: Automates investment memo creation. See `CLAUDE.md` for step breakdown and rules.
 - **Strict separation**: Web app handles UI and short API calls; worker handles all AI jobs and long-running tasks.
 
 ## Critical Conventions
-- **Context Window Management**: Never pass raw uploads to Claude. Always chunk, summarize, and select via `selectChunksForBudget()` (`packages/core/src/claude/token-budget.ts`).
+- **Context Window Management**: Never pass raw uploads to Claude. Always chunk, summarize, and select via `selectChunksForBudget()` (`lib/src/claude/token-budget.ts`).
 - **Versions**: Immutable and hidden by default. Never mutate sealed versions; always create new rows.
 - **Audit Logging**: Every AI call, human action, and stage transition must write to `audit_logs`.
 - **Stage Rows**: All 13 stage rows are pre-created. Only update, never insert new stage rows.
-- **DB Access**: Use `packages/db/src/client.ts` only. Worker uses service role key; web uses anon key (RLS enforced).
+- **DB Access**: Use `database/src/client.ts` only. Worker uses service role key; web uses anon key (RLS enforced).
 - **TypeScript**: `strict: true`, no `any`, use `unknown` and narrow. No `.js` extensions for internal packages.
 - **Module Resolution**: `bundler` for non-Next.js packages; Next.js default for web.
 
 ## Developer Workflows
 - **Setup**:
   1. Clone repo
-  2. Copy `.env.example` to `.env.local` (in `apps/web/`)
-  3. `pnpm install`
-  4. `pnpm db:migrate`
+  2. Copy `.env.example` to `.env.local` (in `web/`)
+  3. `npm install`
+  4. `npm db:migrate`
   5. Run RLS policies: `docs/sql/rls-policies.sql` in Supabase SQL Editor
-  6. `pnpm dev` (starts web on 3000, worker on 3001)
+  6. `npm dev` (starts web on 3000, worker on 3001)
 - **Build/Typecheck**:
-  - `pnpm build` (all apps)
-  - `pnpm typecheck` (all packages)
+  - `npm build` (all apps)
+  - `npm typecheck` (all packages)
 - **DB Migrations**:
-  - `pnpm db:generate` (Drizzle migrations)
-  - `pnpm db:migrate` (apply migrations)
-  - `pnpm db:studio` (Drizzle Studio browser)
+  - `npm db:generate` (Drizzle migrations)
+  - `npm db:migrate` (apply migrations)
+  - `npm db:studio` (Drizzle Studio browser)
 
 ## Integration Points
 - **AI Models**: Claude for all steps except fact-checking (Gemini, Step 8 only)
@@ -44,10 +44,10 @@ This guide enables AI coding agents to work productively in the Clermont AI Port
 
 ## Key Files & Directories
 - `CLAUDE.md`: Architecture, rules, and SOP details
-- `apps/web/src/app/`: Main UI pages and API routes
-- `apps/worker/src/jobs/handlers/`: AI job handlers for each pipeline step
-- `packages/core/src/prompts/`: Prompt templates for each pipeline step
-- `packages/db/src/client.ts`: DB access layer
+- `web/src/app/`: Main UI pages and API routes
+- `worker/src/jobs/handlers/`: AI job handlers for each pipeline step
+- `lib/src/prompts/`: Prompt templates for each pipeline step
+- `database/src/client.ts`: DB access layer
 - `docs/sql/rls-policies.sql`: Supabase RLS policies
 
 ## Project-Specific Patterns
@@ -55,7 +55,7 @@ This guide enables AI coding agents to work productively in the Clermont AI Port
 - **Never store AI API keys in web app env** (worker only)
 - **Never call AI APIs directly from Next.js API routes**
 - **PDF export is proxied through worker to keep secrets server-side**
-- **Use `pnpm shadcn init` for shadcn UI components (local devDependency)**
+- **Use `npm shadcn init` for shadcn UI components (local devDependency)**
 
 ## Examples
 - **AI job dispatch**: Next.js API route → `workerClient.runStage()` → worker → AI API

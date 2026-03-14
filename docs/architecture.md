@@ -27,16 +27,16 @@ How the monorepo packages map to deployable units and shared libraries.
 ```mermaid
 graph TD
     subgraph Vercel
-        Web[apps/web<br>Next.js 16 App Router]
+        Web[web<br>Next.js 16 App Router]
     end
 
     subgraph Railway
-        Worker[apps/worker<br>Hono HTTP Server]
+        Worker[worker<br>Hono HTTP Server]
     end
 
     subgraph Shared Packages
-        Core[packages/core<br>AI clients, prompts, types]
-        DB[packages/db<br>Drizzle ORM schema]
+        Core[lib<br>AI clients, prompts, types]
+        DB[database<br>Supabase types]
     end
 
     subgraph External
@@ -88,7 +88,7 @@ graph TD
         H11[export-html]
     end
 
-    subgraph packages/core
+    subgraph lib
         ClaudeClient[Claude Client]
         GeminiClient[Gemini Client]
         Prompts[Prompt Templates]

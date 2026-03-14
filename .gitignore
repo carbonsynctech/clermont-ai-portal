@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-.pnpm-store/
 
 # Build outputs
 dist/
@@ -14,7 +13,7 @@ build/
 .env.local
 
 # Drizzle
-packages/db/migrations/meta/
+database/migrations/meta/
 
 # IDE
 .vscode/
@@ -29,14 +28,10 @@ Thumbs.db
 # DigitalOcean (contains secrets)
 .do/app.yaml
 
-# Turbo
-.turbo/
-
 # Test
 coverage/
 
 # Logs
 *.log
 npm-debug.log*
-pnpm-debug.log*
 .vercel

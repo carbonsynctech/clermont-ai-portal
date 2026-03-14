@@ -1,28 +1,24 @@
 {
   "name": "ai-content-portal",
   "private": true,
+  "workspaces": [
+    "web",
+    "worker",
+    "lib",
+    "database"
+  ],
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
-    "db:gen-types": "cd packages/db && pnpm gen:types"
+    "dev": "npm run dev --workspace=@repo/web & npm run dev --workspace=@repo/worker",
+    "build": "npm run build --workspace=@repo/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:gen-types": "cd database && npm run gen:types"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.21.0",
-    "turbo": "^2.3.3",
     "typescript": "^5.7.0"
   },
   "engines": {
-    "node": ">=22.0.0",
-    "pnpm": ">=10.0.0"
-  },
-  "packageManager": "pnpm@10.17.1",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "puppeteer"
-    ]
+    "node": ">=22.0.0"
   }
 }

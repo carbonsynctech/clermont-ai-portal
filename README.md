@@ -7,14 +7,14 @@ AI-powered investment memo creation portal for analysts. Automates a 13-step Sta
 ```mermaid
 graph TD
     subgraph Vercel
-        Web[apps/web – Next.js 16]
+        Web[web – Next.js 16]
     end
     subgraph Railway
-        Worker[apps/worker – Hono]
+        Worker[worker – Hono]
     end
     subgraph Shared
-        Core[packages/core]
-        DB[packages/db]
+        Core[lib]
+        DB[database]
     end
     Web -->|fire-and-forget| Worker
     Worker --> Claude[Claude API]
@@ -29,15 +29,15 @@ See [`docs/architecture.md`](docs/architecture.md) for full C4 diagrams (context
 
 | Package | Framework | Deploy | Purpose |
 |---------|-----------|--------|---------|
-| `apps/web` | Next.js 16 (App Router) | Vercel | Frontend, API routes, auth |
-| `apps/worker` | Hono | Railway | Long-running AI jobs |
-| `packages/db` | Drizzle ORM | – | Schema, migrations, Supabase client |
-| `packages/core` | – | – | Claude/Gemini clients, prompts, types |
+| `web` | Next.js 16 (App Router) | Vercel | Frontend, API routes, auth |
+| `worker` | Hono | Railway | Long-running AI jobs |
+| `database` | Supabase types | – | Schema, types, Supabase client |
+| `lib` | – | – | Claude/Gemini clients, prompts, types |
 
 ## Prerequisites
 
 - Node.js 22+
-- pnpm 10+
+- npm 10+
 - Supabase project (PostgreSQL + Auth)
 - Anthropic API key (Claude)
 - Google Gemini API key
@@ -47,42 +47,38 @@ See [`docs/architecture.md`](docs/architecture.md) for full C4 diagrams (context
 1. Clone the repo and install dependencies:
    ```bash
    git clone <repo-url> && cd clermont-ai-portal
-   pnpm install
+   npm install
    ```
 2. Configure environment variables:
    - Copy `.env.example` → `.env.local` (root) and fill in values
-   - Copy `.env.example` → `apps/web/.env.local` (Next.js needs its own copy of `DATABASE_URL`)
+   - Copy `.env.example` → `web/.env.local` (Next.js needs its own copy of `DATABASE_URL`)
 3. Run database migrations:
    ```bash
-   pnpm db:migrate
+   npm run db:migrate
    ```
 4. Apply RLS policies in Supabase SQL Editor: `docs/sql/rls-policies.sql`
 5. Start development:
    ```bash
-   pnpm dev
+   npm run dev
    ```
 
 ## Commands
 
 ```bash
-pnpm dev          # Start web (3000) + worker (3001)
-pnpm build        # Build all apps
-pnpm typecheck    # TypeScript check all packages
-pnpm db:generate  # Generate Drizzle migrations
-pnpm db:migrate   # Apply migrations to Supabase
-pnpm db:studio    # Open Drizzle Studio (DB browser)
+npm run dev          # Start web (3000) + worker (3001)
+npm run build        # Build all apps
+npm run typecheck    # TypeScript check all packages
+npm run db:gen-types # Regenerate Supabase types after schema changes
 ```
 
 ## Project Structure
 
 ```
 clermont-ai-portal/
-├── apps/
-│   ├── web/                 # Next.js frontend + API routes
-│   └── worker/              # Hono background job server
-├── packages/
-│   ├── core/                # AI clients, prompts, pipeline types
-│   └── db/                  # Drizzle schema + Supabase client
+├── web/                     # Next.js frontend + API routes
+├── worker/                  # Hono background job server
+├── database/                # Supabase generated types + JSONB interfaces
+├── lib/                     # AI clients, prompts, pipeline types
 ├── docs/
 │   ├── architecture.md      # C4 diagrams (Mermaid)
 │   ├── proposal.pdf         # Original client proposal
